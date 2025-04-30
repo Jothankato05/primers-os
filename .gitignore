@@ -1,0 +1,10 @@
+.qodo/
+mnt/
+fake_history.py
+__pycache__/
+*.pyc
+*.iso
+build.log
+.env
+.vscode/
+.idea/

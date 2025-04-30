@@ -1,0 +1,5 @@
+#!/bin/bash
+# PRIMERS OS Brain Launcher
+export PRIMERS_LOG_DIR="/var/log/primers"
+cd /usr/share/primers/brain
+python3 main.py "$@"

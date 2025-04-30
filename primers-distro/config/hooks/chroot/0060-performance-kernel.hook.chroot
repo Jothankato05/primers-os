@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+# GRUB performance config
+cat > /etc/default/grub << 'EOF'
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=5
+GRUB_DISTRIBUTOR="PRIMERS OS"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash mitigations=off threadirqs"
+GRUB_CMDLINE_LINUX=""
+GRUB_THEME="/usr/share/grub/themes/primers/theme.txt"
+GRUB_GFXMODE="1920x1080,1280x720,auto"
+EOF
+
+# CPU performance governor service
+cat > /etc/systemd/system/primers-perf.service << 'EOF'
+[Unit]
+Description=PRIMERS OS CPU Performance Governor
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $f 2>/dev/null || true; done"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable primers-perf.service 2>/dev/null || true
+update-grub 2>/dev/null || true

@@ -1,0 +1,21 @@
+#!/bin/bash
+set -e
+
+# Install Python deps
+pip3 install --no-cache-dir psutil flask 2>/dev/null || \
+  apt-get install -y python3-psutil python3-flask
+
+# Copy brain files from build overlay
+mkdir -p /usr/share/primers/brain
+if [ -d /primers-brain ]; then
+  cp -r /primers-brain/. /usr/share/primers/brain/
+fi
+
+# Set correct permissions
+chmod +x /usr/bin/primers /usr/bin/primers-install /usr/bin/primers-compat
+
+# Copy calamares branding
+mkdir -p /usr/share/calamares/branding/primers
+if [ -d /primers-installer ]; then
+  cp -r /primers-installer/. /usr/share/calamares/
+fi

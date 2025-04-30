@@ -1,0 +1,13 @@
+---
+componentName: primers
+welcomeStyleCalamares: false
+strings:
+  productName:        "PRIMERS OS"
+  shortProductName:   "PRIMERS"
+  version:            "1.0 Genesis"
+  shortVersion:       "1.0"
+  versionedName:      "PRIMERS OS 1.0 Genesis"
+  bootloaderEntryName: "PRIMERS OS"
+  productUrl:         "https://primeros.org"
+  supportUrl:         "https://primeros.org/support"
+  releaseNotesUrl:    "https://primeros.org/release-1.0"

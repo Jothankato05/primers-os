@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+# Enable 32-bit for Wine
+dpkg --add-architecture i386 || true
+apt-get update -qq
+apt-get install -y --no-install-recommends \
+  wine32 wine64 libwine libwine:i386 fonts-wine 2>/dev/null || true
+
+# Pre-configure Wine prefix so .exe works on first launch
+sudo -u primers bash -c '
+  export WINEPREFIX=/home/primers/.wine
+  export WINEARCH=win64
+  wineboot --init 2>/dev/null || true
+  winetricks -q corefonts vcrun2019 2>/dev/null || true
+' || true

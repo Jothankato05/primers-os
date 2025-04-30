@@ -1,0 +1,42 @@
+#!/bin/bash
+set -e
+
+# Generate wallpaper
+mkdir -p /usr/share/primers
+python3 - << 'PYEOF'
+try:
+    from PIL import Image, ImageDraw
+    img = Image.new('RGB', (1920, 1080), (10, 10, 15))
+    draw = ImageDraw.Draw(img)
+    for x in range(0, 1920, 80):
+        draw.line([(x,0),(x,1080)], fill=(18,18,30), width=1)
+    for y in range(0, 1080, 80):
+        draw.line([(0,y),(1920,y)], fill=(18,18,30), width=1)
+    img.save('/usr/share/primers/wallpaper.png')
+    print('[PRIMERS] Wallpaper generated.')
+except ImportError:
+    try:
+        import subprocess
+        subprocess.run(['convert','-size','1920x1080','xc:#0a0a0f',
+                        '/usr/share/primers/wallpaper.png'], check=True)
+        print('[PRIMERS] Wallpaper generated via ImageMagick.')
+    except Exception as e:
+        print(f'[PRIMERS] Wallpaper skipped: {e}')
+PYEOF
+
+# LightDM greeter config
+cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
+[greeter]
+background=#0a0a0f
+font-name=Noto Sans 11
+indicators=~spacer;~clock;~spacer;~session;~power
+clock-format=%H:%M  %A %d %B
+EOF
+
+# Set default session to OpenBox
+cat > /etc/lightdm/lightdm.conf << 'EOF'
+[Seat:*]
+autologin-user=primers
+autologin-session=openbox
+user-session=openbox
+EOF

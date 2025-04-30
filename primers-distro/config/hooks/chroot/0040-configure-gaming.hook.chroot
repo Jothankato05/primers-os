@@ -1,0 +1,32 @@
+#!/bin/bash
+set -e
+
+# Performance sysctl tuning
+cat > /etc/sysctl.d/99-primers-perf.conf << 'EOF'
+vm.swappiness=10
+vm.dirty_ratio=10
+vm.dirty_background_ratio=5
+kernel.sched_migration_cost_ns=5000000
+net.core.somaxconn=65535
+EOF
+
+# ZRAM swap — saves RAM for apps, better than disk swap
+apt-get install -y zram-tools 2>/dev/null || true
+cat > /etc/default/zramswap << 'EOF'
+ALGO=zstd
+PERCENT=25
+PRIORITY=100
+EOF
+
+# Lutris default config
+mkdir -p /etc/skel/.config/lutris
+cat > /etc/skel/.config/lutris/lutris.conf << 'EOF'
+[lutris]
+disable_runtime=false
+prefer_system_libs=false
+
+[runner-options]
+Enable DXVK=true
+Enable ESYNC=true
+Enable GameMode=true
+EOF

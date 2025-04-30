@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "modules": [
+    {
+      "name": "devtools",
+      "description": "Python, Node, Rust, Docker, VS Code",
+      "size_mb": 1200,
+      "packages": ["python3-dev","python3-pip","python3-venv","nodejs","npm","build-essential","cmake","gcc","g++","git","docker.io","docker-compose"]
+    },
+    {
+      "name": "creative",
+      "description": "GIMP, Inkscape, Blender, OBS, Kdenlive",
+      "size_mb": 1800,
+      "packages": ["gimp","inkscape","blender","kdenlive","obs-studio","audacity","darktable"]
+    },
+    {
+      "name": "gaming",
+      "description": "Steam, Lutris, Heroic, MangoHUD, Discord",
+      "size_mb": 900,
+      "packages": ["steam","lutris","gamemode","mangohud","discord","mumble"]
+    },
+    {
+      "name": "cyber",
+      "description": "nmap, Wireshark, Metasploit, Burp Suite",
+      "size_mb": 1100,
+      "packages": ["nmap","wireshark","tcpdump","aircrack-ng","john","hydra","sqlmap","nikto","gobuster"],
+      "warning": "Use only on systems you own or have explicit permission to test."
+    },
+    {
+      "name": "ai-ml",
+      "description": "PyTorch, TensorFlow, Jupyter, scikit-learn",
+      "size_mb": 3500,
+      "packages": ["jupyter-notebook","python3-sklearn","python3-pandas","python3-numpy","python3-matplotlib","python3-scipy"]
+    },
+    {
+      "name": "office",
+      "description": "LibreOffice, Thunderbird, document tools",
+      "size_mb": 700,
+      "packages": ["libreoffice","thunderbird","evince","gedit"]
+    },
+    {
+      "name": "macos-compat",
+      "description": "macOS app compatibility via Darling (experimental)",
+      "size_mb": 2200,
+      "packages": ["darling"],
+      "post_install": "echo 'Darling installed. Run macOS apps with: primers-compat <app>'"
+    }
+  ]
+}

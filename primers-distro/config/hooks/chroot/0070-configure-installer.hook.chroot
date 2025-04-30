@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e
+
+# Install calamares if not already present
+apt-get install -y calamares calamares-settings-ubuntu 2>/dev/null || \
+  apt-get install -y calamares 2>/dev/null || true
+
+# Copy branding if available
+if [ -f /usr/share/calamares/branding/primers/branding.desc ]; then
+  echo "[PRIMERS] Calamares branding already in place."
+else
+  mkdir -p /usr/share/calamares/branding/primers
+  cat > /usr/share/calamares/branding/primers/branding.desc << 'EOF'
+---
+componentName: primers
+strings:
+  productName: "PRIMERS OS"
+  shortProductName: "PRIMERS"
+  version: "1.0 Genesis"
+  versionedName: "PRIMERS OS 1.0 Genesis"
+  bootloaderEntryName: "PRIMERS OS"
+EOF
+fi
+
+# Desktop shortcut for installer
+cat > /usr/share/applications/install-primers.desktop << 'EOF'
+[Desktop Entry]
+Name=Install PRIMERS OS
+Comment=Install PRIMERS OS to your hard drive
+Exec=sudo calamares
+Icon=calamares
+Type=Application
+Categories=System;
+Terminal=false
+EOF

@@ -1,0 +1,36 @@
+#!/bin/bash
+# PRIMERS OS Compatibility Launcher
+# Detects file type and launches with correct layer.
+FILE="$1"
+
+if [ -z "$FILE" ]; then
+  echo "Usage: primers-compat <file>"
+  echo "Supported: .exe .msi (Windows via Wine)"
+  echo "           .app .dmg (macOS via Darling — install macos-compat module first)"
+  exit 1
+fi
+
+EXT="${FILE##*.}"
+EXT="${EXT,,}"
+
+case "$EXT" in
+  exe|msi|bat|com)
+    echo "[PRIMERS COMPAT] Launching Windows app: $FILE"
+    export WINEPREFIX="$HOME/.wine"
+    export WINEARCH=win64
+    wine "$FILE"
+    ;;
+  app|dmg)
+    if command -v darling &>/dev/null; then
+      echo "[PRIMERS COMPAT] Launching macOS app: $FILE"
+      darling "$FILE"
+    else
+      echo "[PRIMERS COMPAT] macOS compatibility not installed."
+      echo "Run: primers-install macos-compat"
+    fi
+    ;;
+  *)
+    echo "[PRIMERS COMPAT] Unknown type '$EXT'. Attempting Wine..."
+    wine "$FILE"
+    ;;
+esac

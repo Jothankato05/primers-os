@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=PRIMERS OS Brain
+Comment=AI-native system controller
+Exec=xterm -title "PRIMERS OS" -geometry 120x35 -bg "#0a0a0f" -fg "#c8c8e8" -e primers
+Icon=utilities-terminal
+Type=Application
+Categories=System;
+Terminal=false
+StartupNotify=true

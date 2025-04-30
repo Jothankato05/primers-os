@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+useradd -m -s /bin/bash -G sudo,audio,video,plugdev,netdev primers || true
+echo "primers:primers" | chpasswd
+echo "primers ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/primers
+chmod 440 /etc/sudoers.d/primers
+echo "primers-os" > /etc/hostname
+echo "127.0.0.1 localhost primers-os" >> /etc/hosts
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime || true
+# Create PRIMERS data dirs
+mkdir -p /var/log/primers /var/lib/primers
+chown -R primers:primers /var/log/primers /var/lib/primers 2>/dev/null || true

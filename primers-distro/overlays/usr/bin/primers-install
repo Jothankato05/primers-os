@@ -1,0 +1,55 @@
+#!/bin/bash
+# PRIMERS OS Module Installer
+set -e
+REGISTRY="/usr/lib/primers/modules/module_registry.json"
+
+if [ ! -f "$REGISTRY" ]; then
+  echo "[ERROR] Module registry not found: $REGISTRY"
+  exit 1
+fi
+
+if [ -z "$1" ]; then
+  echo ""
+  echo "  ╔══════════════════════════════════════╗"
+  echo "  ║   PRIMERS OS — Module Installer      ║"
+  echo "  ╚══════════════════════════════════════╝"
+  echo ""
+  python3 - "$REGISTRY" << 'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+for m in data["modules"]:
+    size = m.get("size_mb", "?")
+    warn = "  ⚠" if m.get("warning") else ""
+    print(f"    {m['name']:<20} {m['description'][:45]}  ({size}MB){warn}")
+print()
+print("  Usage:   primers-install <module_name>")
+print("  Example: primers-install gaming")
+print()
+PYEOF
+  exit 0
+fi
+
+MODULE="$1"
+echo ""
+echo "  [PRIMERS] Installing module: $MODULE"
+python3 - "$REGISTRY" "$MODULE" << 'PYEOF'
+import json, subprocess, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+mod = next((m for m in data["modules"] if m["name"] == sys.argv[2]), None)
+if not mod:
+    print(f"  [ERROR] Module not found: {sys.argv[2]}")
+    print(f"  Run 'primers-install' with no args to see available modules.")
+    sys.exit(1)
+if mod.get("warning"):
+    print(f"  ⚠  {mod['warning']}")
+    ans = input("  Continue? [y/N] ").strip().lower()
+    if ans != "y":
+        sys.exit(0)
+pkgs = " ".join(mod["packages"])
+subprocess.run(f"apt-get install -y {pkgs}", shell=True, check=True)
+if mod.get("post_install"):
+    subprocess.run(mod["post_install"], shell=True)
+print(f"\n  ✓ Module '{mod['name']}' installed successfully.")
+PYEOF

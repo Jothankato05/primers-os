@@ -1,0 +1,10 @@
+NAME="PRIMERS OS"
+VERSION="1.0 Genesis"
+ID=primers
+ID_LIKE=ubuntu
+PRETTY_NAME="PRIMERS OS 1.0 Genesis"
+VERSION_ID="1.0"
+HOME_URL="https://primeros.org"
+SUPPORT_URL="https://primeros.org/support"
+BUG_REPORT_URL="https://primeros.org/bugs"
+PRIMERS_CODENAME="Genesis"

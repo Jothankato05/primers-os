@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <theme>
+    <name>Clearlooks</name>
+    <titleLayout>NLIMC</titleLayout>
+    <keepBorder>yes</keepBorder>
+    <font place="ActiveWindow">
+      <name>Noto Sans</name><size>9</size><weight>Normal</weight>
+    </font>
+  </theme>
+  <desktops><number>4</number></desktops>
+  <keyboard>
+    <keybind key="Super-Return">
+      <action name="Execute">
+        <command>xterm -title "PRIMERS OS" -geometry 120x35 -bg "#0a0a0f" -fg "#c8c8e8" -e primers</command>
+      </action>
+    </keybind>
+    <keybind key="Super-e">
+      <action name="Execute"><command>pcmanfm</command></action>
+    </keybind>
+    <keybind key="Super-b">
+      <action name="Execute"><command>firefox</command></action>
+    </keybind>
+    <keybind key="A-F4">
+      <action name="Close"/>
+    </keybind>
+    <keybind key="Super-d">
+      <action name="ToggleShowDesktop"/>
+    </keybind>
+  </keyboard>
+  <mouse>
+    <context name="Desktop">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>root-menu</menu></action>
+      </mousebind>
+    </context>
+  </mouse>
+  <menu>
+    <file>menu.xml</file>
+    <hideDelay>200</hideDelay>
+    <submenuShowDelay>100</submenuShowDelay>
+  </menu>
+</openbox_config>

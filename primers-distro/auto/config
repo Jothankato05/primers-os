@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+lb config noauto \
+  --distribution jammy \
+  --architectures amd64 \
+  --linux-flavours generic \
+  --bootloader grub-efi \
+  --binary-images iso-hybrid \
+  --debian-installer none \
+  --memtest none \
+  --iso-application "PRIMERS OS" \
+  --iso-publisher "Primers Organisation" \
+  --iso-volume "PRIMERS_OS_1.0" \
+  --archive-areas "main restricted universe multiverse" \
+  "${@}"

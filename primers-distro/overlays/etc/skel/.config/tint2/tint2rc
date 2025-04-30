@@ -1,0 +1,25 @@
+panel_items = TSC
+panel_size = 100% 36
+panel_position = bottom center horizontal
+panel_margin = 0 0
+panel_padding = 0 0 2
+panel_background_id = 1
+taskbar_mode = single_desktop
+task_text = 1
+task_icon = 0
+task_maximum_size = 180 30
+task_active_background_id = 2
+task_background_id = 3
+systray = 1
+systray_padding = 4 4 4
+clock_format = %H:%M  %a %d %b
+clock_font = Noto Sans 9
+clock_font_color = #c8c8e8 100
+#---- Backgrounds ----
+background = #0a0a0f 95
+border_width = 0
+background = #1e1e3a 95
+border_width = 1
+border_color = #00e5ff 40
+background = #10101a 80
+border_width = 0

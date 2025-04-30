@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=PRIMERS Brain
+Exec=xterm -title "PRIMERS OS" -geometry 120x35 -bg "#0a0a0f" -fg "#c8c8e8" -e primers
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
