@@ -8,7 +8,7 @@ echo "╚═══════════════════════�
 echo ""
 
 # Dependency check
-for dep in lb squashfs-tools xorriso mtools; do
+for dep in lb mksquashfs xorriso mtools; do
   if ! command -v $dep &>/dev/null; then
     echo "[ERROR] Missing: $dep"
     echo "Run:"
