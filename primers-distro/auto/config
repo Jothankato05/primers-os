@@ -6,7 +6,7 @@ lb config noauto \
   --linux-flavours generic \
   --bootloader grub-efi \
   --binary-images iso-hybrid \
-  --debian-installer none \
+  --debian-installer false \
   --memtest none \
   --iso-application "PRIMERS OS" \
   --iso-publisher "Primers Organisation" \
