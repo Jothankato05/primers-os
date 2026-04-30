@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 lb config noauto \
-  --mode ubuntu \
   --distribution jammy \
+  --parent-distribution jammy \
   --initramfs casper \
   --architectures amd64 \
   --linux-flavours generic \
