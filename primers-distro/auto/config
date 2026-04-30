@@ -9,9 +9,12 @@ lb config noauto \
   --linux-flavours generic \
   --bootloader syslinux \
   --syslinux-theme "" \
+  --security false \
   --mirror-bootstrap "http://archive.ubuntu.com/ubuntu/" \
   --mirror-chroot "http://archive.ubuntu.com/ubuntu/" \
+  --mirror-chroot-security "http://security.ubuntu.com/ubuntu/" \
   --mirror-binary "http://archive.ubuntu.com/ubuntu/" \
+  --mirror-binary-security "http://security.ubuntu.com/ubuntu/" \
   --binary-images iso-hybrid \
   --debian-installer false \
   --memtest none \
