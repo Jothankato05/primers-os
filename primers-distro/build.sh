@@ -45,8 +45,9 @@ chmod +x config/includes.chroot/usr/bin/primers
 chmod +x config/includes.chroot/usr/bin/primers-install
 chmod +x config/includes.chroot/usr/bin/primers-compat
 
-# Init live-build config
-echo "[BUILD] Initialising live-build..."
+# Clean and Init
+echo "[BUILD] Cleaning and Initialising live-build..."
+sudo lb clean --purge || true
 bash auto/config
 
 # Build
