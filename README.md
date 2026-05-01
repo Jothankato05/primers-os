@@ -1,4 +1,4 @@
-# ⚛ PRIMERS OS — Phase 1
+#  PRIMERS OS — Phase 1
 
 AI-Native Modular OS Platform · Python-based system controller built on Linux.
 
