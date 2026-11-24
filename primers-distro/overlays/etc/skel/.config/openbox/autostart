@@ -1,4 +1,7 @@
 # PRIMERS OS session autostart (Openbox)
+# Standard folders (Documents, Downloads, Music...). Openbox can't run
+# /etc/xdg/autostart (it needs PyXDG), which keeps GNOME daemons out.
+xdg-user-dirs-update
 tint2 &
 pcmanfm --desktop &
 nm-applet &

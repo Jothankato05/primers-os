@@ -83,6 +83,7 @@ primers-distro/        ISO build system
   tools/               check-packages.py (validates every package name)
 branding/              official Primers OS logo pack (SVG + PNG) — source of all OS artwork
 docs/decisions/        architecture decision records
+docs/pilot-guide.md    running a one-lab pilot: install, Lab Mode, benchmarks
 .github/workflows/     CI (tests + lint) and ISO build/release
 ```
 

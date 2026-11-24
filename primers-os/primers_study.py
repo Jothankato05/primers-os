@@ -29,7 +29,8 @@ def spawn_end_notice() -> None:
 
 
 def notify_done(session: study_mode.Session) -> None:
-    text = (f"Well done: {session.minutes} minutes of focus.\n\n"
+    unit = "minute" if session.minutes == 1 else "minutes"
+    text = (f"Well done: {session.minutes} {unit} of focus.\n\n"
             "Take a short break. Paused sites are open again.")
     if os.environ.get("DISPLAY") and shutil.which("zenity"):
         subprocess.run(["zenity", "--info", "--title=Study session complete", "--no-wrap",

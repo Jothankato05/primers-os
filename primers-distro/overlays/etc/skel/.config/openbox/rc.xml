@@ -69,4 +69,12 @@
     <hideDelay>200</hideDelay>
     <submenuShowDelay>100</submenuShowDelay>
   </menu>
+  <applications>
+    <!-- PRIMERS notices (Lab Mode, Study Mode) come from background helpers, so
+         focus-stealing prevention would open them under the active window -->
+    <application class="Zenity">
+      <focus>yes</focus>
+      <layer>above</layer>
+    </application>
+  </applications>
 </openbox_config>
