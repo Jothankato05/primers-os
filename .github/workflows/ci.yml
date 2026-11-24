@@ -83,7 +83,8 @@ jobs:
             config/hooks/chroot/*.hook.chroot \
             overlays/usr/bin/primers overlays/usr/bin/primers-compat \
             overlays/usr/bin/primers-install overlays/usr/bin/primers-terminal \
-            overlays/etc/skel/.config/openbox/autostart ../primers-lite-bee/lite-bee
+            overlays/etc/skel/.config/openbox/autostart ../primers-lite-bee/lite-bee \
+            overlays/usr/lib/primers/unmetered-network
       - name: Validate JSON, YAML, XML and QML
         working-directory: primers-distro
         run: |

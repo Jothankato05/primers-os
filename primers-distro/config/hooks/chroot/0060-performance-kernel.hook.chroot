@@ -52,5 +52,9 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+# Data Saver: background downloads wait for unmetered networks
+# (drop-ins for apt-daily, apt-daily-upgrade and fwupd-refresh ship in overlays)
+chmod 0755 /usr/lib/primers/unmetered-network
+
 systemctl enable primers-perf.service
 systemctl enable zramswap.service 2>/dev/null || true

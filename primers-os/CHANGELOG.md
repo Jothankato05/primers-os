@@ -22,6 +22,9 @@
   terminals in Night Ink / Chalk with Ready Green for states; the boot
   splash shows the mark with its blinking cursor. The GRUB theme boots
   without the GRUB 2.12 "null src bitmap" stop.
+- Data Saver for system updates: package-list refresh, automatic upgrades
+  and firmware refresh wait for an unmetered connection (mobile data and
+  phone hotspots are skipped); `datasaver` command in the Brain.
 - Wired Ethernet now works: NetworkManager manages every device (Ubuntu's
   package leaves wired interfaces unmanaged unless the distro overrides it).
 - Desktop: launcher bar, right-click and Super+Space menus, media keys,

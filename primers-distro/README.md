@@ -114,6 +114,25 @@ tools/check-packages.py         verifies every package name against the Ubuntu a
   `ubuntu`, which the signed GRUB requires), so installed systems can boot
   with Secure Boot enabled.
 
+### Data Saver (system updates)
+
+Background downloads — the daily package-list refresh, automatic security
+upgrades and firmware metadata refresh — are postponed while NetworkManager
+reports the connection as **metered** (mobile data and phone hotspots that
+announce themselves; you can also mark any connection metered in its
+settings). They run on the next Wi-Fi/Ethernet connection. The gate is
+`/usr/lib/primers/unmetered-network`, wired in as `ExecCondition=` drop-ins
+under `/etc/systemd/system/*.service.d/50-primers-data-saver.conf`.
+`unattended-upgrades` also applies its own metered check.
+
+Allow background downloads on metered networks:
+
+```bash
+sudo mkdir -p /etc/primers && sudo touch /etc/primers/updates-on-metered
+```
+
+`datasaver` in the PRIMERS Brain shows the current state.
+
 ### Customizing
 
 - **Add a package:** append it to a `config/packages-lists/*.list.chroot`

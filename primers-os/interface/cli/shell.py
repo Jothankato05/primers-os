@@ -29,7 +29,7 @@ from utils.logger import PrimersLogger
 VOICE_SAFE_ACTIONS = {
     "list_processes", "system_status", "security_status", "list_threats",
     "list_alerts", "list_connections", "find_process", "math", "help",
-    "version", "advise", "kernel", "ask",
+    "version", "advise", "kernel", "ask", "datasaver",
 }
 
 
@@ -504,6 +504,30 @@ class PrimersShell:
         for a in alerts[-30:]:
             ts = time.strftime("%H:%M:%S", time.localtime(a.get("timestamp", time.time())))
             print(f"  {C.dim(ts)}  {C.warn('⚠')} [{a['type']}]  {a['msg']}")
+        print(f"\n{divider()}\n")
+
+    def _cmd_datasaver(self, cmd: ParsedCommand):
+        from core import network_status
+        st = network_status.read_status()
+        print(f"\n{divider()}")
+        print(f"  {C.hi('DATA SAVER')}")
+        print(divider())
+        if not st.available:
+            print(C.warn("  NetworkManager is not available — can't tell whether this connection is metered."))
+            print(f"\n{divider()}\n")
+            return
+        print(f"\n  Connection:    {C.info(st.connection_text)}  {C.dim('(internet: ' + st.connectivity_text + ')')}")
+        print(f"  Metered:       {C.warn(st.metered_text) if st.metered else C.ok(st.metered_text)}")
+        if st.background_downloads_paused:
+            print(f"  Background:    {C.warn('paused')} — package lists, upgrades and firmware refresh wait for Wi-Fi/Ethernet")
+        elif st.metered and st.override:
+            print(f"  Background:    {C.warn('allowed on metered')} {C.dim('(override: ' + network_status.OVERRIDE_FILE + ')')}")
+        else:
+            print(f"  Background:    {C.ok('normal')} — updates download as usual")
+        print(f"\n  {C.dim('Browsing data is saved separately by Primers Lite Bee (Lite/Ultra modes).')}")
+        if st.metered and not st.override:
+            print(C.dim("  Allow updates on metered links: sudo mkdir -p /etc/primers && "
+                        "sudo touch " + network_status.OVERRIDE_FILE))
         print(f"\n{divider()}\n")
 
     def _cmd_list_connections(self, cmd: ParsedCommand):

@@ -22,7 +22,7 @@ every one-shot command succeeded, `1` otherwise — handy for scripts.
 
 | Area | Commands |
 |---|---|
-| System | `status` · `alerts` · `kernel [info\|load\|uptime\|net]` · `version` |
+| System | `status` · `alerts` · `datasaver` (metered network, paused downloads) · `kernel [info\|load\|uptime\|net]` · `version` |
 | Processes | `ps [--sort=cpu\|memory\|pid\|name] [--limit=N]` · `find <name>` · `launch <cmd>` · `kill <pid> [--force] [--yes]` · `suspend` / `resume <pid>` · `priority <pid> <nice>` |
 | Security | `security` · `threats [--level=HIGH]` · `connections` · `cyber scan [1-1024]` · `cyber report` |
 | Intelligence | `ask <question>` — Ask Primers (offline knowledge base) · `advise` — prioritised recommendations · `learn stats\|suggest\|clear` · `task add\|list\|run\|enable\|disable\|remove\|history` |

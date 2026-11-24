@@ -44,6 +44,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
     "security":                ("security_status", "Show security engine status"),
     "threats":                 ("list_threats",    "Show security threat events"),
     "alerts":                  ("list_alerts",     "Show system alerts"),
+    "datasaver":               ("datasaver",       "Data Saver: metered network & paused downloads"),
     "connections":             ("list_connections","Show active network connections"),
     "netstat":                 ("list_connections","Show active network connections"),
     "find":                    ("find_process",    "Find process by name"),
@@ -84,7 +85,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
 }
 
 HELP_GROUPS = {
-    "System":       ["status", "alerts", "kernel", "version"],
+    "System":       ["status", "alerts", "datasaver", "kernel", "version"],
     "Process":      ["ps", "kill", "launch", "find", "suspend", "resume", "priority"],
     "Security":     ["security", "threats", "connections", "cyber"],
     "Intelligence": ["ask", "advise", "learn", "task"],
@@ -103,6 +104,7 @@ NL_PATTERNS: List[Tuple[str, str]] = [
     (r"^(?:show\s+)?(?:any\s+|all\s+)?(?:security\s+)?threats?(?:\s+detected)?\??$|^am\s+i\s+safe\??$",  "list_threats"),
     (r"^(?:show\s+)?(?:any\s+|all\s+)?alerts?\??$",                                                   "list_alerts"),
     (r"^(?:show\s+)?(?:the\s+)?network\s+connections?$",                                              "list_connections"),
+    (r"^(?:am\s+i\s+on\s+(?:a\s+)?metered(?:\s+(?:network|connection))?|data\s+saver(?:\s+status)?)\??$", "datasaver"),
     (r"^find\s+(?:process\s+)?(?P<arg>\S+)$",                                                         "find_process"),
     (r"^(?:calculate|compute|solve)\s+(?P<arg>.+)$",                                                  "math"),
     (r"^what(?:'s|\s+is)\s+(?P<arg>[\d\s+\-*/^%().,]+?)\s*\??$",                                     "math"),
