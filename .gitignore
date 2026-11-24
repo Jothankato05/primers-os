@@ -12,3 +12,5 @@ work/
 .pytest_cache/
 *.iso.sha256
 *.iso.part*
+# Local session-tool state (not project files)
+.anchor/
