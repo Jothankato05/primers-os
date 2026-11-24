@@ -1,31 +1,56 @@
 #!/bin/bash
-set -e
+# PRIMERS OS — bootloader defaults and CPU governor for installed systems
+set -euo pipefail
 
-# GRUB performance config
-cat > /etc/default/grub << 'EOF'
+# Kernel command line for installed systems. CPU vulnerability mitigations
+# stay ON (the kernel default): turning them off exposes every user to
+# Spectre/Meltdown-class attacks for a few percent of speed.
+cat > /etc/default/grub <<'EOF'
 GRUB_DEFAULT=0
+GRUB_TIMEOUT_STYLE=menu
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="PRIMERS OS"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash mitigations=off threadirqs"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash threadirqs"
 GRUB_CMDLINE_LINUX=""
 GRUB_THEME="/usr/share/grub/themes/primers/theme.txt"
 GRUB_GFXMODE="1920x1080,1280x720,auto"
+GRUB_DISABLE_OS_PROBER=false
 EOF
 
-# CPU performance governor service
-cat > /etc/systemd/system/primers-perf.service << 'EOF'
+# Performance CPU governor while on mains power; the kernel default
+# (powersave/schedutil) is kept on battery so laptops don't drain.
+install -d /usr/lib/primers
+cat > /usr/lib/primers/perf-governor <<'EOF'
+#!/bin/sh
+on_ac=1
+for ps in /sys/class/power_supply/*; do
+  [ -r "$ps/type" ] || continue
+  if [ "$(cat "$ps/type")" = "Mains" ]; then
+    on_ac="$(cat "$ps/online" 2>/dev/null || echo 1)"
+    break
+  fi
+done
+[ "$on_ac" = "1" ] || exit 0
+for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+  [ -w "$f" ] && echo performance > "$f" 2>/dev/null || true
+done
+exit 0
+EOF
+chmod 0755 /usr/lib/primers/perf-governor
+
+cat > /etc/systemd/system/primers-perf.service <<'EOF'
 [Unit]
-Description=PRIMERS OS CPU Performance Governor
+Description=PRIMERS OS CPU performance governor (on AC power)
 After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c "for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > $f 2>/dev/null || true; done"
+ExecStart=/usr/lib/primers/perf-governor
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl enable primers-perf.service 2>/dev/null || true
-update-grub 2>/dev/null || true
+systemctl enable primers-perf.service
+systemctl enable zramswap.service 2>/dev/null || true

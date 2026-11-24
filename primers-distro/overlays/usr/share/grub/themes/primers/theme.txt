@@ -1,35 +1,61 @@
+# PRIMERS OS GRUB theme
+# background.png, terminal_box_*.png and the *.pf2 fonts are generated next
+# to this file at build time (config/hooks/chroot/0050-configure-desktop).
+# GRUB 2.12 needs a desktop-image: without one it stops every boot with
+# "null src bitmap in grub_video_bitmap_create_scaled".
 title-text: ""
+desktop-image: "background.png"
 desktop-color: "#0a0a0f"
-+label {
+message-font: "Noto Sans Regular 14"
+message-color: "#c8c8e8"
+terminal-font: "Noto Sans Regular 14"
+terminal-box: "terminal_box_*.png"
+
++ label {
   text = "PRIMERS OS 1.0 Genesis"
   color = "#00e5ff"
   font = "Noto Sans Regular 20"
   align = "center"
   left = 0%
-  top = 18%
+  top = 30%
   width = 100%
   height = 36
 }
-+boot_menu {
-  left = 15%
-  width = 70%
-  top = 36%
-  height = 220
+
++ boot_menu {
+  left = 20%
+  width = 60%
+  top = 38%
+  height = 45%
   item_color = "#c8c8e8"
   selected_item_color = "#00e5ff"
   item_font = "Noto Sans Regular 14"
   selected_item_font = "Noto Sans Regular 14"
-  item_height = 36
-  item_spacing = 4
-  icon_width = 0
+  item_height = 30
+  item_spacing = 6
+  item_padding = 4
+  scrollbar = false
 }
-+label {
-  text = "Use arrow keys to select · Enter to boot"
+
++ label {
+  id = "__timeout__"
+  text = "Booting in %d seconds"
   color = "#606080"
   font = "Noto Sans Regular 11"
   align = "center"
   left = 0%
-  top = 82%
+  top = 86%
+  width = 100%
+  height = 24
+}
+
++ label {
+  text = "Arrow keys to select  -  Enter to boot  -  e to edit"
+  color = "#606080"
+  font = "Noto Sans Regular 11"
+  align = "center"
+  left = 0%
+  top = 90%
   width = 100%
   height = 24
 }

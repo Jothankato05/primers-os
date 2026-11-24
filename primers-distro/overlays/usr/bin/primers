@@ -1,5 +1,3 @@
-#!/bin/bash
-# PRIMERS OS Brain Launcher
-export PRIMERS_LOG_DIR="/var/log/primers"
-cd /usr/share/primers/brain
-python3 main.py "$@"
+#!/bin/sh
+# PRIMERS OS Brain launcher. Per-user data lives in ~/.local/share/primers.
+exec python3 /usr/share/primers/brain/main.py "$@"

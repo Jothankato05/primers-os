@@ -1,0 +1,11 @@
+# Packages that must never be installed in the image (pinned to -1 during the
+# build, purged if a dependency pulled them in). The pin is removed before
+# the image is packed, so users can still install them later.
+#
+# Only list packages nothing in the image *depends* on — purging a
+# dependency removes the packages that need it (e.g. Lutris depends on
+# fluid-soundfont-gs, so the soundfont cannot be excluded).
+
+# Duplicate Wine: Lutris only *recommends* it; the image ships stable 'wine'
+wine-development
+libwine-development

@@ -8,3 +8,7 @@ build.log
 .env
 .vscode/
 .idea/
+work/
+.pytest_cache/
+*.iso.sha256
+*.iso.part*
