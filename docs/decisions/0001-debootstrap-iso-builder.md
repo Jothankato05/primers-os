@@ -1,0 +1,43 @@
+# 0001 — Build the ISO with debootstrap + GRUB instead of live-build
+
+- **Status:** accepted
+- **Date:** 2026-11-24
+
+## Context
+
+The ISO was built with `live-build`. Every CI build (runs 7–13, tags
+`v1.0.2`–`v1.0.8-genesis`) failed. On the `ubuntu-22.04` runner, `apt install
+live-build` gives version **3.0~a57-1ubuntu41** — the 2012-era branch Ubuntu
+still carries — not the modern Debian live-build. In that version:
+
+- `--mode ubuntu` with the syslinux bootloader always requires
+  `gfxboot-theme-ubuntu`, and every theme option requires a
+  `syslinux-themes-<name>` package. None of these exist in jammy.
+- Chroot firmware detection downloads per-component `Contents-*.gz` files
+  that Ubuntu mirrors don't publish (Debian layout).
+- `--linux-packages linux-image-generic --linux-flavours generic` produces
+  the package name `linux-image-generic-generic`.
+
+Separately, the package lists used Debian names (`firmware-linux-free`) and
+`firefox`, which on jammy is a snap transition package that can't be
+installed in a chroot.
+
+## Decision
+
+Replace live-build with a small, staged `build.sh` that runs `debootstrap`,
+installs packages in a chroot with apt, applies overlays and hooks, builds
+a casper squashfs and makes a hybrid BIOS/UEFI ISO with `grub-mkrescue`. The
+existing package lists, hooks and overlays are kept. Firefox comes from
+Mozilla's signed APT repository (fingerprint-pinned in `build.sh`).
+
+## Consequences
+
+- The build depends only on tools available on any Ubuntu/Debian host and
+  was verified end to end: the ISO boots to the desktop in QEMU (BIOS and
+  UEFI) and the Calamares installer runs.
+- `tools/check-packages.py` validates every package name against the jammy
+  archive in CI, so naming errors fail in seconds.
+- The live ISO's GRUB from `grub-mkrescue` is unsigned: the live USB needs
+  Secure Boot disabled. Installed systems use Ubuntu's signed shim/GRUB.
+  Signing the live boot path is future work.
+- We maintain ~400 lines of shell instead of a live-build configuration.
