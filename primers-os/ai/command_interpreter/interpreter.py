@@ -46,6 +46,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
     "alerts":                  ("list_alerts",     "Show system alerts"),
     "datasaver":               ("datasaver",       "Data Saver: metered network & paused downloads"),
     "lab":                     ("lab",             "Lab Mode: shared account wiped at sign-out"),
+    "benchmark":               ("benchmark",       "Measure boot time, RAM and disk against PRIMERS targets (--json)"),
     "study":                   ("study",           "Study Mode: focus timer, pauses distracting sites (study 25 | stop)"),
     "focus":                   ("study",           "Study Mode: focus timer, pauses distracting sites (study 25 | stop)"),
     "connections":             ("list_connections","Show active network connections"),
@@ -88,7 +89,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
 }
 
 HELP_GROUPS = {
-    "System":       ["status", "alerts", "datasaver", "lab", "kernel", "version"],
+    "System":       ["status", "alerts", "datasaver", "lab", "benchmark", "kernel", "version"],
     "Process":      ["ps", "kill", "launch", "find", "suspend", "resume", "priority"],
     "Security":     ["security", "threats", "connections", "cyber"],
     "Intelligence": ["ask", "advise", "learn", "task"],
@@ -115,6 +116,9 @@ NL_PATTERNS: List[Tuple[str, str]] = [
     (r"^(?:am\s+i\s+on\s+(?:a\s+)?metered(?:\s+(?:network|connection))?|data\s+saver(?:\s+status)?)\??$", "datasaver"),
     (r"^(?:lab\s+mode(?:\s+status)?|is\s+this\s+a\s+(?:shared\s+|lab\s+)*(?:computer|machine|pc|account)|"
      r"(?:will|are|do)\s+my\s+files\s+(?:be\s+|get\s+)?(?:deleted|wiped|erased|kept|saved))\??$", "lab"),
+    (r"^(?:run\s+(?:a\s+)?)?benchmark(?:\s+(?:this|my)\s+(?:pc|computer|machine|laptop))?$|"
+     r"^how\s+fast\s+(?:is\s+)?(?:this|my)\s+(?:pc|computer|machine|laptop)(?:\s+boot(?:ing)?)?\??$|"
+     r"^how\s+(?:long|fast)\s+does\s+(?:this|my)\s+(?:pc|computer|machine|laptop)\s+(?:take\s+to\s+)?boot\??$", "benchmark"),
     (r"^find\s+(?:process\s+)?(?P<arg>\S+)$",                                                         "find_process"),
     (r"^(?:calculate|compute|solve)\s+(?P<arg>.+)$",                                                  "math"),
     (r"^what(?:'s|\s+is)\s+(?P<arg>[\d\s+\-*/^%().,]+?)\s*\??$",                                     "math"),

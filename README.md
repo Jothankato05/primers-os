@@ -60,6 +60,7 @@ press Enter at the prompt.
 | **Apps** | Primers Lite Bee, Firefox (Mozilla's official .deb), VLC, OBS Studio, text editor, image viewer, archive manager |
 | **Modules** | `primers-install devtools \| creative \| gaming \| office \| ai-ml \| cyber \| voice` |
 | **Study Mode** | `study 25` starts a focus timer: Lite Bee pauses social media, video, games and betting sites, the panel counts down, a notice says when to take a break |
+| **Benchmark** | `benchmark` in the Brain measures boot time, idle RAM and disk against the PRIMERS targets and saves a shareable report (hardware facts only) |
 | **Lab Mode** | For shared lab PCs: `sudo primers-lab enable` adds a passwordless `lab` account that is wiped at every sign-out and boot, so each student starts clean |
 | **Security** | Firewall on, CPU mitigations on, automatic security updates, AppArmor, no shared passwords — the live user exists only in the live session |
 | **Kernel** | Ubuntu HWE kernel (6.8) for recent GPUs and Wi-Fi, zram swap, performance governor on AC power |

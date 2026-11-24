@@ -29,7 +29,7 @@ from utils.logger import PrimersLogger
 VOICE_SAFE_ACTIONS = {
     "list_processes", "system_status", "security_status", "list_threats",
     "list_alerts", "list_connections", "find_process", "math", "help",
-    "version", "advise", "kernel", "ask", "datasaver", "lab",
+    "version", "advise", "kernel", "ask", "datasaver", "lab", "benchmark",
 }
 
 
@@ -557,6 +557,41 @@ class PrimersShell:
                 print(C.err("  ✗ Lab Mode is not fully set up: run sudo primers-lab enable again."))
             elif not st.get("sign_in_ready"):
                 print(C.warn("  Restart the computer to finish: the lab account can sign in after that."))
+        print(f"\n{divider()}\n")
+
+    def _cmd_benchmark(self, cmd: ParsedCommand):
+        from core import benchmark
+        from utils.paths import data_dir
+        report = benchmark.collect()
+        if cmd.flags.get("json"):
+            print(json.dumps(dict(report, results=[dict(zip(("check", "measured", "target", "result"), r))
+                                                   for r in benchmark.evaluate(report)]), indent=2))
+            return
+        hw = report["hardware"]
+        print(f"\n{divider()}")
+        print(f"  {C.hi('BENCHMARK')}  {C.dim(report['os'] + ' · kernel ' + report['kernel'])}")
+        print(divider())
+        print(f"  {C.dim('Machine:')}  {' '.join(x for x in (hw.get('vendor'), hw.get('model')) if x) or 'unknown'}")
+        print(f"  {C.dim('CPU:')}      {hw['cpu']} ({hw['cores']} threads)")
+        disk = report["disk"]
+        kind = {True: "hard disk", False: "SSD"}.get(disk.get("rotational"), "unknown type")
+        print(f"  {C.dim('Disk:')}     {kind}")
+        boot = report.get("boot", {})
+        if boot:
+            parts = " + ".join(f"{k} {boot[k]:.1f}s" for k in ("firmware", "loader", "kernel", "initrd", "graphical")
+                               if k in boot)
+            print(f"  {C.dim('Boot:')}     {parts}")
+        print()
+        marks = {"pass": C.ok("✓ pass"), "fail": C.err("✗ over"), "n/a": C.dim("–")}
+        for check, measured, target, result in benchmark.evaluate(report):
+            print(f"  {check:<16} {C.info(f'{measured:>10}')}   {C.dim(f'{target:<34}')} {marks[result]}")
+        if report["uptime_s"] < 120:
+            print(C.dim("\n  Tip: wait two minutes after boot for a true idle RAM reading."))
+        if report["live_session"]:
+            print(C.dim("  Live USB session: boot and disk figures only mean something once installed."))
+        path = benchmark.save(report, os.path.join(data_dir(), "benchmarks"))
+        print(f"\n  {C.dim('Saved:')} {path}")
+        print(C.dim("  The report has hardware facts and timings only: no names, files or addresses."))
         print(f"\n{divider()}\n")
 
     def _cmd_study_start(self, cmd: ParsedCommand):

@@ -42,6 +42,10 @@
   starts a focus timer; Primers Lite Bee pauses social media, video, games
   and betting sites until it ends (before any data is spent on typed or
   clicked links), the panel counts down and a notice marks the break.
+- `benchmark` in the Brain measures boot-to-login time, RAM and disk
+  against the PRIMERS design targets (2 GB RAM, < 600 MB idle, < 15 s boot
+  on SSD / 30 s on HDD, < 8 GB install) and saves a JSON report with
+  hardware facts only, for collecting pilot proof points.
 - Console logins say PRIMERS OS instead of Ubuntu and no longer show
   Ubuntu Pro adverts.
 - Wired Ethernet now works: NetworkManager manages every device (Ubuntu's
