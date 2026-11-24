@@ -25,8 +25,8 @@ every one-shot command succeeded, `1` otherwise — handy for scripts.
 | System | `status` · `alerts` · `kernel [info\|load\|uptime\|net]` · `version` |
 | Processes | `ps [--sort=cpu\|memory\|pid\|name] [--limit=N]` · `find <name>` · `launch <cmd>` · `kill <pid> [--force] [--yes]` · `suspend` / `resume <pid>` · `priority <pid> <nice>` |
 | Security | `security` · `threats [--level=HIGH]` · `connections` · `cyber scan [1-1024]` · `cyber report` |
-| Intelligence | `advise` — prioritised recommendations · `learn stats\|suggest\|clear` · `task add\|list\|run\|enable\|disable\|remove\|history` |
-| Services | `math <expr>` · `gpa add\|remove\|report\|clear` · `graph scan\|show\|anomalies\|stats\|export` · `modules [install <name>]` · `plugins` |
+| Intelligence | `ask <question>` — Ask Primers (offline knowledge base) · `advise` — prioritised recommendations · `learn stats\|suggest\|clear` · `task add\|list\|run\|enable\|disable\|remove\|history` |
+| Services | `browse <site or search>` (Primers Lite Bee) · `math <expr>` · `gpa add\|remove\|report\|clear` · `graph scan\|show\|anomalies\|stats\|export` · `modules [install <name>]` · `plugins` |
 | Interface | `gui start\|stop\|open` · `voice start\|stop` · `help` · `clear` · `exit` |
 
 Natural language works too — anchored phrases, so ordinary sentences never
@@ -39,6 +39,25 @@ what is 2^10             calculate sqrt(2)        open firefox
 ```
 
 Mistype a command and it suggests the closest ones (`staus` → *status*).
+Anything else phrased as a question goes to **Ask Primers**.
+
+## Ask Primers (knowledge layer)
+
+`knowledge/PRIMERS_KNOWLEDGE.md` is loaded at boot and split by heading.
+Questions are answered offline, in this order:
+
+1. **Emergencies first** — anything that sounds like danger shows Nigeria's
+   emergency number (112) and SecureLink before anything else, and is
+   checked before any other command (so *"help me, I'm in danger"* never
+   just prints the help text).
+2. **Glossary** terms (*"what is Lab Mode?"*), then the **Ready answers** FAQ.
+3. The best-matching **section**, quoted from the file (BM25 retrieval with
+   heading boost). Table rows are shown as `Field: value`.
+4. Nothing relevant → it says so and gives the contact route; it never
+   invents. Items marked `[VERIFY]` are shown as *(unconfirmed)*.
+
+Update the file and the next start picks it up. Override the location with
+`PRIMERS_KNOWLEDGE=/path/to/file.md`.
 
 ### Examples
 

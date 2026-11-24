@@ -63,6 +63,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
     "bye":                     ("exit",            "Exit PRIMERS OS"),
 
     # Intelligence
+    "ask":                     ("ask",             "Ask Primers anything (offline knowledge)"),
     "advise":                  ("advise",          "AI recommendations for this system"),
     "insights":                ("advise",          "AI recommendations for this system"),
     "learn":                   ("learn",           "Behavioural learning engine"),
@@ -74,6 +75,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
     "gpa":                     ("gpa",             "GPA calculator and tracker"),
     "graph":                   ("graph",           "Network topology mapper"),
     "modules":                 ("modules",         "List installable software modules"),
+    "browse":                  ("browse",          "Open Primers Lite Bee (URL or search)"),
     "plugins":                 ("plugins",         "List loaded plugins"),
 
     # Interfaces
@@ -85,8 +87,8 @@ HELP_GROUPS = {
     "System":       ["status", "alerts", "kernel", "version"],
     "Process":      ["ps", "kill", "launch", "find", "suspend", "resume", "priority"],
     "Security":     ["security", "threats", "connections", "cyber"],
-    "Intelligence": ["advise", "learn", "task"],
-    "Services":     ["math", "gpa", "graph", "modules", "plugins"],
+    "Intelligence": ["ask", "advise", "learn", "task"],
+    "Services":     ["browse", "math", "gpa", "graph", "modules", "plugins"],
     "Interface":    ["gui", "voice", "clear", "help", "exit"],
 }
 
@@ -107,6 +109,16 @@ NL_PATTERNS: List[Tuple[str, str]] = [
     (r"^(?:give\s+me\s+)?(?:any\s+)?(?:advice|recommendations?|suggestions?)\??$",                    "advise"),
     (r"^(?:what\s+should\s+i\s+do|any\s+advice)\??$",                                                 "advise"),
 ]
+
+
+def _is_emergency(text: str) -> bool:
+    from services.knowledge.engine import KnowledgeBase
+    return KnowledgeBase.is_emergency(text)
+
+
+_QUESTION = re.compile(
+    r"^(who|what|whats|what's|where|when|why|how|which|is|are|does|do|can|could|should|"
+    r"tell me|explain|i'?m in danger|help me)\b", re.IGNORECASE)
 
 
 class CommandInterpreter:
@@ -163,6 +175,11 @@ class CommandInterpreter:
 
         cmd_word = tokens[0].lower()
         args = tokens[1:]
+
+        # Emergencies first: "help me, I'm in danger" must never run 'help'
+        if _is_emergency(raw):
+            return ParsedCommand(action="ask", args=[raw], flags={}, raw=raw,
+                                 confidence=0.9, word=cmd_word, rest=raw)
         flags = self._extract_flags(args)
         clean_args = [a for a in args if not self._is_flag(a)]
         rest = raw.split(None, 1)[1] if len(raw.split(None, 1)) > 1 else ""
@@ -184,6 +201,11 @@ class CommandInterpreter:
             action, _ = self.COMMAND_MAP[cmd_word]
             return ParsedCommand(action=action, args=clean_args, flags=flags, raw=raw,
                                  confidence=1.0, word=cmd_word, rest=rest)
+
+        # Anything phrased as a question goes to Ask Primers
+        if _QUESTION.match(raw) or raw.endswith("?"):
+            return ParsedCommand(action="ask", args=[raw], flags={}, raw=raw,
+                                 confidence=0.5, word=cmd_word, rest=raw)
 
         return ParsedCommand(action="unknown", args=tokens, flags=flags, raw=raw,
                              confidence=0.0, word=cmd_word, rest=rest,
@@ -209,7 +231,7 @@ class CommandInterpreter:
             for w in extra:
                 lines.append(f"    {w:<14} {self.COMMAND_MAP[w][1]}")
         lines.append("\n  Tip: natural language works too — 'show me processes', 'am i safe?',")
-        lines.append("       'what is 2^10', 'any advice?'\n")
+        lines.append("       'what is 2^10', 'any advice?', 'who founded Primers?'\n")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------ #

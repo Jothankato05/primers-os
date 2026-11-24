@@ -51,7 +51,8 @@ def test_natural_language(ci, text, action, args):
     "tell me about threats in the news today",
 ])
 def test_ordinary_sentences_do_not_trigger_actions(ci, text):
-    assert ci.parse(text).action == "unknown"
+    # Unmatched sentences go to the read-only knowledge base, never to an action
+    assert ci.parse(text).action in ("unknown", "ask")
 
 
 def test_unknown_suggests_close_commands(ci):

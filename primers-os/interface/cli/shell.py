@@ -29,7 +29,7 @@ from utils.logger import PrimersLogger
 VOICE_SAFE_ACTIONS = {
     "list_processes", "system_status", "security_status", "list_threats",
     "list_alerts", "list_connections", "find_process", "math", "help",
-    "version", "advise", "kernel",
+    "version", "advise", "kernel", "ask",
 }
 
 
@@ -117,6 +117,7 @@ class PrimersShell:
         gpa_service=None,
         graph_ai=None,
         decision_engine=None,
+        knowledge=None,
         interactive: bool = True,
     ):
         self.logger = PrimersLogger.get_logger("cli")
@@ -133,6 +134,7 @@ class PrimersShell:
         self.gpa = gpa_service
         self.graph = graph_ai
         self.de = decision_engine or getattr(command_interpreter, "decision_engine", None)
+        self.kb = knowledge
         self.interactive = interactive
 
         self.math = MathEngine()
@@ -559,6 +561,36 @@ class PrimersShell:
             nxt = self.le.suggest(self._recent[-3:] or None)
             print(f"\n  {C.dim('You might want next:')} {', '.join(C.accent(s) for s in nxt)}")
         print(f"\n{divider()}\n")
+
+    def _cmd_ask(self, cmd: ParsedCommand):
+        question = cmd.rest.strip() if cmd.rest else " ".join(cmd.args)
+        if not self.kb:
+            print(C.err("  ✗ Knowledge base not available."))
+            return
+        if not question:
+            print(f"\n  {C.hi('ASK PRIMERS')}  {C.dim('— e.g. ask what is Veltis One?')}")
+            print(f"  {C.dim('Topics:')} " + ", ".join(t.split(". ", 1)[-1].split(" (")[0] for t in self.kb.topics()[:12]))
+            return
+        ans = self.kb.answer(question)
+        print(f"\n  {C.accent('⚛ Ask Primers')}  {C.dim(question)}")
+        print(divider())
+        for i, line in enumerate(ans.text.splitlines()):
+            if ans.emergency and i < 2:
+                print(f"  {C.err(line)}")
+            else:
+                print(f"  {line}")
+        if ans.sources:
+            print(f"\n  {C.dim('Source: ' + ans.sources[0])}")
+        print()
+
+    def _cmd_browse(self, cmd: ParsedCommand):
+        target = cmd.rest.strip() if cmd.confidence == 1.0 else " ".join(cmd.args)
+        args = ["lite-bee"] + ([target] if target else [])
+        pid = self.pm.launch(" ".join(__import__("shlex").quote(a) for a in args))
+        if pid:
+            print(C.ok(f"  ✓ Primers Lite Bee opened{(' → ' + target) if target else ''}"))
+        else:
+            print(C.err("  ✗ Primers Lite Bee is not installed on this system."))
 
     def _cmd_learn(self, cmd: ParsedCommand):
         if not self.le:

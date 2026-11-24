@@ -56,6 +56,7 @@ def build_shell(settings: Settings, interactive: bool):
     from interface.voice.listener import VoiceListener
     from services.gpa_service.service import GPAService
     from services.graph_ai.engine import GraphAIEngine
+    from services.knowledge.engine import KnowledgeBase
     from services.plugin_loader.loader import PluginLoader
 
     system_monitor = SystemMonitor(settings)
@@ -86,6 +87,7 @@ def build_shell(settings: Settings, interactive: bool):
         gpa_service=GPAService(),
         graph_ai=GraphAIEngine(),
         decision_engine=decision_engine,
+        knowledge=KnowledgeBase(),
         interactive=interactive,
     )
     shell.voice = VoiceListener(command_interpreter, on_command=shell.execute_voice)
