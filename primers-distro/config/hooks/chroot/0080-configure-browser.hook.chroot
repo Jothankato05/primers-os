@@ -1,0 +1,41 @@
+#!/bin/bash
+# PRIMERS OS — Primers Lite Bee as the default web browser
+set -euo pipefail
+
+LB=/usr/share/primers/lite-bee
+[ -d "$LB/litebee" ] || { echo "[PRIMERS] Lite Bee missing at $LB" >&2; exit 1; }
+
+# Icons from the Lite Bee logo
+for size in 16 24 32 48 64 128 256; do
+  install -D -m 0644 "$LB/litebee/assets/lite-bee-$size.png" \
+    "/usr/share/icons/hicolor/${size}x${size}/apps/lite-bee.png"
+done
+gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
+# Installer slideshow slide
+if [ -d /etc/calamares/branding/primers ]; then
+  install -m 0644 "$LB/litebee/assets/lite-bee-128.png" /etc/calamares/branding/primers/lite-bee.png
+fi
+
+# Default for web links and HTML files (Firefox stays installed)
+cat >> /etc/xdg/mimeapps.list <<'MIMEEOF'
+text/html=lite-bee.desktop
+application/xhtml+xml=lite-bee.desktop
+x-scheme-handler/http=lite-bee.desktop
+x-scheme-handler/https=lite-bee.desktop
+MIMEEOF
+update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/lite-bee 200
+update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/lite-bee 200
+update-desktop-database -q /usr/share/applications 2>/dev/null || true
+
+# Compile with the image's Python and check the engine bindings exist
+python3 -m compileall -q "$LB"
+PYTHONPATH="$LB" python3 - <<'PYEOF'
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("WebKit2", "4.0")
+from gi.repository import WebKit2  # noqa: F401
+from litebee import filters, modes, urls
+assert urls.to_url("primersgroup.ng") == "https://primersgroup.ng"
+assert filters.build_rules(modes.MODES["ultra"])
+print("[PRIMERS] Lite Bee checks passed")
+PYEOF

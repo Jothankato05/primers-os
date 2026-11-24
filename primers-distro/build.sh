@@ -294,6 +294,15 @@ stage_customize() {
   find "$CHROOT/usr/share/primers/brain" -type d -exec chmod 0755 {} +
   find "$CHROOT/usr/share/primers/brain" -type f -exec chmod 0644 {} +
 
+  log "Installing Primers Lite Bee -> /usr/share/primers/lite-bee"
+  rm -rf "$CHROOT/usr/share/primers/lite-bee"
+  install -d -m 0755 "$CHROOT/usr/share/primers/lite-bee"
+  tar -C "$REPO_ROOT/primers-lite-bee" --exclude='__pycache__' --exclude='*.pyc' -cf - litebee \
+    | tar -C "$CHROOT/usr/share/primers/lite-bee" -xf -
+  install -m 0755 "$REPO_ROOT/primers-lite-bee/lite-bee" "$CHROOT/usr/bin/lite-bee"
+  find "$CHROOT/usr/share/primers/lite-bee" -type d -exec chmod 0755 {} +
+  find "$CHROOT/usr/share/primers/lite-bee" -type f -exec chmod 0644 {} +
+
   log "Installing Calamares configuration -> /etc/calamares"
   rm -rf "$CHROOT/etc/calamares"
   install -d -m 0755 "$CHROOT/etc/calamares"

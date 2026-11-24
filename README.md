@@ -10,6 +10,7 @@ This repository contains both halves of the OS:
 | Directory | What it is |
 |---|---|
 | [`primers-os/`](primers-os/README.md) | **PRIMERS Brain** — the Python system controller (CLI shell, web dashboard, AI engines, plugins) |
+| [`primers-lite-bee/`](primers-lite-bee/README.md) | **Primers Lite Bee** — our fast, data-saving browser for 2G, LTE and Wi-Fi |
 | [`primers-distro/`](primers-distro/README.md) | **The distribution** — ISO build system, desktop configuration, installer, module system |
 
 ---
@@ -51,10 +52,12 @@ turned off).
 | | |
 |---|---|
 | **PRIMERS Brain** | Opens on login (or `Super+Enter`). `status`, `ps`, `threats`, `advise`, `math 2^10`… or just ask: *"how is my system?"*, *"am I safe?"*, *"any advice?"* |
+| **Ask Primers** | Offline answers about Primers from the built-in knowledge base: *"what is Veltis One?"*, *"who founded Primers?"* — emergencies first (112) |
+| **Primers Lite Bee** | Default browser. Detects Wi-Fi / LTE / 2G and switches between Full, Lite and Ultra data modes; ads and trackers blocked in the engine; data meter in MB (and ₦); offline saving, reader mode, session restore |
 | **Desktop** | Openbox + tint2 panel, PCManFM, dark theme, LightDM login |
 | **Windows apps** | Wine (64- and 32-bit); double-click any `.exe` or `primers-compat app.exe` |
 | **Gaming** | Lutris, GameMode, MangoHud, Mesa Vulkan (64/32-bit); `primers-install gaming` adds Steam |
-| **Apps** | Firefox (Mozilla's official .deb), VLC, OBS Studio, text editor, image viewer, archive manager |
+| **Apps** | Primers Lite Bee, Firefox (Mozilla's official .deb), VLC, OBS Studio, text editor, image viewer, archive manager |
 | **Modules** | `primers-install devtools \| creative \| gaming \| office \| ai-ml \| cyber \| voice` |
 | **Security** | Firewall on, CPU mitigations on, automatic security updates, AppArmor, no shared passwords — the live user exists only in the live session |
 | **Kernel** | Ubuntu HWE kernel (6.8) for recent GPUs and Wi-Fi, zram swap, performance governor on AC power |
@@ -66,7 +69,9 @@ primers-os/            PRIMERS Brain (Python 3.10+)
   main.py              entry point: `primers`, `primers status`, `primers -c "cmd"`
   core/ ai/ services/  monitoring, security, learning, automation, math, GPA, graph…
   interface/           CLI shell, web dashboard, voice
-  tests/               pytest suite (117 tests)
+  tests/               pytest suite
+  knowledge/           PRIMERS_KNOWLEDGE.md — the system knowledge layer (Ask Primers)
+primers-lite-bee/      Primers Lite Bee browser (Python + GTK + WebKit)
 primers-distro/        ISO build system
   build.sh             debootstrap → chroot → squashfs → hybrid BIOS/UEFI ISO
   config/              build.conf, package lists, chroot hooks

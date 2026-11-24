@@ -41,6 +41,33 @@ jobs:
           python main.py -c "math 2^10" | grep -q "1,024"
           python main.py -c "status" -c "advise"
 
+  lite-bee:
+    name: Primers Lite Bee
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK, WebKit and a virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0 python3-pytest xvfb
+      - name: Unit tests
+        working-directory: primers-lite-bee
+        run: /usr/bin/python3 -m pytest -q tests
+      - name: Browser smoke test (real WebKit, Ultra mode blocks images)
+        working-directory: primers-lite-bee
+        env:
+          LITEBEE_HOME: ${{ runner.temp }}/litebee
+        run: |
+          mkdir -p "$RUNNER_TEMP/www"
+          head -c 400000 /dev/urandom > "$RUNNER_TEMP/www/photo.jpg"
+          printf '<title>t</title><h1>Hello</h1><img src="photo.jpg">' > "$RUNNER_TEMP/www/index.html"
+          (cd "$RUNNER_TEMP/www" && python3 -m http.server 8765 --bind 127.0.0.1 &)
+          sleep 1
+          xvfb-run -a ./lite-bee --screenshot "$RUNNER_TEMP/home.png" bee:home | tee home.json
+          grep -q '"title": "Primers Lite Bee"' home.json
+          xvfb-run -a ./lite-bee --mode ultra --screenshot "$RUNNER_TEMP/ultra.png" http://127.0.0.1:8765/ | tee ultra.json
+          python3 -c "import json; d=json.load(open('ultra.json')); assert d['mode']=='ultra' and d['bytes'] < 5000, d"
+
   distro-lint:
     name: Distro lint
     runs-on: ubuntu-22.04
@@ -55,7 +82,7 @@ jobs:
             config/hooks/chroot/*.hook.chroot \
             overlays/usr/bin/primers overlays/usr/bin/primers-compat \
             overlays/usr/bin/primers-install overlays/usr/bin/primers-terminal \
-            overlays/etc/skel/.config/openbox/autostart
+            overlays/etc/skel/.config/openbox/autostart ../primers-lite-bee/lite-bee
       - name: Validate JSON, YAML, XML and QML
         working-directory: primers-distro
         run: |

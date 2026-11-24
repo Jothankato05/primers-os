@@ -34,7 +34,7 @@ interrupted build resumes where it stopped:
 |---|---|
 | `bootstrap` | `debootstrap` a minimal Ubuntu jammy |
 | `packages` | apt sources (+ Mozilla's repo for Firefox), HWE kernel, casper, every `config/packages-lists/*.list.chroot` |
-| `customize` | copy `overlays/`, the PRIMERS Brain and the installer config; run `config/hooks/chroot/*.hook.chroot` |
+| `customize` | copy `overlays/`, the PRIMERS Brain, Primers Lite Bee and the installer config; run `config/hooks/chroot/*.hook.chroot` |
 | `finalize` | rebuild the initramfs, clean caches, reset machine-id/SSH keys, security checks |
 | `image` | squashfs + GRUB menu + hybrid ISO |
 
@@ -91,6 +91,7 @@ config/
     0050-configure-desktop      artwork, Plymouth splash, GRUB theme fonts, LightDM, GTK
     0060-performance-kernel     /etc/default/grub, CPU governor service
     0070-configure-installer    "Install PRIMERS OS" launcher
+    0080-configure-browser      Primers Lite Bee icons, default browser, checks
 overlays/                       copied verbatim into the OS root
   usr/bin/primers               launches the brain
   usr/bin/primers-terminal      brain in a terminal window (falls back to a shell)

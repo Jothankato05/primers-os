@@ -19,7 +19,7 @@ strings:
   versionedName:       "PRIMERS OS 1.0 Genesis"
   shortVersionedName:  "PRIMERS 1.0"
   bootloaderEntryName: "PRIMERS OS"
-  productUrl:          "https://primeros.org"
+  productUrl:          "https://primersgroup.ng"
   supportUrl:          "https://github.com/Jothankato05/primers-os/issues"
   knownIssuesUrl:      "https://github.com/Jothankato05/primers-os/issues"
   releaseNotesUrl:     "https://github.com/Jothankato05/primers-os/releases"

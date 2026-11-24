@@ -155,6 +155,41 @@ Presentation {
         }
     }
 
+    Slide {
+        Rectangle {
+            anchors.fill: parent
+            color: "#0a1a27"
+            Image {
+                id: logoBee
+                source: "lite-bee.png"
+                width: 96; height: 96
+                fillMode: Image.PreserveAspectFit
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: parent.height * 0.18
+            }
+            Text {
+                id: titleBee
+                anchors.top: logoBee.bottom; anchors.topMargin: 24
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.8
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: "#e6ad39"; font.pixelSize: 26; font.bold: true
+                text: "Primers Lite Bee"
+            }
+            Text {
+                anchors.top: titleBee.bottom; anchors.topMargin: 16
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.8
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: "#f4efe6"; font.pixelSize: 16
+                text: "Our own browser, built for speed. It sees whether you are on Wi-Fi, LTE or 2G and loads only what your connection can afford — ads and trackers blocked, a live data meter, and pages saved for offline reading."
+            }
+        }
+    }
+
     function onActivate() { presentation.currentSlide = 0; }
     function onLeave() { }
 }

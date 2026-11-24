@@ -25,6 +25,14 @@
   registry fixed for Ubuntu 22.04 (Steam, voice module, accurate contents).
 - `primers-compat`: .exe/.msi/.bat handling, first-run Wine prefix, winecfg.
 
+### Primers Lite Bee (new)
+- Our own browser (GTK UI on the system WebKit engine) and the new default:
+  Auto/Full/Lite/Ultra data modes chosen from NetworkManager/ModemManager
+  (Wi-Fi, LTE, 3G, 2G, metered hotspots), engine-level blocking of ads,
+  trackers, fonts, media and (Ultra) images, data meter with optional naira
+  cost, offline saving, reader mode, crash-safe session restore, Lite Bee
+  logo and icons. Ultra mode cut a 1.16 MB test page to 735 bytes.
+
 ### PRIMERS Brain
 - Fixed: shell failed to start on Python 3.10/3.11 (3.12-only f-string), so
   the Brain never ran on the OS; `learn stats` / `learn suggest` crashes;
@@ -41,7 +49,12 @@
   (`primers status`, `-c`), alert badge in the prompt, "did you mean"
   suggestions, `modules`, `plugins`, `gui stop/open`, user plugin directory,
   port exposure (local vs network) in `cyber report`.
-- 117 automated tests; CI on Python 3.10 and 3.12.
+- Ask Primers: the Primers knowledge base ships with the OS and answers
+  offline (`ask`, or just ask a question) — emergencies first, glossary,
+  FAQ, quoted sections, never invented; `[VERIFY]` items marked unconfirmed.
+- `browse` opens Primers Lite Bee.
+- 131 Brain tests + 41 Lite Bee tests; CI on Python 3.10 and 3.12 and a real
+  WebKit smoke test for Lite Bee.
 
 ---
 
