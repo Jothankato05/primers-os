@@ -47,7 +47,8 @@ def exam(lab):  # noqa: F811
     net = Net(lab.fake)
     e = em.ExamMode(lab, conf=str(lab.root / "etc/primers/exam.conf"),
                     pkla=str(lab.root / "polkit/60-primers-exam.pkla"),
-                    rules_file=str(lab.root / "run/primers-exam.nft"), run=net.run, log=lab.fake.logs.append)
+                    rules_file=str(lab.root / "run/primers-exam.nft"), run=net.run, log=lab.fake.logs.append,
+                    is_root=lambda: True)
     e.net = net
     return e
 
@@ -230,3 +231,21 @@ def test_brain_exam_command(shell, capsys, monkeypatch):
     shell.execute("exam")
     out = capsys.readouterr().out
     assert "EXAM MODE" in out and "https://cbt.uni.edu.ng/" in out and "firewall active" in out
+
+
+def test_status_without_root_says_unknown_not_off(exam):
+    enabled(exam.lab)
+    exam.start("https://cbt.uni.edu.ng/")
+    exam.is_root = lambda: False
+    st = exam.status()
+    assert st["active"] and st["firewall"] is None and st["usb_blocked"] is None
+
+
+def test_cli_status_unknown_without_root(capsys, monkeypatch):
+    import primers_exam
+    monkeypatch.setattr(em.ExamMode, "status", lambda self: {
+        "active": True, "url": "https://cbt.uni.edu.ng/", "allow": ["cbt.uni.edu.ng"], "ports": [80, 443],
+        "started": "now", "firewall": None, "usb_blocked": None})
+    assert primers_exam.main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "Exam Mode: ON" in out and "sudo primers-exam status" in out and "NOT ACTIVE" not in out

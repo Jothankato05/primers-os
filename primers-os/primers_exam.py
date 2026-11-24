@@ -32,7 +32,7 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("stop", help="end the exam")
     sub.add_parser("status", help="show whether an exam is running")
     lg = sub.add_parser("log", help="show the exam log")
-    lg.add_argument("--since", help="e.g. 'today' or '2026-11-24 09:00'")
+    lg.add_argument("--since", help="e.g. today, '2026-11-24 09:00' or --since=-2h")
     return p
 
 
@@ -48,6 +48,9 @@ def print_status(exam: exam_mode.ExamMode) -> int:
     print(f"  Exam:       {st['url']}")
     print(f"  Servers:    {', '.join(st['allow'])} (ports {', '.join(map(str, st['ports']))})")
     print(f"  Started:    {st['started']}")
+    if st["firewall"] is None:
+        print("  Firewall and USB block: run 'sudo primers-exam status' to check")
+        return 0
     print(f"  Firewall:   {'active' if st['firewall'] else 'NOT ACTIVE'}")
     print(f"  USB drives: {'blocked' if st['usb_blocked'] else 'NOT BLOCKED'}")
     return 0 if st["firewall"] and st["usb_blocked"] else 1

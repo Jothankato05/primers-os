@@ -198,8 +198,10 @@ class ExamMode:
     def __init__(self, lab: Optional[lab_mode.LabMode] = None, conf: str = CONF, pkla: str = PKLA,
                  rules_file: str = RULES_FILE,
                  run: Callable[[Sequence[str]], subprocess.CompletedProcess] = _default_run,
-                 log: Callable[[str], None] = _default_log):
+                 log: Callable[[str], None] = _default_log,
+                 is_root: Callable[[], bool] = lambda: os.geteuid() == 0):
         self.lab = lab or lab_mode.LabMode()
+        self.is_root = is_root
         self.conf_path, self.pkla, self.rules_file = conf, pkla, rules_file
         self.run, self.log = run, log
 
@@ -218,9 +220,12 @@ class ExamMode:
             return {"active": None, "error": str(e)}
         if conf is None:
             return {"active": False}
+        # The firewall and the polkit file can only be checked by root:
+        # None means "unknown", never "off".
+        root = self.is_root()
         return {"active": True, "url": conf.url, "allow": conf.allow, "ports": conf.ports,
-                "started": conf.started, "firewall": self.firewall_active(),
-                "usb_blocked": os.path.exists(self.pkla)}
+                "started": conf.started, "firewall": self.firewall_active() if root else None,
+                "usb_blocked": os.path.exists(self.pkla) if root else None}
 
     # ---------------- helpers ----------------
 

@@ -45,6 +45,7 @@ class KioskWindow(Gtk.ApplicationWindow):
         self.blocked = 0
         self.finishing = False
         self._last_logged = None
+        self._error_uri = None
         self._ticks = 0
         self.set_decorated(False)
 
@@ -154,7 +155,9 @@ class KioskWindow(Gtk.ApplicationWindow):
     def on_load_changed(self, view, event):
         if event == WebKit2.LoadEvent.COMMITTED:
             uri = view.get_uri() or ""
-            if uri and uri != self._last_logged and self.policy.allows(uri):
+            if uri and uri == self._error_uri:        # our error page, not a visit
+                self._error_uri = None
+            elif uri and uri != self._last_logged and self.policy.allows(uri):
                 self._last_logged = uri
                 log(f"visited {uri[:300]}")
         elif event == WebKit2.LoadEvent.FINISHED:
@@ -165,13 +168,15 @@ class KioskWindow(Gtk.ApplicationWindow):
                 error.matches(WebKit2.PolicyError.quark(), WebKit2.PolicyError.FRAME_LOAD_INTERRUPTED_BY_POLICY_CHANGE):
             return False
         log(f"could not load {uri[:300]}: {error.message}")
-        view.load_alternate_html(pages.exam_error(uri, error.message), uri, None)
+        self._error_uri = uri
+        view.load_alternate_html(pages.exam_error(uri, error.message, self.policy.url), uri, None)
         return True
 
     def on_tls_error(self, view, uri, cert, errors):
         log(f"certificate not trusted: {uri[:300]}")
+        self._error_uri = uri
         view.load_alternate_html(pages.exam_error(
-            uri, "The exam server's security certificate could not be verified."), uri, None)
+            uri, "The exam server's security certificate could not be verified.", self.policy.url), uri, None)
         return True
 
     def on_finish(self, *_):

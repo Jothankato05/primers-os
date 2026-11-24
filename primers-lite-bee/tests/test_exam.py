@@ -49,3 +49,9 @@ def test_load_uses_env_override_and_handles_missing(tmp_path, monkeypatch):
 def test_exam_error_page_escapes():
     page = pages.exam_error('https://cbt.x/"><script>', "<b>timeout</b>")
     assert "<script>" not in page and "&lt;b&gt;timeout&lt;/b&gt;" in page and "invigilator" in page
+
+
+def test_exam_error_page_links_back_to_the_exam():
+    page = pages.exam_error("http://cbt.x/q2", "refused", "http://cbt.x/start")
+    assert 'href="http://cbt.x/start">Back to the exam' in page and 'href="http://cbt.x/q2">Try again' in page
+    assert "Back to the exam" not in pages.exam_error("http://cbt.x/start", "refused", "http://cbt.x/start")

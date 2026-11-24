@@ -169,12 +169,14 @@ Change the list in <code>~/.config/primers/study-sites</code>.</p>
     return _page("Study Mode", body)
 
 
-def exam_error(uri: str, message: str) -> str:
+def exam_error(uri: str, message: str, exam_url: Optional[str] = None) -> str:
     """Shown in the exam kiosk when an exam page fails to load."""
+    back = (f'<a href="{html.escape(exam_url, quote=True)}">Back to the exam</a>'
+            if exam_url and exam_url != uri else "")
     body = f"""
 <h1>The exam page didn't load</h1>
 <p class="muted">{html.escape(message)}</p>
-<div class="actions"><a href="{html.escape(uri, quote=True)}">Try again</a></div>
+<div class="actions"><a href="{html.escape(uri, quote=True)}">Try again</a>{back}</div>
 <p class="muted">If this keeps happening, raise your hand and tell the invigilator.</p>
 """
     return _page("Exam page didn't load", body)

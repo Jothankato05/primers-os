@@ -574,8 +574,11 @@ class PrimersShell:
             print(f"\n  {C.warn('An exam is running.')} The shared lab account opens only:")
             print(f"    {C.info(st['url'])}")
             print(f"  Servers:  {', '.join(st['allow'])}   {C.dim('since ' + st['started'])}")
-            checks = [("firewall active", st["firewall"]), ("USB drives blocked", st["usb_blocked"])]
-            print("  " + "   ".join((C.ok("✓ ") if ok else C.err("✗ ")) + name for name, ok in checks))
+            if st["firewall"] is None:
+                print(C.dim("  Firewall and USB block: check with sudo primers-exam status"))
+            else:
+                checks = [("firewall active", st["firewall"]), ("USB drives blocked", st["usb_blocked"])]
+                print("  " + "   ".join((C.ok("✓ ") if ok else C.err("✗ ")) + name for name, ok in checks))
         print(f"\n{divider()}\n")
 
     def _cmd_benchmark(self, cmd: ParsedCommand):
