@@ -65,8 +65,9 @@ jobs:
           sleep 1
           xvfb-run -a ./lite-bee --screenshot "$RUNNER_TEMP/home.png" bee:home | tee home.json
           grep -q '"title": "Primers Lite Bee"' home.json
-          xvfb-run -a ./lite-bee --mode ultra --screenshot "$RUNNER_TEMP/ultra.png" http://127.0.0.1:8765/ | tee ultra.json
-          python3 -c "import json; d=json.load(open('ultra.json')); assert d['mode']=='ultra' and d['bytes'] < 5000, d"
+          xvfb-run -a ./lite-bee --mode ultra --screenshot "$RUNNER_TEMP/ultra.png" http://127.0.0.1:8765/ | tee ultra.out
+          grep '^{' ultra.out | tail -n1 > ultra.json
+          python3 -c "import json; d=json.load(open('ultra.json')); assert d['mode']=='ultra' and d['bytes'] < 5000, d; print('Ultra mode page bytes:', d['bytes'])"
 
   distro-lint:
     name: Distro lint
