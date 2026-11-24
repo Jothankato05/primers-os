@@ -17,7 +17,7 @@ class GraphAIEngine:
         self.hostname = socket.gethostname()
         try:
             self.local_ip = socket.gethostbyname(self.hostname)
-        except:
+        except OSError:
             self.local_ip = "127.0.0.1"
         
     def scan(self) -> dict:
@@ -43,7 +43,7 @@ class GraphAIEngine:
 
         # 3. Scan connections
         try:
-            connections = psutil.net_connections(kind='inet')
+            connections = psutil.net_connections(kind='inet')  # may need root for other users' PIDs
             for conn in connections:
                 laddr = f"{conn.laddr.ip}:{conn.laddr.port}" if conn.laddr else "unknown"
                 raddr_ip = conn.raddr.ip if conn.raddr else None
@@ -158,7 +158,7 @@ class GraphAIEngine:
                 if edge.get("pid"):
                     try:
                         proc_name = psutil.Process(edge["pid"]).name()
-                    except:
+                    except (psutil.Error, OSError):
                         pass
                 
                 status = edge["status"]

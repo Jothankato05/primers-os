@@ -31,13 +31,44 @@ class CyberIntelligence:
         self.logger = PrimersLogger.get_logger("cyber_intelligence")
         self._last_scan_results = []
 
+    @staticmethod
+    def _listening_sockets() -> Dict[int, dict]:
+        """Map listening TCP port → bind address/process (best effort)."""
+        result: Dict[int, dict] = {}
+        try:
+            for c in psutil.net_connections(kind="tcp"):
+                if c.status != psutil.CONN_LISTEN or not c.laddr:
+                    continue
+                ip = c.laddr.ip
+                loopback = ip.startswith("127.") or ip == "::1"
+                entry = result.setdefault(c.laddr.port, {"exposure": "local", "pid": c.pid})
+                if not loopback:
+                    entry["exposure"] = "network"
+                if c.pid and not entry.get("pid"):
+                    entry["pid"] = c.pid
+        except (psutil.AccessDenied, OSError):
+            pass
+        for entry in result.values():
+            try:
+                entry["process"] = psutil.Process(entry["pid"]).name() if entry.get("pid") else None
+            except (psutil.Error, OSError):
+                entry["process"] = None
+        return result
+
     def scan_ports(self, port_range: tuple = (1, 1024), timeout: float = 0.3) -> List[dict]:
         """
         Scan localhost for open ports.
-        Returns list of { "port": int, "service": str, "risk": str }
+        Returns list of { "port", "service", "risk", "exposure", "process" }.
+        exposure is "network" when the service listens on a non-loopback
+        address (reachable from other machines) and "local" otherwise.
         """
-        self.logger.info(f"Scanning ports {port_range[0]}-{port_range[1]} on localhost...")
+        start, end = int(port_range[0]), int(port_range[1])
+        if not (1 <= start <= end <= 65535):
+            raise ValueError("port range must be within 1-65535")
+        self.logger.info(f"Scanning ports {start}-{end} on localhost...")
+        listening = self._listening_sockets()
         open_ports = []
+        port_range = (start, end)
         
         for port in range(port_range[0], port_range[1] + 1):
             try:
@@ -51,12 +82,15 @@ class CyberIntelligence:
                         elif port in self.KNOWN_SERVICES:
                             risk = "MEDIUM"
                         
+                        info = listening.get(port, {})
                         open_ports.append({
                             "port": port,
                             "service": service,
-                            "risk": risk
+                            "risk": risk,
+                            "exposure": info.get("exposure", "unknown"),
+                            "process": info.get("process"),
                         })
-            except Exception as e:
+            except OSError as e:
                 self.logger.error(f"Error scanning port {port}: {e}")
         
         self._last_scan_results = open_ports
@@ -138,6 +172,12 @@ class CyberIntelligence:
             elif port == 5900:
                 recommendations.append("Disable VNC (Port 5900) or tunnel it over SSH.")
         
+        exposed = [r["port"] for r in self._last_scan_results if r.get("exposure") == "network"]
+        if exposed:
+            recommendations.append(
+                f"Ports {', '.join(map(str, exposed))} accept connections from the network — "
+                "bind them to 127.0.0.1 or block them with 'sudo ufw deny <port>' if not needed.")
+
         if not recommendations and self._last_scan_results:
             recommendations.append("Review all open ports and ensure they are necessary for system operation.")
         elif not self._last_scan_results:

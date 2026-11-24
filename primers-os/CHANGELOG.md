@@ -1,3 +1,50 @@
+# Changelog
+
+## [1.0.0-genesis] — 2026-11-24
+
+### Distribution
+- **New ISO builder** (`primers-distro/build.sh`): debootstrap → chroot →
+  squashfs → hybrid BIOS/UEFI ISO, in resumable stages. Replaces live-build,
+  whose Ubuntu 22.04 version (3.0) could not build jammy images — the cause
+  of every failed CI build (see docs/decisions/0001).
+- Fixed package names for Ubuntu 22.04 (`linux-firmware`, HWE kernel, real
+  Firefox .deb from Mozilla's repository instead of the snap stub), 32-bit
+  Wine, Vulkan and Mesa, `tools/check-packages.py` to validate them.
+- Live user is created by casper at boot; installed systems no longer ship a
+  `primers:primers` account with passwordless sudo.
+- CPU vulnerability mitigations are back on (`mitigations=off` removed);
+  performance governor only on AC power; firewall enabled by default.
+- Complete Calamares installer configuration (unpack, partitioning incl.
+  encryption, users, LightDM autologin choice, GRUB on BIOS/UEFI with
+  Ubuntu's signed shim), branding and slideshow.
+- New PRIMERS artwork (logo, wallpaper, Plymouth boot splash, GRUB theme).
+  The GRUB theme now boots without the GRUB 2.12 "null src bitmap" stop.
+- Desktop: launcher bar, right-click and Super+Space menus, media keys,
+  polkit agent, Bluetooth/volume tray, dark GTK theme, `primers-terminal`.
+- `primers-install`: escalates with sudo, refreshes package indexes, module
+  registry fixed for Ubuntu 22.04 (Steam, voice module, accurate contents).
+- `primers-compat`: .exe/.msi/.bat handling, first-run Wine prefix, winecfg.
+
+### PRIMERS Brain
+- Fixed: shell failed to start on Python 3.10/3.11 (3.12-only f-string), so
+  the Brain never ran on the OS; `learn stats` / `learn suggest` crashes;
+  resource alerts never fired (missing settings); plugin system and tab
+  completion broken; dashboard `/api/status` always failed; voice import
+  crashed boot when SpeechRecognition was missing; `kill process 42` was
+  parsed with "process" as the PID; ordinary sentences like "how do I run
+  tests" launched programs.
+- Security: AST-based math evaluator instead of `eval`; dashboard bound to
+  localhost with Host-header check, CSP and no HTML injection; protected
+  PIDs; voice limited to read-only commands; private (0700/0600) per-user
+  data directory; untrusted user plugins skipped.
+- New: `advise` (prioritised recommendations), one-shot mode
+  (`primers status`, `-c`), alert badge in the prompt, "did you mean"
+  suggestions, `modules`, `plugins`, `gui stop/open`, user plugin directory,
+  port exposure (local vs network) in `cyber report`.
+- 117 automated tests; CI on Python 3.10 and 3.12.
+
+---
+
 ### Update 0
 - Automated system maintenance at 2025-10-09T19:23:30
 

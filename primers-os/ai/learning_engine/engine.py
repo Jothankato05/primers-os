@@ -1,157 +1,179 @@
+"""
+PRIMERS OS — Learning Engine
+Tracks command history and suggests future commands based on usage patterns.
+History is stored privately (0600) in the user's data directory.
+"""
+
 import json
 import os
+import threading
 import time
+from collections import Counter
 from datetime import datetime
-from typing import List, Dict, Tuple, Optional
+from typing import Dict, List, Optional
+
+from utils import paths
 from utils.logger import PrimersLogger
+
+MAX_HISTORY = 5000            # entries kept in memory / considered for stats
+SESSION_GAP_SECONDS = 1800    # 30 minutes of inactivity starts a new session
+DEFAULT_SUGGESTIONS = ["status", "ps", "help"]
+
+
+def _first_word(command: str) -> str:
+    parts = (command or "").split()
+    return parts[0].lower() if parts else ""
+
 
 class LearningEngine:
     """
     Behavioural learning engine.
-    Tracks command history and suggests future commands based on usage patterns.
+    Learns which commands the user runs, when, and in what order.
     """
 
-    def __init__(self):
+    def __init__(self, history_path: Optional[str] = None):
         self.logger = PrimersLogger.get_logger("learning_engine")
-        # Ensure path is absolute
-        self.history_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs", "usage.jsonl")
+        self.history_path = history_path or paths.data_file("usage.jsonl")
         self.usage_data: List[dict] = []
+        self._lock = threading.Lock()
         self.load()
 
-    def log_command(self, raw: str, action: str, args: list) -> None:
-        """Appends one line to logs/usage.jsonl."""
+    # ------------------------------------------------------------------ #
+    #  Recording
+    # ------------------------------------------------------------------ #
+
+    def log_command(self, raw: str, action: str, args: Optional[list] = None) -> None:
+        if not raw or not raw.strip():
+            return
         entry = {
             "timestamp": time.time(),
-            "command": raw,
+            "command": raw.strip(),
             "action": action,
             "hour": datetime.now().hour,
-            "args": args
+            "args": list(args or []),
         }
-        
-        self.usage_data.append(entry)
-        
+        with self._lock:
+            self.usage_data.append(entry)
+            if len(self.usage_data) > MAX_HISTORY:
+                del self.usage_data[:-MAX_HISTORY]
         try:
-            os.makedirs(os.path.dirname(self.history_path), exist_ok=True)
-            with open(self.history_path, 'a') as f:
-                f.write(json.dumps(entry) + "\n")
-        except Exception as e:
+            paths.append_private(self.history_path, json.dumps(entry) + "\n")
+        except OSError as e:
             self.logger.error(f"Failed to log usage: {e}")
 
+    def clear(self) -> None:
+        with self._lock:
+            self.usage_data = []
+        try:
+            if os.path.exists(self.history_path):
+                os.remove(self.history_path)
+        except OSError as e:
+            self.logger.error(f"Failed to clear usage history: {e}")
+
+    # ------------------------------------------------------------------ #
+    #  Analysis
+    # ------------------------------------------------------------------ #
+
     def get_stats(self) -> dict:
-        """Return detailed usage statistics."""
-        if not self.usage_data:
+        with self._lock:
+            data = list(self.usage_data)
+
+        if not data:
             return {
                 "total_commands": 0,
                 "most_used": [],
                 "least_used": [],
-                "busiest_hour": 0,
+                "top_commands": [],
+                "busiest_hour": None,
                 "command_sequences": [],
-                "session_count": 0
+                "session_count": 0,
             }
-        
-        total_commands = len(self.usage_data)
-        
-        # 1. Frequency mapping
-        cmd_counts = {}
-        hour_counts = {}
-        for entry in self.usage_data:
-            cmd = entry["command"].split()[0] if entry["command"].split() else "unknown"
-            cmd_counts[cmd] = cmd_counts.get(cmd, 0) + 1
-            hour = entry.get("hour", 0)
-            hour_counts[hour] = hour_counts.get(hour, 0) + 1
-            
-        sorted_cmds = sorted(cmd_counts.items(), key=lambda x: x[1], reverse=True)
-        most_used = [{"command": k, "count": v} for k, v in sorted_cmds[:5]]
-        least_used = [{"command": k, "count": v} for k, v in sorted_cmds[-5:]]
-        
-        # 2. Busiest hour
-        busiest_hour = max(hour_counts.items(), key=lambda x: x[1])[0] if hour_counts else 0
-        
-        # 3. Command sequences (top 3)
-        sequences = {}
-        for i in range(len(self.usage_data) - 1):
-            cmd1 = self.usage_data[i]["command"].split()[0] if self.usage_data[i]["command"].split() else "unknown"
-            cmd2 = self.usage_data[i+1]["command"].split()[0] if self.usage_data[i+1]["command"].split() else "unknown"
-            seq = f"{cmd1}→{cmd2}"
-            sequences[seq] = sequences.get(seq, 0) + 1
-            
-        sorted_seqs = sorted(sequences.items(), key=lambda x: x[1], reverse=True)
-        command_sequences = [{"sequence": k, "count": v} for k, v in sorted_seqs[:3]]
-        
-        # 4. Session count (gaps > 30min)
-        session_count = 1
-        for i in range(len(self.usage_data) - 1):
-            gap = self.usage_data[i+1]["timestamp"] - self.usage_data[i]["timestamp"]
-            if gap > 1800: # 30 mins
-                session_count += 1
-                
+
+        cmd_counts = Counter(_first_word(e["command"]) or "unknown" for e in data)
+        hour_counts = Counter(e.get("hour", 0) for e in data)
+        ranked = cmd_counts.most_common()
+
+        sequences = Counter(
+            f"{_first_word(a['command'])}→{_first_word(b['command'])}"
+            for a, b in zip(data, data[1:])
+        )
+
+        session_count = 1 + sum(
+            1 for a, b in zip(data, data[1:])
+            if b["timestamp"] - a["timestamp"] > SESSION_GAP_SECONDS
+        )
+
         return {
-            "total_commands": total_commands,
-            "most_used": most_used,
-            "least_used": least_used,
-            "busiest_hour": busiest_hour,
-            "command_sequences": command_sequences,
-            "session_count": session_count
+            "total_commands": len(data),
+            "most_used": [{"command": k, "count": v} for k, v in ranked[:5]],
+            "least_used": [{"command": k, "count": v} for k, v in ranked[-5:]],
+            "top_commands": ranked[:5],  # [(command, count), ...]
+            "busiest_hour": hour_counts.most_common(1)[0][0],
+            "command_sequences": [{"sequence": k, "count": v} for k, v in sequences.most_common(3)],
+            "session_count": session_count,
         }
 
-    def suggest(self, recent_commands: list[str]) -> list[str]:
-        """Suggest top 3 next commands based on history."""
-        if not self.usage_data:
-            return ["status", "processes", "help"]
+    def suggest(self, recent_commands: Optional[List[str]] = None, limit: int = 3) -> List[str]:
+        """Suggest the next commands, from sequences, time of day and frequency."""
+        with self._lock:
+            data = list(self.usage_data)
+        if not data:
+            return DEFAULT_SUGGESTIONS[:limit]
 
-        suggestions = []
-        
-        # 1. Sequence matching
+        if recent_commands is None:
+            recent_commands = [data[-1]["command"]]
+
+        suggestions: List[str] = []
+
+        def add(cmds):
+            for c in cmds:
+                if c and c not in suggestions:
+                    suggestions.append(c)
+
+        # 1. What usually follows the last command
         if recent_commands:
-            last_cmd = recent_commands[-1].split()[0] if recent_commands[-1].split() else ""
-            seq_candidates = {}
-            for i in range(len(self.usage_data) - 1):
-                curr = self.usage_data[i]["command"].split()[0] if self.usage_data[i]["command"].split() else ""
-                if curr == last_cmd:
-                    next_cmd = self.usage_data[i+1]["command"].split()[0] if self.usage_data[i+1]["command"].split() else ""
-                    if next_cmd:
-                        seq_candidates[next_cmd] = seq_candidates.get(next_cmd, 0) + 1
-            
-            sorted_next = sorted(seq_candidates.items(), key=lambda x: x[1], reverse=True)
-            suggestions.extend([cmd for cmd, count in sorted_next if cmd not in suggestions])
+            last = _first_word(recent_commands[-1])
+            followers = Counter(
+                _first_word(b["command"]) for a, b in zip(data, data[1:])
+                if _first_word(a["command"]) == last
+            )
+            add(c for c, _ in followers.most_common())
 
-        # 2. Hour of day matching
-        current_hour = datetime.now().hour
-        hour_candidates = {}
-        for entry in self.usage_data:
-            if entry.get("hour") == current_hour:
-                cmd = entry["command"].split()[0] if entry["command"].split() else ""
-                if cmd:
-                    hour_candidates[cmd] = hour_candidates.get(cmd, 0) + 1
-        
-        sorted_hour = sorted(hour_candidates.items(), key=lambda x: x[1], reverse=True)
-        for cmd, count in sorted_hour:
-            if cmd not in suggestions:
-                suggestions.append(cmd)
-            if len(suggestions) >= 3:
-                break
-        
-        # 3. Overall frequency fallback
-        if len(suggestions) < 3:
-            stats = self.get_stats()
-            for item in stats["most_used"]:
-                if item["command"] not in suggestions:
-                    suggestions.append(item["command"])
-                if len(suggestions) >= 3:
-                    break
-        
-        return suggestions[:3]
+        # 2. What the user runs at this hour
+        hour = datetime.now().hour
+        add(c for c, _ in Counter(_first_word(e["command"]) for e in data
+                                  if e.get("hour") == hour).most_common())
 
-    def load(self) -> list[dict]:
-        """Reads all log entries."""
+        # 3. Overall favourites, then sensible defaults
+        add(c for c, _ in Counter(_first_word(e["command"]) for e in data).most_common())
+        add(DEFAULT_SUGGESTIONS)
+        return suggestions[:limit]
+
+    def known_commands(self) -> Dict[str, int]:
+        with self._lock:
+            return dict(Counter(_first_word(e["command"]) for e in self.usage_data))
+
+    # ------------------------------------------------------------------ #
+    #  Persistence
+    # ------------------------------------------------------------------ #
+
+    def load(self) -> List[dict]:
         data = []
         if os.path.exists(self.history_path):
             try:
-                with open(self.history_path, 'r') as f:
+                with open(self.history_path, "r", encoding="utf-8") as f:
                     for line in f:
-                        if line.strip():
-                            data.append(json.loads(line))
-            except Exception as e:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue  # skip a corrupt line, keep the rest
+                        if isinstance(entry, dict) and "command" in entry and "timestamp" in entry:
+                            data.append(entry)
+            except OSError as e:
                 self.logger.error(f"Failed to load usage history: {e}")
-        self.usage_data = data
-        return data
+        with self._lock:
+            self.usage_data = data[-MAX_HISTORY:]
+        return self.usage_data

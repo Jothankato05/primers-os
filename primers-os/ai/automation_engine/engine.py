@@ -1,207 +1,264 @@
+"""
+PRIMERS OS — Automation Engine
+Schedules shell commands at intervals or at a time of day.
+
+Tasks run as the current user. The task file is private (0600) inside the
+user's data directory so other users cannot read or inject commands.
+"""
+
 import json
 import os
-import time
-import threading
 import subprocess
+import threading
+import time
 import uuid
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Optional
+
+from utils import paths
 from utils.logger import PrimersLogger
 
-class AutomationEngine:
-    """
-    Task scheduler and system automation engine.
-    Schedules shell commands at intervals or specific times.
-    """
+TASK_TIMEOUT_SECONDS = 30
+MIN_INTERVAL_SECONDS = 10
+MAX_OUTPUT_CHARS = 4000
 
-    def __init__(self):
+
+class AutomationEngine:
+    """Task scheduler and system automation engine."""
+
+    def __init__(self, tasks_path: Optional[str] = None, history_path: Optional[str] = None,
+                 tick_seconds: float = 10.0):
         self.logger = PrimersLogger.get_logger("automation_engine")
-        self.tasks_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs", "tasks.json")
-        self.history_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs", "task_history.jsonl")
+        self.tasks_path = tasks_path or paths.data_file("tasks.json")
+        self.history_path = history_path or paths.data_file("task_history.jsonl")
         self.tasks: List[dict] = []
+        self._lock = threading.RLock()
         self._running = False
-        self._thread = None
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._in_flight = set()
+        self._tick = tick_seconds
         self.load()
 
-    def add_task(self, name: str, command: str, schedule_type: str, interval_seconds: Optional[int] = None, run_at_time: Optional[str] = None) -> dict:
-        """
-        Validates and adds a new task.
-        """
-        if schedule_type not in ["interval", "time"]:
+    # ------------------------------------------------------------------ #
+    #  Task management
+    # ------------------------------------------------------------------ #
+
+    def add_task(self, name: str, command: str, schedule_type: str,
+                 interval_seconds: Optional[int] = None, run_at_time: Optional[str] = None) -> dict:
+        if not name or not name.strip():
+            return {"ok": False, "error": "task name is required"}
+        if not command or not command.strip():
+            return {"ok": False, "error": "command is required"}
+        if schedule_type not in ("interval", "time"):
             return {"ok": False, "error": "schedule_type must be 'interval' or 'time'"}
-        
+
         if schedule_type == "interval":
-            if interval_seconds is None or interval_seconds <= 0:
-                return {"ok": False, "error": "interval_seconds must be > 0"}
-        
-        if schedule_type == "time":
+            try:
+                interval_seconds = int(interval_seconds)
+            except (TypeError, ValueError):
+                return {"ok": False, "error": "interval_seconds must be a whole number"}
+            if interval_seconds < MIN_INTERVAL_SECONDS:
+                return {"ok": False, "error": f"interval_seconds must be ≥ {MIN_INTERVAL_SECONDS}"}
+            run_at_time = None
+        else:
             if not run_at_time:
                 return {"ok": False, "error": "run_at_time is required for 'time' schedule"}
             try:
                 datetime.strptime(run_at_time, "%H:%M")
             except ValueError:
                 return {"ok": False, "error": "run_at_time must match HH:MM format"}
+            interval_seconds = None
 
-        task_id = str(uuid.uuid4())[:8]
         task = {
-            "id": task_id,
-            "name": name,
-            "command": command,
+            "id": uuid.uuid4().hex[:8],
+            "name": name.strip(),
+            "command": command.strip(),
             "schedule_type": schedule_type,
             "interval_seconds": interval_seconds,
             "run_at_time": run_at_time,
             "enabled": True,
             "created": time.time(),
             "last_run": None,
-            "run_count": 0
+            "run_count": 0,
         }
-        
-        self.tasks.append(task)
-        self.save()
-        return {"ok": True, "id": task_id}
+        with self._lock:
+            self.tasks.append(task)
+            self.save()
+        return {"ok": True, "id": task["id"]}
+
+    def _find(self, task_id: str) -> Optional[dict]:
+        for t in self.tasks:
+            if t["id"] == task_id:
+                return t
+        return None
 
     def remove_task(self, task_id: str) -> dict:
-        initial_count = len(self.tasks)
-        self.tasks = [t for t in self.tasks if t["id"] != task_id]
-        if len(self.tasks) < initial_count:
-            self.save()
-            return {"ok": True}
+        with self._lock:
+            before = len(self.tasks)
+            self.tasks = [t for t in self.tasks if t["id"] != task_id]
+            if len(self.tasks) < before:
+                self.save()
+                return {"ok": True}
         return {"ok": False, "error": "not found"}
 
     def list_tasks(self) -> List[dict]:
-        return self.tasks
+        with self._lock:
+            return [dict(t) for t in self.tasks]
+
+    def _set_enabled(self, task_id: str, enabled: bool) -> dict:
+        with self._lock:
+            t = self._find(task_id)
+            if not t:
+                return {"ok": False, "error": "not found"}
+            t["enabled"] = enabled
+            self.save()
+        return {"ok": True}
 
     def enable_task(self, task_id: str) -> dict:
-        for t in self.tasks:
-            if t["id"] == task_id:
-                t["enabled"] = True
-                self.save()
-                return {"ok": True}
-        return {"ok": False, "error": "not found"}
+        return self._set_enabled(task_id, True)
 
     def disable_task(self, task_id: str) -> dict:
-        for t in self.tasks:
-            if t["id"] == task_id:
-                t["enabled"] = False
-                self.save()
-                return {"ok": True}
-        return {"ok": False, "error": "not found"}
+        return self._set_enabled(task_id, False)
 
     def run_now(self, task_id: str) -> dict:
-        for t in self.tasks:
-            if t["id"] == task_id:
-                return self._execute_task(t)
-        return {"ok": False, "error": "not found"}
+        with self._lock:
+            t = self._find(task_id)
+        if not t:
+            return {"ok": False, "error": "not found"}
+        return self._execute_task(t)
 
     def get_history(self, task_id: Optional[str] = None, limit: int = 20) -> List[dict]:
         history = []
         if os.path.exists(self.history_path):
             try:
-                with open(self.history_path, 'r') as f:
+                with open(self.history_path, "r", encoding="utf-8") as f:
                     for line in f:
-                        if line.strip():
+                        if not line.strip():
+                            continue
+                        try:
                             entry = json.loads(line)
-                            if task_id is None or entry.get("task_id") == task_id:
-                                history.append(entry)
-            except Exception as e:
+                        except json.JSONDecodeError:
+                            continue
+                        if task_id is None or entry.get("task_id") == task_id:
+                            history.append(entry)
+            except OSError as e:
                 self.logger.error(f"Failed to load task history: {e}")
         return history[-limit:]
+
+    # ------------------------------------------------------------------ #
+    #  Scheduler
+    # ------------------------------------------------------------------ #
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
         self._running = True
-        self._thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._scheduler_loop, daemon=True, name="AutomationEngine")
         self._thread.start()
         self.logger.info("AutomationEngine background thread started.")
 
     def stop(self) -> None:
         self._running = False
+        self._stop.set()
         if self._thread:
             self._thread.join(timeout=1.0)
         self.logger.info("AutomationEngine background thread stopped.")
 
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    def due_tasks(self, now: Optional[float] = None) -> List[dict]:
+        """Tasks that should run at `now` (exposed for testing)."""
+        now = time.time() if now is None else now
+        now_dt = datetime.fromtimestamp(now)
+        due = []
+        with self._lock:
+            for task in self.tasks:
+                if not task.get("enabled", True) or task["id"] in self._in_flight:
+                    continue
+                last_run = task.get("last_run")
+                if task["schedule_type"] == "interval":
+                    if now - (last_run or 0) >= task["interval_seconds"]:
+                        due.append(task)
+                elif task["schedule_type"] == "time":
+                    if task["run_at_time"] != now_dt.strftime("%H:%M"):
+                        continue
+                    if last_run and datetime.fromtimestamp(last_run).date() == now_dt.date() \
+                            and now - last_run < 120:
+                        continue  # already ran in this minute window today
+                    due.append(task)
+        return due
+
     def _scheduler_loop(self):
         while self._running:
-            now = time.time()
-            now_dt = datetime.fromtimestamp(now)
-            now_str = now_dt.strftime("%H:%M")
-            
-            for task in self.tasks:
-                if not task.get("enabled", True):
-                    continue
-                
-                should_run = False
-                if task["schedule_type"] == "interval":
-                    interval = task["interval_seconds"]
-                    last_run = task.get("last_run") or 0
-                    if now - last_run >= interval:
-                        should_run = True
-                elif task["schedule_type"] == "time":
-                    if task["run_at_time"] == now_str:
-                        # Ensure we don't run more than once per day/minute
-                        last_run_ts = task.get("last_run")
-                        if last_run_ts:
-                            last_run_dt = datetime.fromtimestamp(last_run_ts)
-                            if last_run_dt.date() != now_dt.date() or (now - last_run_ts) > 60:
-                                should_run = True
-                        else:
-                            should_run = True
-                
-                if should_run:
-                    # Run in a separate thread to avoid blocking the scheduler
+            try:
+                for task in self.due_tasks():
                     threading.Thread(target=self._execute_task, args=(task,), daemon=True).start()
-            
-            time.sleep(10)
+            except Exception as e:
+                self.logger.error(f"Scheduler error: {e}")
+            self._stop.wait(self._tick)
 
     def _execute_task(self, task: dict) -> dict:
-        self.logger.info(f"Executing task: {task['name']} (ID: {task['id']})")
-        
-        try:
-            # Update last_run immediately to prevent double-trigger
+        with self._lock:
+            if task["id"] in self._in_flight:
+                return {"ok": False, "error": "task is already running"}
+            self._in_flight.add(task["id"])
             task["last_run"] = time.time()
             task["run_count"] = task.get("run_count", 0) + 1
             self.save()
-
-            result = subprocess.run(task["command"], shell=True, capture_output=True, text=True, timeout=30)
-            
-            history_entry = {
+        self.logger.info(f"Executing task: {task['name']} (ID: {task['id']})")
+        try:
+            result = subprocess.run(task["command"], shell=True, capture_output=True,
+                                    text=True, timeout=TASK_TIMEOUT_SECONDS)
+            output = (result.stdout + result.stderr).strip()[:MAX_OUTPUT_CHARS]
+            self._log_history({
                 "task_id": task["id"],
                 "timestamp": time.time(),
                 "command": task["command"],
                 "returncode": result.returncode,
-                "output": (result.stdout + result.stderr).strip()
-            }
-            self._log_history(history_entry)
-            return {"ok": True, "output": history_entry["output"], "returncode": result.returncode}
+                "output": output,
+            })
+            return {"ok": True, "output": output, "returncode": result.returncode}
         except subprocess.TimeoutExpired:
-            self.logger.error(f"Task {task['id']} timed out after 30s")
+            self.logger.error(f"Task {task['id']} timed out after {TASK_TIMEOUT_SECONDS}s")
+            self._log_history({"task_id": task["id"], "timestamp": time.time(),
+                               "command": task["command"], "returncode": -1,
+                               "output": f"timed out after {TASK_TIMEOUT_SECONDS}s"})
             return {"ok": False, "error": "Timeout expired"}
         except Exception as e:
             self.logger.error(f"Task execution failed ({task['id']}): {e}")
             return {"ok": False, "error": str(e)}
+        finally:
+            with self._lock:
+                self._in_flight.discard(task["id"])
+
+    # ------------------------------------------------------------------ #
+    #  Persistence
+    # ------------------------------------------------------------------ #
 
     def _log_history(self, entry: dict):
         try:
-            os.makedirs(os.path.dirname(self.history_path), exist_ok=True)
-            with open(self.history_path, 'a') as f:
-                f.write(json.dumps(entry) + "\n")
-        except Exception as e:
+            paths.append_private(self.history_path, json.dumps(entry) + "\n")
+        except OSError as e:
             self.logger.error(f"Failed to log task history: {e}")
 
     def save(self) -> None:
-        try:
-            os.makedirs(os.path.dirname(self.tasks_path), exist_ok=True)
-            with open(self.tasks_path, 'w') as f:
-                json.dump(self.tasks, f, indent=4)
-        except Exception as e:
-            self.logger.error(f"Failed to save tasks: {e}")
+        with self._lock:
+            try:
+                paths.write_private(self.tasks_path, json.dumps(self.tasks, indent=4))
+            except OSError as e:
+                self.logger.error(f"Failed to save tasks: {e}")
 
     def load(self) -> None:
-        if os.path.exists(self.tasks_path):
-            try:
-                with open(self.tasks_path, 'r') as f:
-                    self.tasks = json.load(f)
-            except Exception as e:
-                self.logger.error(f"Failed to load tasks: {e}")
-                self.tasks = []
+        if not os.path.exists(self.tasks_path):
+            return
+        try:
+            with open(self.tasks_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.tasks = [t for t in data if isinstance(t, dict) and "id" in t and "command" in t]
+        except (OSError, json.JSONDecodeError) as e:
+            self.logger.error(f"Failed to load tasks: {e}")
+            self.tasks = []

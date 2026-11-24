@@ -43,7 +43,11 @@ class KernelInterface:
         if info["cores"] == 0:
             info["cores"] = psutil.cpu_count(logical=False) or 0
         if info["mhz"] == 0.0:
-            info["mhz"] = psutil.cpu_freq().current if psutil.cpu_freq() else 0.0
+            try:
+                freq = psutil.cpu_freq()
+                info["mhz"] = round(freq.current, 1) if freq else 0.0
+            except (OSError, NotImplementedError, AttributeError):
+                info["mhz"] = 0.0
         if info["model"] == "Unknown":
             info["model"] = platform.processor() or "Unknown"
             
@@ -105,7 +109,7 @@ class KernelInterface:
                     load = psutil.getloadavg()
                     info["load_1min"], info["load_5min"], info["load_15min"] = load
                 info["total_processes"] = len(psutil.pids())
-            except:
+            except (OSError, AttributeError):
                 pass
                 
         return info

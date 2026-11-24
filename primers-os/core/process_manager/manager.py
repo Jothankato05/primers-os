@@ -3,12 +3,22 @@ PRIMERS OS — Process Manager
 Manages system processes: list, launch, terminate, prioritise, isolate.
 """
 
-import psutil
-import subprocess
 import os
-import signal
-from typing import List, Optional, Dict
+import shlex
+import subprocess
+from typing import Dict, List, Optional
+
+import psutil
+
 from utils.logger import PrimersLogger
+
+# PIDs that must never be signalled from the shell: init, and the brain itself.
+def _protected_pids() -> set:
+    return {0, 1, os.getpid(), os.getppid()}
+
+
+class ProtectedProcessError(Exception):
+    pass
 
 
 class ProcessRecord:
@@ -91,7 +101,9 @@ class ProcessManager:
     def launch(self, command: str, shell: bool = False) -> Optional[int]:
         """Launch a new process. Returns PID or None on failure."""
         try:
-            args = command.split() if not shell else command
+            args = shlex.split(command) if not shell else command
+            if not args:
+                return None
             proc = subprocess.Popen(
                 args,
                 shell=shell,
@@ -102,12 +114,21 @@ class ProcessManager:
             self._launched[proc.pid] = proc
             self.logger.info(f"Launched: '{command}' → PID {proc.pid}")
             return proc.pid
-        except (FileNotFoundError, PermissionError, OSError) as e:
+        except (FileNotFoundError, PermissionError, OSError, ValueError) as e:
             self.logger.error(f"Launch failed for '{command}': {e}")
             return None
 
+    @staticmethod
+    def is_protected(pid: int) -> bool:
+        return pid in _protected_pids()
+
+    def _guard(self, pid: int):
+        if self.is_protected(pid):
+            raise ProtectedProcessError(f"PID {pid} is protected (init or PRIMERS itself)")
+
     def terminate(self, pid: int, force: bool = False) -> bool:
         """Terminate a process gracefully (SIGTERM) or forcefully (SIGKILL)."""
+        self._guard(pid)
         try:
             proc = psutil.Process(pid)
             if force:
@@ -139,6 +160,7 @@ class ProcessManager:
             return False
 
     def suspend(self, pid: int) -> bool:
+        self._guard(pid)
         try:
             psutil.Process(pid).suspend()
             self.logger.info(f"Suspended PID {pid}")

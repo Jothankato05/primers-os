@@ -1,111 +1,143 @@
-# ⚛ PRIMERS OS — Phase 1
+# ⚛ PRIMERS Brain
 
-AI-Native Modular OS Platform · Python-based system controller built on Linux.
+The AI-native system controller at the heart of PRIMERS OS: a shell you can
+talk to, background engines that watch your system, and a web dashboard.
+Pure Python 3.10+, runs on any Linux (and mostly on macOS/WSL).
 
----
-
-## Quick Start (WSL / Ubuntu)
+## Run it
 
 ```bash
-# 1. Install dependency
-pip install psutil
-
-# 2. Run
-cd primers-os
-python main.py
+python3 -m pip install -r requirements.txt   # psutil, flask
+python3 main.py                              # interactive shell
+python3 main.py status                       # one command, then exit
+python3 main.py -c "ps --limit=5" -c advise  # several commands
+python3 main.py --gui                        # shell + web dashboard
+python3 main.py --version
 ```
 
----
+On PRIMERS OS it's simply `primers` (or `Super+Enter`). Exit code is `0` when
+every one-shot command succeeded, `1` otherwise — handy for scripts.
 
-## Phase 1 — What's Built
+## Commands
 
-| Module | Location | Status |
+| Area | Commands |
+|---|---|
+| System | `status` · `alerts` · `kernel [info\|load\|uptime\|net]` · `version` |
+| Processes | `ps [--sort=cpu\|memory\|pid\|name] [--limit=N]` · `find <name>` · `launch <cmd>` · `kill <pid> [--force] [--yes]` · `suspend` / `resume <pid>` · `priority <pid> <nice>` |
+| Security | `security` · `threats [--level=HIGH]` · `connections` · `cyber scan [1-1024]` · `cyber report` |
+| Intelligence | `advise` — prioritised recommendations · `learn stats\|suggest\|clear` · `task add\|list\|run\|enable\|disable\|remove\|history` |
+| Services | `math <expr>` · `gpa add\|remove\|report\|clear` · `graph scan\|show\|anomalies\|stats\|export` · `modules [install <name>]` · `plugins` |
+| Interface | `gui start\|stop\|open` · `voice start\|stop` · `help` · `clear` · `exit` |
+
+Natural language works too — anchored phrases, so ordinary sentences never
+trigger actions by accident:
+
+```
+show me processes        what's running?          kill process 4242
+how is my system?        am I safe?               any advice?
+what is 2^10             calculate sqrt(2)        open firefox
+```
+
+Mistype a command and it suggests the closest ones (`staus` → *status*).
+
+### Examples
+
+```text
+task add backup interval 3600 tar czf ~/backup.tgz ~/Documents
+task add morning time 08:30 notify-send "Good morning"
+gpa add "Linear Algebra" 3 A- 2025-Fall
+math factorial(20) / 2^10
+cyber scan 1-10000
+kill 4242 --yes          # skip the confirmation (needed in one-shot mode)
+```
+
+## Safety
+
+- `kill`, `learn clear` and `gpa clear` ask for confirmation; in one-shot
+  mode pass `--yes`. PID 1 and the Brain itself can never be signalled.
+- Voice commands can only run read-only actions (status, ps, threats…).
+- `math` uses an AST-based evaluator (no `eval`) with limits on exponent and
+  result size.
+- The dashboard is read-only, listens on `127.0.0.1`, rejects non-local
+  `Host` headers (DNS rebinding), and sends a strict CSP.
+- One failing command never takes down the shell; details go to the log.
+
+## Where data lives
+
+| | Installed (`/usr/share/primers/brain`) | Git checkout |
 |---|---|---|
-| System Monitor | `core/system_monitor/` | ✅ Live |
-| Process Manager | `core/process_manager/` | ✅ Live |
-| Security Engine | `core/security_engine/` | ✅ Live |
-| Command Interpreter | `ai/command_interpreter/` | ✅ Live |
-| Decision Engine | `ai/decision_engine/` | ✅ Live |
-| Math Engine | `services/math_engine/` | ✅ Live |
-| CLI Shell | `interface/cli/` | ✅ Live |
+| Data dir | `~/.local/share/primers` (`$XDG_DATA_HOME`) | `./logs` |
+| Files | `usage.jsonl` (learning), `tasks.json`, `task_history.jsonl`, `gpa_data.json`, `primers.log`, `.cli_history`, `plugins/` | same |
 
----
+The directory is created `0700` and files `0600`. Override with
+`PRIMERS_DATA_DIR` (and `PRIMERS_LOG_DIR` for the log).
 
-## CLI Commands
+## Configuration
 
-```
-ps / processes / top      — List running processes
-kill <PID>                — Terminate a process (--force for SIGKILL)
-launch <command>          — Launch a new process
-status / sysinfo          — System health: CPU, memory, disk, network
-security                  — Security engine status
-threats                   — Show security threat events (--level=HIGH)
-alerts                    — Show system resource alerts
-connections / netstat     — Live network connections
-find <name>               — Search processes by name
-suspend <PID>             — Suspend a process
-resume <PID>              — Resume a suspended process
-priority <PID> <nice>     — Set process nice value (-20 to 19)
-math <expression>         — Evaluate maths (e.g. math sqrt(144) + pi)
-version                   — Show OS version
-clear                     — Clear terminal
-help                      — Show all commands
-exit / quit               — Exit PRIMERS OS
-```
+Every setting in [`configs/settings.py`](configs/settings.py) can be
+overridden with a `PRIMERS_`-prefixed environment variable:
 
-Natural language also works:
-```
-"show me processes"
-"what's running"
-"kill process 1234"
-"system status"
-"any threats detected"
+| Variable | Default |
+|---|---|
+| `PRIMERS_CPU_ALERT_THRESHOLD` / `_MEMORY_` / `_DISK_` | 90 / 85 / 90 (%) |
+| `PRIMERS_MONITOR_INTERVAL` / `PRIMERS_SECURITY_SCAN_INTERVAL` | 5 / 10 (s) |
+| `PRIMERS_GUI_HOST` / `PRIMERS_GUI_PORT` | `127.0.0.1` / `5000` |
+| `PRIMERS_DEBUG=1` | show all log messages in the terminal |
+| `NO_COLOR=1` | plain output |
+
+## Plugins
+
+Drop a Python file in `~/.local/share/primers/plugins/` (it must be owned by
+you and not group/world-writable):
+
+```python
+NAME = "Weather"
+DESCRIPTION = "Shows the weather"
+COMMANDS = {"weather": "Current weather"}
+
+def weather(cmd, shell):          # handler(cmd, shell), handler(cmd) or handler()
+    city = " ".join(cmd.args) or "your area"
+    return f"Forecast for {city}: sunny"  # returned text is printed
+
+def register(shell):
+    shell.register_command("weather", weather, COMMANDS["weather"])
 ```
 
----
+`services/sample_plugin/plugin.py` is a working example (`hello`).
+
+## Voice
+
+`primers-install voice` (on PRIMERS OS) or `pip install SpeechRecognition
+pyaudio`, then `voice start` and say *"primers system status"*. Speech is
+transcribed by Google's Web Speech API while voice is on; the Brain tells you
+so when you enable it.
 
 ## Architecture
 
 ```
-primers-os/
-├── main.py                     ← Boot + wiring
-├── core/
-│   ├── system_monitor/         ← CPU, mem, disk, net (background thread)
-│   ├── process_manager/        ← List, launch, kill, prioritise
-│   ├── security_engine/        ← Threat detection, connection audit
-│   └── kernel_interface/       ← Reserved (Phase 2)
-├── ai/
-│   ├── command_interpreter/    ← Text → ParsedCommand
-│   └── decision_engine/        ← Rule-based analysis → Recommendations
-├── services/
-│   ├── math_engine/            ← Safe expression evaluator
-│   ├── gpa_service/            ← Reserved (Phase 2)
-│   └── graph_ai/               ← Reserved (Phase 2)
-├── interface/
-│   └── cli/                    ← Shell, prompt, ANSI rendering
-├── configs/
-│   └── settings.py             ← All tunable config
-├── utils/
-│   └── logger.py               ← Centralised rotating log
-└── logs/
-    └── primers.log             ← Runtime log
+main.py                      argument parsing, wiring, one-shot vs interactive
+core/
+  system_monitor/            CPU, memory, disk, network snapshots + threshold alerts
+  process_manager/           list / launch / signal processes (protected PIDs)
+  security_engine/           process + connection anomaly detection (defensive)
+  kernel_interface/          /proc readers with psutil fallbacks
+ai/
+  command_interpreter/       command registry, natural-language patterns, suggestions
+  decision_engine/           rule-based recommendations, weighted by learned habits
+  learning_engine/           usage history → stats, sequences, next-command suggestions
+  automation_engine/         interval / time-of-day task scheduler
+  cyber_intelligence/        localhost port audit with exposure + risk scoring
+services/                    math, GPA, network graph, plugin loader
+interface/                   cli shell, web dashboard (Flask), voice listener
+utils/                       paths (data dirs, private files), logging
+tests/                       pytest suite
 ```
 
----
+## Tests
 
-## Phase Roadmap
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest -q tests
+```
 
-- **Phase 1** (current) — CLI, core monitoring, security, AI command layer
-- **Phase 2** — ML decision engine, GPA service, graph AI, kernel interface
-- **Phase 3** — GUI (Electron/Qt), gesture control, voice interface
-- **Phase 4** — Self-learning, predictive automation, cyber defence system
-
----
-
-## Security Note
-
-The Security Engine is **strictly defensive**:
-- Monitors processes and network connections
-- Raises alerts on anomalous behaviour
-- Never executes offensive actions
-- All process termination requires explicit confirmation
+CI runs them on Python 3.10 (what PRIMERS OS ships) and 3.12.

@@ -5,8 +5,12 @@ Phase 1: rule-based logic. Phase 2+: ML model integration.
 """
 
 import time
-from typing import List, Dict, Optional
+from typing import List, Optional
+
 from utils.logger import PrimersLogger
+
+SEVERITY_ORDER = {"CRITICAL": 0, "WARNING": 1, "MEDIUM": 2, "INFO": 3}
+MAX_DECISION_LOG = 500
 
 
 class Recommendation:
@@ -43,18 +47,27 @@ class DecisionEngine:
 
     def analyse(self) -> List[Recommendation]:
         """Run a full analysis cycle. Returns list of recommendations."""
-        recs = []
-        recs.extend(self._analyse_resources())
-        recs.extend(self._analyse_threats())
-        recs.extend(self._analyse_processes())
+        raw = []
+        raw.extend(self._analyse_resources())
+        raw.extend(self._analyse_threats())
+        raw.extend(self._analyse_processes())
+
+        # One recommendation per (action, reason); most severe first
+        recs, seen = [], set()
+        for r in raw:
+            key = (r.action, r.reason)
+            if key not in seen:
+                seen.add(key)
+                recs.append(r)
+        recs.sort(key=lambda r: (SEVERITY_ORDER.get(r.severity, 9), -r.confidence))
 
         # Weight recommendations by user behaviour if learning engine is available
         if self.learning_engine:
             stats = self.learning_engine.get_stats()
-            top_cmds = [cmd for cmd, count in stats.get("top_commands", [])]
+            top_cmds = [cmd for cmd, _count in stats.get("top_commands", [])]
             for r in recs:
                 # If recommendation action matches a frequently used command, boost confidence
-                action_base = r.action.split()[0]
+                action_base = r.action.split()[0] if r.action.split() else ""
                 if action_base in top_cmds:
                     r.confidence = min(1.0, r.confidence + 0.1)
                     r.explanation += f" Boosted confidence due to high historical usage of '{action_base}'."
@@ -63,6 +76,8 @@ class DecisionEngine:
             self._decision_log.append(r)
             if r.severity == "CRITICAL":
                 self.logger.warning(f"DECISION: {r}")
+        if len(self._decision_log) > MAX_DECISION_LOG:
+            del self._decision_log[:-MAX_DECISION_LOG]
 
         return recs
 
@@ -93,7 +108,8 @@ class DecisionEngine:
             stats = self.learning_engine.get_stats()
             # If the process name is not among the top 10 most used commands/processes, 
             # and it has high resources, flag it as anomalous
-            most_used_names = [item["command"].split()[0] for item in stats.get("most_used", [])]
+            most_used_names = [item["command"].split()[0] for item in stats.get("most_used", [])
+                               if item.get("command", "").split()]
             if proc.name not in most_used_names and (proc.cpu > 50.0 or proc.memory > 20.0):
                 return Recommendation(
                     action=f"suspend {pid}",
@@ -131,7 +147,7 @@ class DecisionEngine:
             ))
         if snap.memory_percent > 85:
             recs.append(Recommendation(
-                action="ps --sort=mem",
+                action="ps --sort=memory",
                 reason=f"Memory at {snap.memory_percent:.1f}%.",
                 severity="WARNING",
                 confidence=0.7,
@@ -140,7 +156,7 @@ class DecisionEngine:
         for mount, info in snap.disk_usage.items():
             if info["percent"] > 90:
                 recs.append(Recommendation(
-                    action=f"clear_disk {mount}",
+                    action=f"du -sh {mount}/* | sort -h",
                     reason=f"Disk {mount} at {info['percent']}%.",
                     severity="CRITICAL",
                     confidence=0.95,
@@ -150,8 +166,11 @@ class DecisionEngine:
 
     def _analyse_threats(self) -> List[Recommendation]:
         recs = []
-        events = self.security_engine.get_events(min_level="MEDIUM")
+        events = self.security_engine.get_events(min_level="MEDIUM")[-50:]
+        is_protected = getattr(self.process_manager, "is_protected", lambda pid: False)
         for event in events:
+            if event.pid and is_protected(event.pid):
+                continue
             if event.level == "CRITICAL":
                 recs.append(Recommendation(
                     action=f"kill {event.pid}" if event.pid else "security",
@@ -163,7 +182,7 @@ class DecisionEngine:
                 ))
             elif event.level == "HIGH":
                 recs.append(Recommendation(
-                    action=f"status --pid={event.pid}" if event.pid else "threats",
+                    action=f"find {event.name}" if event.name else "threats",
                     reason=event.description,
                     severity="WARNING",
                     confidence=0.75,
@@ -174,7 +193,10 @@ class DecisionEngine:
     def _analyse_processes(self) -> List[Recommendation]:
         recs = []
         procs = self.process_manager.list_processes(sort_by="cpu", limit=5)
+        is_protected = getattr(self.process_manager, "is_protected", lambda pid: False)
         for p in procs:
+            if is_protected(p.pid):
+                continue
             if p.cpu > 90:
                 recs.append(Recommendation(
                     action=f"kill {p.pid}",
