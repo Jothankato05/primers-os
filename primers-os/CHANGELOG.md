@@ -31,6 +31,19 @@
 - Data Saver for system updates: package-list refresh, automatic upgrades
   and firmware refresh wait for an unmetered connection (mobile data and
   phone hotspots are skipped); `datasaver` command in the Brain.
+- **Lab Mode** for shared computers: `sudo primers-lab enable` adds a
+  passwordless, non-admin `lab` account whose home folder is wiped and
+  rebuilt from a template at every sign-in, sign-out and boot (also its
+  temp files, crontab, mail and private Wi-Fi profiles). Refuses to touch
+  any account it didn't create; fails closed. `lab` command in the Brain,
+  sign-in notice for students. Passwordless sign-in is only granted at
+  boot, once LightDM has loaded the wipe hooks.
+- **Study Mode**: `study 25` (or `primers-study`, or the desktop menu)
+  starts a focus timer; Primers Lite Bee pauses social media, video, games
+  and betting sites until it ends (before any data is spent on typed or
+  clicked links), the panel counts down and a notice marks the break.
+- Console logins say PRIMERS OS instead of Ubuntu and no longer show
+  Ubuntu Pro adverts.
 - Wired Ethernet now works: NetworkManager manages every device (Ubuntu's
   package leaves wired interfaces unmanaged unless the distro overrides it).
 - Desktop: launcher bar, right-click and Super+Space menus, media keys,

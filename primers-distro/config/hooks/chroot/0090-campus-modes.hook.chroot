@@ -1,0 +1,32 @@
+#!/bin/bash
+# PRIMERS OS — campus modes: Lab Mode and Study Mode
+#
+# Lab Mode is OFF in the image. On each lab machine an administrator runs
+# "sudo primers-lab enable": that creates a passwordless, non-admin "lab"
+# account and wipes it at every sign-in, sign-out and boot. Here we only
+# check that the pieces it relies on are in place.
+set -euo pipefail
+
+# LightDM lets members of nopasswdlogin sign in without a password
+getent group nopasswdlogin >/dev/null || groupadd --system nopasswdlogin
+if ! grep -Eq '^auth[[:space:]]+sufficient[[:space:]]+pam_succeed_if\.so user ingroup nopasswdlogin' /etc/pam.d/lightdm; then
+  echo "E: /etc/pam.d/lightdm has no nopasswdlogin rule; Lab Mode sign-in would ask for a password" >&2
+  exit 1
+fi
+
+# Never shipped switched on
+systemctl disable primers-lab-reset.service >/dev/null 2>&1 || true
+rm -f /etc/primers/lab.conf /etc/lightdm/lightdm.conf.d/60-primers-lab.conf
+chmod 0755 /usr/bin/primers-lab
+command -v zenity >/dev/null
+
+out=$(primers-lab status)
+grep -q "Lab Mode: off" <<<"$out" || { echo "E: primers-lab status: $out" >&2; exit 1; }
+echo "Lab Mode: available (off by default)"
+
+# Study Mode: per-user focus timer (Brain "study", primers-study, panel timer)
+chmod 0755 /usr/bin/primers-study /usr/lib/primers/study-panel
+out=$(HOME=/nonexistent XDG_STATE_HOME=/nonexistent primers-study status)
+grep -q "Study Mode: off" <<<"$out" || { echo "E: primers-study status: $out" >&2; exit 1; }
+HOME=/nonexistent /usr/lib/primers/study-panel
+echo "Study Mode: available"

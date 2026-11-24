@@ -29,7 +29,7 @@ from utils.logger import PrimersLogger
 VOICE_SAFE_ACTIONS = {
     "list_processes", "system_status", "security_status", "list_threats",
     "list_alerts", "list_connections", "find_process", "math", "help",
-    "version", "advise", "kernel", "ask", "datasaver",
+    "version", "advise", "kernel", "ask", "datasaver", "lab",
 }
 
 
@@ -216,6 +216,7 @@ class PrimersShell:
         if self.show_banner:
             print(banner())
         self._show_boot_summary()
+        self._show_lab_notice()
         print()
 
         while self._running:
@@ -529,6 +530,74 @@ class PrimersShell:
             print(C.dim("  Allow updates on metered links: sudo mkdir -p /etc/primers && "
                         "sudo touch " + network_status.OVERRIDE_FILE))
         print(f"\n{divider()}\n")
+
+    def _cmd_lab(self, cmd: ParsedCommand):
+        from core import lab_mode
+        lab = lab_mode.LabMode()
+        st = lab.status()
+        print(f"\n{divider()}")
+        print(f"  {C.hi('LAB MODE')}")
+        print(divider())
+        if st["enabled"] is None:
+            print(C.err(f"  ✗ Lab Mode settings are damaged: {st['error']}"))
+        elif not st["enabled"]:
+            print("\n  Lab Mode is off: this computer keeps each person's files.")
+            print(C.dim("  For a shared lab PC: sudo primers-lab enable  (a 'lab' account, wiped at sign-out)"))
+        else:
+            if lab.is_lab_session():
+                print(C.warn("\n  ⚠ You are using the shared lab account."))
+                print("    Everything you save here is deleted when you sign out.")
+                print("    Save your work to a USB stick or online before you leave.")
+            else:
+                print(f"\n  Lab Mode is {C.ok('on')}: the '{st['user']}' account signs in without a password")
+                print("  and is wiped at every sign-in, sign-out and boot.")
+            print(f"\n  Fresh home from:  {st['template']}")
+            print(f"  Last reset:       {st['last_reset'] or 'never'}")
+            if not st["login_hooks"] or not st["account_exists"]:
+                print(C.err("  ✗ Lab Mode is not fully set up: run sudo primers-lab enable again."))
+            elif not st.get("sign_in_ready"):
+                print(C.warn("  Restart the computer to finish: the lab account can sign in after that."))
+        print(f"\n{divider()}\n")
+
+    def _cmd_study_start(self, cmd: ParsedCommand):
+        self._cmd_study(ParsedCommand(action="study", args=["start"], flags={}, raw=cmd.raw))
+
+    def _cmd_study(self, cmd: ParsedCommand):
+        from core import study_mode
+        arg = (cmd.args[0].lower() if cmd.args else "")
+        if arg == "start":
+            arg = cmd.args[1] if len(cmd.args) > 1 else str(study_mode.DEFAULT_MINUTES)
+        if arg in ("stop", "end", "quit", "finish", "off"):
+            session = study_mode.stop()
+            print(C.ok("  ✓ Study Mode ended. Paused sites are open again.") if session
+                  else C.dim("  Study Mode is not running."))
+            return
+        if arg.isdigit():
+            try:
+                session = study_mode.start(int(arg))
+            except ValueError as e:
+                print(C.err(f"  ✗ {e}"))
+                return
+            try:
+                import primers_study
+                primers_study.spawn_end_notice()
+            except Exception:
+                self.logger.exception("could not start the Study Mode end notice")
+            end = time.strftime("%H:%M", time.localtime(session.until))
+            print(C.ok(f"  ✓ Study Mode on for {session.minutes} min (until {end})."))
+            print(C.dim("    Primers Lite Bee pauses social media, video, games and betting sites;"))
+            print(C.dim("    the panel shows the time left. End early with: study stop"))
+            return
+        if arg:
+            print(C.err(f"  ✗ Unknown option '{arg}'. Try: study 25 · study stop · study"))
+            return
+        session = study_mode.current()
+        if session:
+            print(f"  {C.hi('STUDY MODE')}  {C.ok(study_mode.format_left(session.remaining()) + ' left')}"
+                  f" {C.dim('of ' + str(session.minutes) + ' min')}")
+        else:
+            print(f"  {C.hi('STUDY MODE')}  {C.dim('off')}  "
+                  f"Start a focus session: {C.accent('study 25')} (minutes)")
 
     def _cmd_list_connections(self, cmd: ParsedCommand):
         conns = self.se.scan_connections()
@@ -994,6 +1063,15 @@ class PrimersShell:
     # ──────────────────────────────────────────
     #  Boot summary
     # ──────────────────────────────────────────
+
+    def _show_lab_notice(self):
+        try:
+            from core import lab_mode
+            if lab_mode.LabMode().is_lab_session():
+                print(C.warn("\n  ⚠ Shared lab account: your files are deleted when you sign out. "
+                             "Save to USB or online."))
+        except Exception:
+            pass
 
     def _show_boot_summary(self):
         def state(component, on="Online", off="On demand"):

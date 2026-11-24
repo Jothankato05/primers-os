@@ -27,6 +27,12 @@
     <item label="Primers Lite Bee"><action name="Execute"><command>lite-bee</command></action></item>
     <item label="File Manager"><action name="Execute"><command>pcmanfm</command></action></item>
     <separator/>
+    <menu id="study-menu" label="Study Mode">
+      <item label="Focus 25 minutes"><action name="Execute"><command>primers-study start 25</command></action></item>
+      <item label="Focus 50 minutes"><action name="Execute"><command>primers-study start 50</command></action></item>
+      <item label="Focus 90 minutes"><action name="Execute"><command>primers-study start 90</command></action></item>
+      <item label="Stop Study Mode"><action name="Execute"><command>primers-study stop</command></action></item>
+    </menu>
     <menu id="apps-menu"/>
     <menu id="system-menu"/>
     <separator/>

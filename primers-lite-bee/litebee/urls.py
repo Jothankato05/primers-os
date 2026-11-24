@@ -69,3 +69,12 @@ def display_host(url: str) -> str:
 
 def is_secure(url: str) -> bool:
     return url.startswith(("https://", "bee:", "file://"))
+
+
+def query_param(uri: str, name: str) -> str:
+    """First value of query parameter `name` in `uri` ('' if missing)."""
+    from urllib.parse import parse_qs, urlsplit
+    try:
+        return parse_qs(urlsplit(uri or "").query).get(name, [""])[0]
+    except ValueError:
+        return ""

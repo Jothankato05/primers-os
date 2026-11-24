@@ -27,7 +27,7 @@ except ValueError:  # Ubuntu 22.04 ships 4.0 alongside
     gi.require_version("WebKit2", "4.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, WebKit2  # noqa: E402
 
-from litebee import APP_ID, APP_NAME, VERSION, filters, network, pages, storage, urls  # noqa: E402
+from litebee import APP_ID, APP_NAME, VERSION, filters, network, pages, storage, study, urls  # noqa: E402
 from litebee.datameter import DataMeter  # noqa: E402
 from litebee.modes import MODES, Mode, resolve  # noqa: E402
 from litebee.session import Session, Settings  # noqa: E402
@@ -244,7 +244,8 @@ class BrowserWindow(Gtk.ApplicationWindow):
         tab = tab or self.current
         if tab:
             tab.page_bytes = 0
-            tab.view.load_uri(uri)
+            site = self.app.study.check(uri)
+            tab.view.load_uri(pages.study_uri(site) if site else uri)
 
     # ------------------------------------------------------------------ #
     #  Signals
@@ -333,7 +334,31 @@ class BrowserWindow(Gtk.ApplicationWindow):
         return child
 
     def on_decide_policy(self, view, decision, decision_type, tab):
+        if decision_type in (WebKit2.PolicyDecisionType.NAVIGATION_ACTION,
+                             WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION):
+            # Study Mode, early: a link the user clicked doesn't even reach the
+            # network (on 2G every request counts).
+            action = decision.get_navigation_action()
+            site = self.app.study.check(action.get_request().get_uri() or "")
+            clicked = action.get_navigation_type() == WebKit2.NavigationType.LINK_CLICKED and \
+                action.is_user_gesture()
+            if site and (clicked or decision_type == WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION):
+                decision.ignore()
+                if decision_type == WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION:
+                    GLib.idle_add(lambda: self.new_tab(pages.study_uri(site)) and False)
+                else:
+                    GLib.idle_add(lambda: self.load(pages.study_uri(site), tab) and False)
+                return True
         if decision_type == WebKit2.PolicyDecisionType.RESPONSE:
+            # Study Mode: paused sites never load, whether typed, clicked,
+            # redirected to or embedded in another page.
+            site = self.app.study.check(decision.get_request().get_uri() or "")
+            if site:
+                decision.ignore()
+                main = getattr(decision, "is_main_frame_main_resource", lambda: True)()
+                if main:
+                    GLib.idle_add(lambda: self.load(pages.study_uri(site), tab) and False)
+                return True
             if not decision.is_mime_type_supported():
                 decision.download()
                 return True
@@ -544,6 +569,7 @@ class LiteBeeApp(Gtk.Application):
         self.settings = Settings.load()
         self.session = Session.load()
         self.meter = DataMeter(naira_per_gb=self.settings.naira_per_gb)
+        self.study = study.StudyGate()
         self.connection = network.detect()
         self.mode: Mode = resolve(self.settings.mode, self.connection)
         self.window: Optional[BrowserWindow] = None
@@ -745,6 +771,9 @@ class LiteBeeApp(Gtk.Application):
                 self._finish(request, body, "text/html")
             elif path == "saved":
                 self._finish(request, pages.saved_list(self.saved_index()).encode(), "text/html")
+            elif path == "study":
+                site = urls.query_param(request.get_uri(), "site")
+                self._finish(request, pages.study_paused(site, self.study.until()).encode(), "text/html")
             elif path.startswith("saved/"):
                 page_id = path[6:]
                 if not re.fullmatch(r"[A-Za-z0-9-]+", page_id):

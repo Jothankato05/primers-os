@@ -139,3 +139,31 @@ before sending or receiving anything. Someone could be trying to intercept this 
 <div class="actions"><a href="#" onclick="webkit.messageHandlers.litebee.postMessage('home');return false">Go home</a></div>
 """
     return _page("Connection not secure", body)
+
+
+def study_uri(site: str) -> str:
+    from urllib.parse import quote
+    return "bee:study?site=" + quote(site or "", safe="")
+
+
+def study_paused(site: str, until: Optional[int]) -> str:
+    """Shown instead of a paused site while a study session runs."""
+    if until:
+        import time as _time
+        left = max(0, until - int(_time.time()))
+        minutes = max(1, (left + 59) // 60)
+        when = _time.strftime("%H:%M", _time.localtime(until))
+        status = (f"<p><b>{html.escape(site)}</b> is paused for the next "
+                  f"<b>{minutes} minute{'s' if minutes != 1 else ''}</b>, until {when}.</p>")
+    else:
+        status = f"<p>Your study session is over: <a href='https://{html.escape(site, quote=True)}'>open {html.escape(site)}</a>.</p>"
+    body = f"""
+<h1>Study Mode is on</h1>
+{status}
+<p class="muted">Stay with it: you'll get there. Social media, video, games and betting sites
+open again when the timer ends.</p>
+<p class="muted">Need it now? Type <code>study stop</code> in the PRIMERS Brain.
+Change the list in <code>~/.config/primers/study-sites</code>.</p>
+<div class="actions"><a href="bee:home">Home</a></div>
+"""
+    return _page("Study Mode", body)

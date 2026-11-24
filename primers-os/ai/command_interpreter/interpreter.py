@@ -45,6 +45,9 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
     "threats":                 ("list_threats",    "Show security threat events"),
     "alerts":                  ("list_alerts",     "Show system alerts"),
     "datasaver":               ("datasaver",       "Data Saver: metered network & paused downloads"),
+    "lab":                     ("lab",             "Lab Mode: shared account wiped at sign-out"),
+    "study":                   ("study",           "Study Mode: focus timer, pauses distracting sites (study 25 | stop)"),
+    "focus":                   ("study",           "Study Mode: focus timer, pauses distracting sites (study 25 | stop)"),
     "connections":             ("list_connections","Show active network connections"),
     "netstat":                 ("list_connections","Show active network connections"),
     "find":                    ("find_process",    "Find process by name"),
@@ -85,7 +88,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
 }
 
 HELP_GROUPS = {
-    "System":       ["status", "alerts", "datasaver", "kernel", "version"],
+    "System":       ["status", "alerts", "datasaver", "lab", "kernel", "version"],
     "Process":      ["ps", "kill", "launch", "find", "suspend", "resume", "priority"],
     "Security":     ["security", "threats", "connections", "cyber"],
     "Intelligence": ["ask", "advise", "learn", "task"],
@@ -96,6 +99,11 @@ HELP_GROUPS = {
 # Natural language patterns. Anchored so that ordinary sentences don't
 # trigger actions by accident; the optional named group "arg" is the argument.
 NL_PATTERNS: List[Tuple[str, str]] = [
+    # Study Mode comes before the generic "start <program>" pattern
+    (r"^(?:start\s+|begin\s+)?(?:a\s+)?(?:study(?:ing)?|focus(?:ing)?)(?:\s+(?:session|mode))?"
+     r"\s+(?:for\s+)?(?P<arg>\d{1,3})(?:\s*(?:minutes?|mins?|m))?$", "study"),
+    (r"^(?:start|begin)\s+(?:a\s+)?(?:study(?:ing)?|focus(?:ing)?)(?:\s+(?:session|mode))?$", "study_start"),
+    (r"^(?P<arg>stop|end|quit|finish)\s+(?:the\s+)?(?:studying|focusing|(?:study|focus)(?:\s+(?:session|mode))?)$", "study"),
     (r"^(?:please\s+)?(?:show|list)\s+(?:me\s+)?(?:all\s+)?(?:the\s+)?(?:running\s+)?process(?:es)?$", "list_processes"),
     (r"^what(?:'s|\s+is)\s+running\??$",                                                              "list_processes"),
     (r"^(?:please\s+)?(?:kill|terminate|stop)\s+(?:process\s+|pid\s+)?(?P<arg>\d+)$",               "kill_process"),
@@ -105,6 +113,8 @@ NL_PATTERNS: List[Tuple[str, str]] = [
     (r"^(?:show\s+)?(?:any\s+|all\s+)?alerts?\??$",                                                   "list_alerts"),
     (r"^(?:show\s+)?(?:the\s+)?network\s+connections?$",                                              "list_connections"),
     (r"^(?:am\s+i\s+on\s+(?:a\s+)?metered(?:\s+(?:network|connection))?|data\s+saver(?:\s+status)?)\??$", "datasaver"),
+    (r"^(?:lab\s+mode(?:\s+status)?|is\s+this\s+a\s+(?:shared\s+|lab\s+)*(?:computer|machine|pc|account)|"
+     r"(?:will|are|do)\s+my\s+files\s+(?:be\s+|get\s+)?(?:deleted|wiped|erased|kept|saved))\??$", "lab"),
     (r"^find\s+(?:process\s+)?(?P<arg>\S+)$",                                                         "find_process"),
     (r"^(?:calculate|compute|solve)\s+(?P<arg>.+)$",                                                  "math"),
     (r"^what(?:'s|\s+is)\s+(?P<arg>[\d\s+\-*/^%().,]+?)\s*\??$",                                     "math"),

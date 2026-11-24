@@ -92,11 +92,14 @@ config/
     0060-performance-kernel     /etc/default/grub, CPU governor service
     0070-configure-installer    "Install PRIMERS OS" launcher
     0080-configure-browser      Primers Lite Bee icons, default browser, checks
+    0090-campus-modes           Lab Mode prerequisites (off in the image), Study Mode
 overlays/                       copied verbatim into the OS root
   usr/bin/primers               launches the brain
   usr/bin/primers-terminal      brain in a terminal window (falls back to a shell)
   usr/bin/primers-install       module installer
   usr/bin/primers-compat        Windows program launcher (Wine)
+  usr/bin/primers-lab           Lab Mode for shared computers
+  usr/bin/primers-study         Study Mode focus timer
   usr/lib/primers/modules/      module registry (JSON)
   etc/skel/                     defaults for every new user (Openbox, tint2, PCManFM…)
 installer/calamares/            installer: settings.conf, modules/*.conf, branding/
@@ -132,6 +135,65 @@ sudo mkdir -p /etc/primers && sudo touch /etc/primers/updates-on-metered
 ```
 
 `datasaver` in the PRIMERS Brain shows the current state.
+
+### Lab Mode (shared computers)
+
+For lab and library PCs that many students use. It is off by default; turn
+it on, on each machine:
+
+```bash
+sudo primers-lab enable
+```
+
+then **restart the computer** (LightDM reads its configuration only when it
+starts, so the lab account can sign in only after a restart, never without
+the wipe).
+
+This creates a `lab` account that signs in from the login screen without a
+password and is never an administrator (its password is locked, so it can't
+be used on a text console, over SSH or with `su`). Its home folder is deleted
+and rebuilt from a template **before every session, after every session and
+at every boot**, together with its files in `/tmp`, `/var/tmp` and
+`/dev/shm`, its crontab and mail, and Wi-Fi profiles only it could use.
+Students see a notice at sign-in, and `lab` in the PRIMERS Brain explains it.
+
+- **Template:** `/etc/primers/lab-skel` if it exists, otherwise `/etc/skel`
+  (or `--template DIR`). Put the lab's wallpaper, bookmarks and shortcuts
+  there; it must be owned by root.
+- **Other accounts are untouched.** Staff keep normal accounts on the same
+  machine.
+- **Safety:** it only ever wipes the account it created (name and UID are
+  recorded in `/etc/primers/lab.conf`), and only if that account is still an
+  ordinary user with home `/home/<name>` in no admin group. If a check or the
+  wipe fails, LightDM refuses the lab sign-in rather than show the previous
+  student's files; the reason is in the system log (`journalctl -t primers-lab`).
+- **Wiring:** LightDM `session-setup-script`/`session-cleanup-script`
+  (`/etc/lightdm/lightdm.conf.d/60-primers-lab.conf`) and
+  `primers-lab-reset.service` at boot, before logins are allowed.
+
+```bash
+primers-lab status          # on or off, last reset
+sudo primers-lab reset      # wipe the lab account now (ends its session)
+sudo primers-lab disable    # turn it off and delete the lab account
+```
+
+### Study Mode (focus timer)
+
+Any user can start a focus session: `study 25` in the PRIMERS Brain,
+`primers-study start 25`, or right-click the desktop › **Study Mode**. While
+it runs:
+
+- **Primers Lite Bee pauses distracting sites** (social media, video, games
+  and betting) and shows how long is left instead. Typed and clicked links
+  are stopped before any data is spent; embedded players and redirects are
+  caught too. Add sites, or allow one (`-youtube.com`), in
+  `~/.config/primers/study-sites`.
+- **The panel shows the minutes left** (`/usr/lib/primers/study-panel`).
+- **A notice says when the session is over.** `study stop` ends it early.
+
+The session is a small per-user file, `~/.local/state/primers/study`.
+Firefox is not filtered; Study Mode is a focus aid, not a lockdown (that is
+Exam Mode's job).
 
 ### Customizing
 

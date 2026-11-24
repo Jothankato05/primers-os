@@ -1,5 +1,5 @@
 # PRIMERS OS panel
-panel_items = LTSC
+panel_items = LTESC
 panel_size = 100% 36
 panel_position = bottom center horizontal
 panel_margin = 0 0
@@ -30,6 +30,18 @@ launcher_item_app = /usr/share/applications/pcmanfm.desktop
 launcher_item_app = /usr/share/applications/debian-xterm.desktop
 launcher_item_app = /usr/share/applications/net.lutris.Lutris.desktop
 task_font_color = #F5F2EA 100
+
+#---- Study Mode timer (shows only while a session runs) ----
+execp = new
+execp_command = /usr/lib/primers/study-panel
+execp_interval = 10
+execp_has_icon = 0
+execp_continuous = 0
+execp_font = Noto Sans Bold 9
+execp_font_color = #1E9E62 100
+execp_padding = 6 0
+execp_tooltip = Study Mode: distracting sites are paused. Stop: right-click the desktop › Study Mode
+execp_lclick_command = primers-terminal
 
 #---- Backgrounds ----
 # 1: panel
