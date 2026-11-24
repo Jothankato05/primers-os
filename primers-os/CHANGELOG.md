@@ -17,8 +17,13 @@
 - Complete Calamares installer configuration (unpack, partitioning incl.
   encryption, users, LightDM autologin choice, GRUB on BIOS/UEFI with
   Ubuntu's signed shim), branding and slideshow.
-- New PRIMERS artwork (logo, wallpaper, Plymouth boot splash, GRUB theme).
-  The GRUB theme now boots without the GRUB 2.12 "null src bitmap" stop.
+- Official Primers OS logo pack (branding/primers-os-logo) applied across
+  the OS: wallpaper, icons, GRUB menu, LightDM, installer, panel and
+  terminals in Night Ink / Chalk with Ready Green for states; the boot
+  splash shows the mark with its blinking cursor. The GRUB theme boots
+  without the GRUB 2.12 "null src bitmap" stop.
+- Wired Ethernet now works: NetworkManager manages every device (Ubuntu's
+  package leaves wired interfaces unmanaged unless the distro overrides it).
 - Desktop: launcher bar, right-click and Super+Space menus, media keys,
   polkit agent, Bluetooth/volume tray, dark GTK theme, `primers-terminal`.
 - `primers-install`: escalates with sudo, refreshes package indexes, module

@@ -18,7 +18,7 @@ systray_padding = 4 4 6
 systray_icon_size = 22
 clock_format = %H:%M  %a %d %b
 clock_font = Noto Sans 9
-clock_font_color = #c8c8e8 100
+clock_font_color = #F5F2EA 100
 clock_padding = 8 0
 launcher_padding = 4 4 6
 launcher_icon_size = 26
@@ -29,21 +29,21 @@ launcher_item_app = /usr/share/applications/firefox.desktop
 launcher_item_app = /usr/share/applications/pcmanfm.desktop
 launcher_item_app = /usr/share/applications/debian-xterm.desktop
 launcher_item_app = /usr/share/applications/net.lutris.Lutris.desktop
-task_font_color = #c8c8e8 100
+task_font_color = #F5F2EA 100
 
 #---- Backgrounds ----
 # 1: panel
 rounded = 0
 border_width = 0
-background_color = #0a0a0f 95
+background_color = #12161C 97
 border_color = #000000 0
 # 2: active task
 rounded = 3
 border_width = 1
-background_color = #1e1e3a 95
-border_color = #00e5ff 40
+background_color = #1F252E 100
+border_color = #1E9E62 100
 # 3: inactive task
 rounded = 3
 border_width = 0
-background_color = #10101a 80
+background_color = #181D24 100
 border_color = #000000 0

@@ -294,6 +294,14 @@ stage_customize() {
   find "$CHROOT/usr/share/primers/brain" -type d -exec chmod 0755 {} +
   find "$CHROOT/usr/share/primers/brain" -type f -exec chmod 0644 {} +
 
+  log "Installing Primers OS brand assets -> /usr/share/primers/branding"
+  rm -rf "$CHROOT/usr/share/primers/branding"
+  install -d -m 0755 "$CHROOT/usr/share/primers/branding"
+  cp -r "$REPO_ROOT/branding/primers-os-logo/png" "$REPO_ROOT/branding/primers-os-logo/svg" \
+        "$CHROOT/usr/share/primers/branding/"
+  find "$CHROOT/usr/share/primers/branding" -type d -exec chmod 0755 {} +
+  find "$CHROOT/usr/share/primers/branding" -type f -exec chmod 0644 {} +
+
   log "Installing Primers Lite Bee -> /usr/share/primers/lite-bee"
   rm -rf "$CHROOT/usr/share/primers/lite-bee"
   install -d -m 0755 "$CHROOT/usr/share/primers/lite-bee"

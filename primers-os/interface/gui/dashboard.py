@@ -36,11 +36,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PRIMERS OS Dashboard</title>
+<title>Primers OS Dashboard</title>
 <style>
   :root {
-    --bg: #0d0d0d; --panel: #1a1a1a; --accent: #00e5ff; --text: #e0e0e0;
-    --warn: #ffcc00; --danger: #ff4444; --success: #00ff88; --dim: #888888; --line: #333;
+    /* Primers OS brand: Night Ink, Chalk; Ready Green for states only */
+    --bg: #12161C; --panel: #1A1F27; --accent: #F5F2EA; --text: #F5F2EA;
+    --warn: #E8B339; --danger: #E5534B; --success: #1E9E62; --dim: #8A909A; --line: #2A313B;
   }
   * { box-sizing: border-box; }
   body { font-family: 'Noto Sans', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text);
@@ -48,8 +49,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   h1, h2, h3 { margin: 0; }
   .mono { font-family: 'Noto Sans Mono', 'Consolas', monospace; }
   header { display: flex; justify-content: space-between; align-items: center; gap: 12px;
-           border-bottom: 2px solid var(--accent); padding-bottom: 15px; margin-bottom: 25px; flex-wrap: wrap; }
-  header h1 { color: var(--accent); font-size: 1.6rem; letter-spacing: 2px; }
+           border-bottom: 1px solid var(--line); padding-bottom: 15px; margin-bottom: 25px; flex-wrap: wrap; }
+  header h1 { color: var(--accent); font-size: 1.4rem; display: flex; align-items: center; gap: 12px; }
+  header h1 svg { width: 32px; height: 32px; }
   header small { font-size: .8rem; color: var(--dim); }
   #clock { color: var(--dim); }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 25px; }
@@ -61,7 +63,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
   .side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-  .panel h2 { color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; border-left: 4px solid var(--accent); padding-left: 10px; }
+  .panel h2 { color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; border-left: 4px solid var(--success); padding-left: 10px; }
   .scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; padding: 8px; border-bottom: 1px solid #444; color: var(--dim); font-size: .75rem; text-transform: uppercase; }
@@ -83,7 +85,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>⚛ PRIMERS OS <small id="version"></small></h1>
+  <h1><svg viewBox="0 0 64 64" role="img" aria-label="Primers OS"><path fill-rule="evenodd" fill="#F5F2EA" d="M12 8H36A16 16 0 0 1 52 24A16 16 0 0 1 36 40H24V56H12ZM24 19V29H35A5 5 0 0 0 35 19Z"/><rect x="31" y="46" width="16" height="10" rx="1.5" fill="#1E9E62"/></svg>
+      Dashboard <small id="version"></small></h1>
   <div id="clock" class="mono">--:--:--</div>
 </header>
 

@@ -31,9 +31,17 @@ if command -v ufw >/dev/null 2>&1; then
   sed -i 's/^ENABLED=.*/ENABLED=yes/' /etc/ufw/ufw.conf
 fi
 
-# Networking is handled by NetworkManager for every interface
-install -d /etc/NetworkManager/conf.d
-cat > /etc/NetworkManager/conf.d/10-primers-managed.conf <<'EOF'
-[ifupdown]
-managed=true
+# Networking: NetworkManager manages every interface, wired included.
+# Ubuntu's network-manager package leaves wired devices unmanaged unless the
+# distribution overrides it (as Ubuntu Desktop does) — without this, Ethernet
+# never comes up.
+install -d /etc/NetworkManager/conf.d /etc/netplan
+: > /etc/NetworkManager/conf.d/10-globally-managed-devices.conf
+rm -f /etc/NetworkManager/conf.d/10-primers-managed.conf
+cat > /etc/netplan/01-network-manager-all.yaml <<'EOF'
+# Let NetworkManager manage all devices on this system
+network:
+  version: 2
+  renderer: NetworkManager
 EOF
+chmod 600 /etc/netplan/01-network-manager-all.yaml

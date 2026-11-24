@@ -2,5 +2,5 @@
 # Open the PRIMERS Brain in a terminal window. If the brain exits, the window
 # drops to a normal shell instead of vanishing.
 exec xterm -class PrimersBrain -title "PRIMERS OS" -geometry 120x35 \
-  -fa Monospace -fs 11 -bg "#0a0a0f" -fg "#c8c8e8" -cr "#00e5ff" \
+  -fa Monospace -fs 11 -bg "#12161C" -fg "#F5F2EA" -cr "#1E9E62" \
   -e sh -c 'primers "$@"; echo; echo "  PRIMERS Brain exited — this is a regular shell now (type primers to restart)."; exec bash' primers-terminal "$@"

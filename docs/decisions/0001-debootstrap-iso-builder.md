@@ -33,8 +33,9 @@ Mozilla's signed APT repository (fingerprint-pinned in `build.sh`).
 ## Consequences
 
 - The build depends only on tools available on any Ubuntu/Debian host and
-  was verified end to end: the ISO boots to the desktop in QEMU (BIOS and
-  UEFI) and the Calamares installer runs.
+  was verified end to end in QEMU: the ISO boots to the desktop on BIOS and
+  UEFI, Calamares installs to a blank disk (UEFI, GPT, ext4), and the
+  installed system boots from its own GRUB to the login screen and desktop.
 - `tools/check-packages.py` validates every package name against the jammy
   archive in CI, so naming errors fail in seconds.
 - The live ISO's GRUB from `grub-mkrescue` is unsigned: the live USB needs

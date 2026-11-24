@@ -57,6 +57,8 @@ class Tab(Gtk.Box):
         self.window = window
         self.view = view
         self.page_bytes = 0
+        self.error_uri: Optional[str] = None     # URI currently showing our error page
+        self.pending_error: Optional[str] = None
         self.title_label = Gtk.Label(label="New tab", ellipsize=3, width_chars=14, max_width_chars=22, xalign=0)
         self.pack_start(view, True, True, 0)
         view.connect("load-changed", window.on_load_changed, self)
@@ -265,6 +267,11 @@ class BrowserWindow(Gtk.ApplicationWindow):
     def on_load_changed(self, view, event, tab):
         if event == WebKit2.LoadEvent.STARTED:
             tab.page_bytes = 0
+            tab.error_uri = None
+        if event == WebKit2.LoadEvent.COMMITTED and tab.pending_error:
+            if tab.pending_error == view.get_uri():
+                tab.error_uri = tab.pending_error
+            tab.pending_error = None
         if event == WebKit2.LoadEvent.FINISHED:
             self.save_session()
             self.app.meter.save()
@@ -272,16 +279,17 @@ class BrowserWindow(Gtk.ApplicationWindow):
         if tab is self.current:
             self.refresh_chrome()
 
-    def on_load_failed(self, view, event, uri, error):
-        tab = view.get_parent()
+    def on_load_failed(self, view, event, uri, error, tab):
         if error.matches(WebKit2.NetworkError.quark(), WebKit2.NetworkError.CANCELLED) or \
                 error.matches(WebKit2.PolicyError.quark(), WebKit2.PolicyError.FRAME_LOAD_INTERRUPTED_BY_POLICY_CHANGE):
             return False
         offline = self.app.connection.kind == "none"
+        tab.pending_error = uri
         view.load_alternate_html(pages.error(uri, error.message, self.app.mode, offline), uri, None)
         return True
 
     def on_tls_error(self, view, uri, cert, errors, tab):
+        tab.pending_error = uri
         view.load_alternate_html(pages.tls_error(uri, urls.display_host(uri)), uri, None)
         return True
 
@@ -329,10 +337,6 @@ class BrowserWindow(Gtk.ApplicationWindow):
             if not decision.is_mime_type_supported():
                 decision.download()
                 return True
-        if decision_type == WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
-            uri = decision.get_navigation_action().get_request().get_uri() or ""
-            if uri.split(":", 1)[0].lower() in ("javascript", "vbscript"):
-                return False
         return False
 
     def on_mode_toggled(self, button, key):
@@ -406,8 +410,12 @@ class BrowserWindow(Gtk.ApplicationWindow):
             return False
         view = tab.view
         uri = view.get_uri() or ""
-        if not self.url.has_focus():
-            self.url.set_text("" if uri.startswith("bee:home") else uri)
+        shown = "" if uri.startswith("bee:home") else uri
+        typed = self.url.get_text()
+        # Don't overwrite an address the user is in the middle of typing
+        if not self.url.has_focus() or typed in ("", getattr(self, "_shown_uri", "")):
+            self.url.set_text(shown)
+        self._shown_uri = shown
         icon = "channel-secure-symbolic" if urls.is_secure(uri) else "channel-insecure-symbolic"
         self.url.set_icon_from_icon_name(Gtk.EntryIconPosition.PRIMARY, icon)
         self.back_btn.set_sensitive(view.can_go_back())
@@ -570,6 +578,9 @@ class LiteBeeApp(Gtk.Application):
         self.context.connect("download-started", self.on_download)
 
         self.content = WebKit2.UserContentManager()
+        # Buttons on Lite Bee's own error pages talk to the app through this
+        self.content.register_script_message_handler("litebee")
+        self.content.connect("script-message-received::litebee", self.on_page_message)
         self.filter_store = WebKit2.UserContentFilterStore.new(os.path.join(storage.cache_dir(), "filters"))
         self.apply_mode(self.mode)
         GLib.timeout_add_seconds(4, lambda: (self.filter_ready or self._filter_installed(), False)[1])
@@ -706,6 +717,19 @@ class LiteBeeApp(Gtk.Application):
     # ------------------------------------------------------------------ #
     #  bee: pages and downloads
     # ------------------------------------------------------------------ #
+
+    def on_page_message(self, _ucm, js_result):
+        """Only honoured while the visible tab is showing our own error page."""
+        tab = self.window.current if self.window else None
+        if not tab or not tab.error_uri or tab.view.get_uri() != tab.error_uri:
+            return
+        try:
+            action = js_result.get_js_value().to_string()
+        except (AttributeError, GLib.Error):
+            return
+        target = {"home": "bee:home", "saved": "bee:saved"}.get(action)
+        if target:
+            self.window.load(target, tab)
 
     def saved_index(self) -> list:
         data = storage.read_json(storage.data_file("saved.json"), [])

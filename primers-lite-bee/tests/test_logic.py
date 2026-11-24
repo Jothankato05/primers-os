@@ -206,5 +206,5 @@ def test_pages_escape_everything():
     tls = pages.tls_error(evil, evil)
     for page in (home, err, saved, tls):
         assert "<script>alert" not in page
-    assert "Ultra mode" in err and "offline" in err
+    assert "switch to Ultra" in err and "offline" in err
     assert "Nothing saved yet" in pages.saved_list([])

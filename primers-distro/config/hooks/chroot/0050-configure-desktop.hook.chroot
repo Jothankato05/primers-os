@@ -1,18 +1,29 @@
 #!/bin/bash
 # PRIMERS OS — desktop look & feel, artwork, display manager
+#
+# Artwork comes from the official logo pack (branding/primers-os-logo,
+# installed to /usr/share/primers/branding by build.sh). Brand rules: Night
+# Ink #12161C, Chalk #F5F2EA, Ready Green #1E9E62 for the cursor and states
+# only; never stretch, add shadows or gradients, recolour or move the cursor,
+# or retype the wordmark.
 set -euo pipefail
 
+BRAND=/usr/share/primers/branding
+[ -f "$BRAND/png/mark-color.png" ] || { echo "[PRIMERS] brand assets missing in $BRAND" >&2; exit 1; }
 install -d /usr/share/primers /usr/share/pixmaps
 
-# ── Plymouth boot splash: copy the generic spinner graphics into our theme ──
+# ── Plymouth boot splash: the mark with its blinking cursor ──
 PLY=/usr/share/plymouth/themes/primers
 rm -rf "$PLY"
 install -d "$PLY"
-cp /usr/share/plymouth/themes/spinner/*.png "$PLY/"
+# Generic password/entry graphics from the spinner theme; boot frames are ours
+for f in bullet capslock entry keyboard keymap-render lock; do
+  [ -f "/usr/share/plymouth/themes/spinner/$f.png" ] && cp "/usr/share/plymouth/themes/spinner/$f.png" "$PLY/"
+done
 cat > "$PLY/primers.plymouth" <<'PLYEOF'
 [Plymouth Theme]
 Name=PRIMERS OS
-Description=PRIMERS OS boot splash (spinner, firmware logo when available)
+Description=PRIMERS OS boot splash: the Primers mark with its blinking cursor
 ModuleName=two-step
 
 [two-step]
@@ -20,33 +31,33 @@ Font=Noto Sans 12
 TitleFont=Noto Sans Light 30
 ImageDir=/usr/share/plymouth/themes/primers
 DialogHorizontalAlignment=.5
-DialogVerticalAlignment=.7
+DialogVerticalAlignment=.75
 TitleHorizontalAlignment=.5
 TitleVerticalAlignment=.382
 HorizontalAlignment=.5
-VerticalAlignment=.7
+VerticalAlignment=.5
 WatermarkHorizontalAlignment=.5
 WatermarkVerticalAlignment=.94
 Transition=none
 TransitionDuration=0.0
-BackgroundStartColor=0x0a0a0f
-BackgroundEndColor=0x0a0a0f
-ProgressBarBackgroundColor=0x1e1e3a
-ProgressBarForegroundColor=0x00e5ff
-DialogClearsFirmwareBackground=false
+BackgroundStartColor=0x12161c
+BackgroundEndColor=0x12161c
+ProgressBarBackgroundColor=0x262c35
+ProgressBarForegroundColor=0x1e9e62
+DialogClearsFirmwareBackground=true
 MessageBelowAnimation=true
 
 [boot-up]
 UseEndAnimation=false
-UseFirmwareBackground=true
+UseFirmwareBackground=false
 
 [shutdown]
 UseEndAnimation=false
-UseFirmwareBackground=true
+UseFirmwareBackground=false
 
 [reboot]
 UseEndAnimation=false
-UseFirmwareBackground=true
+UseFirmwareBackground=false
 
 [updates]
 SuppressMessages=true
@@ -63,119 +74,104 @@ Title=Upgrading PRIMERS OS…
 SubTitle=Do not turn off your computer
 PLYEOF
 
-# ── Artwork (wallpaper, logo, icons) generated with Pillow ──
+# ── Artwork from the official logo pack ─────────────────────
 python3 - <<'PYEOF'
-import math, os
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+import os
+import shutil
+from PIL import Image
 
-BG = (10, 10, 15)
-ACCENT = (0, 229, 255)
-TEXT = (200, 200, 232)
+BRAND = "/usr/share/primers/branding/png"
+INK = (18, 22, 28)
+CHALK = (245, 242, 234)
+GREEN = (30, 158, 98)
 
-def font(size, bold=False):
-    names = ["NotoSans-Bold.ttf" if bold else "NotoSans-Regular.ttf", "DejaVuSans.ttf"]
-    for root, _, files in os.walk("/usr/share/fonts"):
-        for n in names:
-            if n in files:
-                return ImageFont.truetype(os.path.join(root, n), size)
-    return ImageFont.load_default()
 
-def mark(size, color=ACCENT, glow=True):
-    """The PRIMERS mark: a 'P' monogram inside a hexagon, crossed by one orbit."""
-    s = size * 4                                   # supersample for smooth edges
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    c = s / 2
-    w = max(4, round(s * 0.045))
-    r = s * 0.44
-    pts = [(c + r * math.cos(math.radians(a)), c + r * math.sin(math.radians(a)))
-           for a in range(-90, 270, 60)]
-    d.line(pts + pts[:2], fill=color + (255,), width=w, joint="curve")
-    stem_l, stem_r = s * 0.36, s * 0.36 + w * 1.4
-    d.rectangle([stem_l, s * 0.27, stem_r, s * 0.73], fill=color + (255,))
-    d.rounded_rectangle([stem_l, s * 0.27, s * 0.66, s * 0.53], radius=s * 0.13,
-                        outline=color + (255,), width=round(w * 1.4))
-    orbit = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    od = ImageDraw.Draw(orbit)
-    od.ellipse([s * 0.06, s * 0.40, s * 0.94, s * 0.60], outline=color + (170,), width=max(2, w // 2))
-    er = w * 0.95
-    od.ellipse([s * 0.94 - er, s * 0.50 - er, s * 0.94 + er, s * 0.50 + er], fill=color + (255,))
-    img = Image.alpha_composite(img, orbit.rotate(28, resample=Image.BICUBIC, center=(c, c)))
-    img = img.resize((size, size), Image.LANCZOS)
-    if glow:
-        halo = img.filter(ImageFilter.GaussianBlur(size / 30))
-        img = Image.alpha_composite(halo, img)
-    return img
+def load(name):
+    return Image.open(os.path.join(BRAND, name)).convert("RGBA")
 
-def wallpaper(w, h, path):
-    img = Image.new("RGB", (w, h), BG)
-    d = ImageDraw.Draw(img)
-    step = max(40, w // 24)
-    for x in range(0, w, step):
-        d.line([(x, 0), (x, h)], fill=(18, 18, 30), width=1)
-    for y in range(0, h, step):
-        d.line([(0, y), (w, y)], fill=(18, 18, 30), width=1)
-    logo = mark(int(h * 0.28))
-    img.paste(logo, ((w - logo.width) // 2, int(h * 0.26)), logo)
-    title = "PRIMERS OS"
-    f = font(int(h * 0.055), bold=True)
-    tw = d.textlength(title, font=f)
-    d.text(((w - tw) / 2, h * 0.58), title, font=f, fill=TEXT)
-    sub = "AI-native · Genesis"
-    f2 = font(int(h * 0.022))
-    sw = d.textlength(sub, font=f2)
-    d.text(((w - sw) / 2, h * 0.66), sub, font=f2, fill=(96, 96, 128))
-    img.save(path, optimize=True)
 
-wallpaper(1920, 1080, "/usr/share/primers/wallpaper.png")
-mark(256).save("/usr/share/primers/logo.png")
-for px in (16, 32, 48, 64, 128, 256):
+def on_dark(img, keep_cursor=True):
+    """Chalk version of an ink-on-transparent asset (as in the official app
+    icon). Only ink pixels change colour; the green cursor is untouched, or
+    removed entirely for the 'cursor off' blink frame."""
+    out = img.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            is_green = g > r + 40 and g > b + 20
+            if is_green:
+                if not keep_cursor:
+                    px[x, y] = (0, 0, 0, 0)
+            else:
+                px[x, y] = CHALK + (a,)
+    return out
+
+
+def fit(img, width):
+    h = round(img.height * width / img.width)  # always keep the aspect ratio
+    return img.resize((width, h), Image.LANCZOS)
+
+
+def place(canvas, img, cx, top):
+    canvas.alpha_composite(img, (int(cx - img.width / 2), int(top)))
+
+
+mark = load("mark-color.png")            # 1024x1024, ink P + green cursor
+stacked = load("lockup-stacked.png")     # ink mark + wordmark, stacked
+mark_dark = on_dark(mark)
+stacked_dark = on_dark(stacked)
+
+# Wallpaper: Night Ink with the stacked lockup
+for w, h, name in ((1920, 1080, "wallpaper.png"),):
+    wp = Image.new("RGBA", (w, h), INK + (255,))
+    logo = fit(stacked_dark, int(h * 0.30))
+    place(wp, logo, w / 2, (h - logo.height) / 2 - h * 0.04)
+    wp.convert("RGB").save(f"/usr/share/primers/{name}", optimize=True)
+
+# Icons: the official app icons, unmodified
+sizes = {16: "app-icon-16.png", 32: "app-icon-32.png", 48: "app-icon-48.png",
+         64: "app-icon-64.png", 128: "app-icon-128.png", 256: "app-icon-256.png",
+         512: "app-icon-512.png"}
+for px, fname in sizes.items():
     d = f"/usr/share/icons/hicolor/{px}x{px}/apps"
     os.makedirs(d, exist_ok=True)
-    mark(px, glow=px >= 48).save(f"{d}/primers.png")
-mark(64).save("/usr/share/pixmaps/primers.png")
+    shutil.copy(os.path.join(BRAND, fname), f"{d}/primers.png")
+shutil.copy(os.path.join(BRAND, "app-icon-64.png"), "/usr/share/pixmaps/primers.png")
+shutil.copy(os.path.join(BRAND, "app-icon-256.png"), "/usr/share/primers/logo.png")
 
-# GRUB theme artwork (background + terminal box frame)
+# GRUB menu background: lockup at the top, menu below (no typed wordmark)
 gdir = "/usr/share/grub/themes/primers"
 if os.path.isdir(gdir):
-    gb = Image.new("RGB", (1280, 800), BG)
-    dg = ImageDraw.Draw(gb)
-    for x in range(0, 1280, 64):
-        dg.line([(x, 0), (x, 800)], fill=(18, 18, 30), width=1)
-    for y in range(0, 800, 64):
-        dg.line([(0, y), (1280, y)], fill=(18, 18, 30), width=1)
-    logo = mark(150)
-    gb.paste(logo, ((1280 - 150) // 2, 70), logo)
-    gb.save(f"{gdir}/background.png", optimize=True)
+    gb = Image.new("RGBA", (1280, 800), INK + (255,))
+    place(gb, fit(stacked_dark, 200), 640, 70)
+    gb.convert("RGB").save(f"{gdir}/background.png", optimize=True)
     for part in ("c", "n", "s", "e", "w", "ne", "nw", "se", "sw"):
-        colour = BG + (255,) if part == "c" else (30, 30, 58, 255)
+        colour = INK + (255,) if part == "c" else (38, 44, 53, 255)
         Image.new("RGBA", (6, 6), colour).save(f"{gdir}/terminal_box_{part}.png")
 
-# Boot splash (Plymouth): our mark replaces the distributor logo fallback
-# and a PRIMERS wordmark replaces the Ubuntu watermark.
+# Plymouth: 32 frames ≈ 1.06 s at Plymouth's 30 fps — cursor on, then off
 pdir = "/usr/share/plymouth/themes/primers"
 if os.path.isdir(pdir):
-    mark(128, glow=False).save(f"{pdir}/bgrt-fallback.png")
-    wm = Image.new("RGBA", (320, 48), (0, 0, 0, 0))
-    dw = ImageDraw.Draw(wm)
-    f = font(30, bold=True)
-    tw = dw.textlength("PRIMERS OS", font=f)
-    dw.text(((320 - tw) / 2, 4), "PRIMERS OS", font=f, fill=TEXT + (255,))
-    wm.save(f"{pdir}/watermark.png")
+    on = fit(mark_dark, 112)
+    off = fit(on_dark(mark, keep_cursor=False), 112)
+    for i in range(1, 33):
+        (on if i <= 16 else off).save(f"{pdir}/throbber-{i:04d}.png")
+    on.save(f"{pdir}/animation-0001.png")
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(f"{pdir}/bgrt-fallback.png")
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(f"{pdir}/watermark.png")
 
-# Calamares branding images
+# Installer branding
 brand = "/etc/calamares/branding/primers"
 if os.path.isdir(brand):
-    mark(128).save(f"{brand}/logo.png")
-    mark(64).save(f"{brand}/icon.png")
-    welcome = Image.new("RGBA", (640, 300), BG + (255,))
-    m = mark(200)
-    welcome.paste(m, (40, 50), m)
-    dw = ImageDraw.Draw(welcome)
-    dw.text((270, 105), "PRIMERS OS", font=font(46, bold=True), fill=TEXT)
-    dw.text((272, 170), "1.0 Genesis", font=font(24), fill=ACCENT)
-    welcome.save(f"{brand}/welcome.png")
-print("[PRIMERS] artwork generated")
+    shutil.copy(os.path.join(BRAND, "app-icon-128.png"), f"{brand}/logo.png")
+    shutil.copy(os.path.join(BRAND, "app-icon-64.png"), f"{brand}/icon.png")
+    welcome = load("lockup-horizontal-dark.png")
+    fit(welcome, 640).save(f"{brand}/welcome.png")
+    fit(mark_dark, 96).save(f"{brand}/mark-dark.png")
+print("[PRIMERS] artwork generated from the official logo pack")
 PYEOF
 
 gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true

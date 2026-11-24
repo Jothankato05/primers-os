@@ -101,7 +101,7 @@ def error(uri: str, message: str, mode: Mode, offline: bool) -> str:
     if offline:
         tips.append("You seem to be offline. Pages you saved are still available.")
     if mode.key != "ultra":
-        tips.append("On a weak signal, Ultra mode (☰ → Mode → Ultra) loads text first and needs far less data.")
+        tips.append("On a weak signal, switch to Ultra with the gold mode button (top right): it loads text first and needs far less data.")
     tips_html = "".join(f"<li>{html.escape(t)}</li>" for t in tips)
     body = f"""
 <h1>This page didn't load</h1>
@@ -110,8 +110,8 @@ def error(uri: str, message: str, mode: Mode, offline: bool) -> str:
 <ul>{tips_html}</ul>
 <div class="actions">
   <a href="{safe_uri}">Try again</a>
-  <a href="bee:saved">Saved pages</a>
-  <a href="bee:home">Home</a>
+  <a href="#" onclick="webkit.messageHandlers.litebee.postMessage('saved');return false">Saved pages</a>
+  <a href="#" onclick="webkit.messageHandlers.litebee.postMessage('home');return false">Home</a>
 </div>
 """
     return _page("Page didn't load", body)
@@ -136,6 +136,6 @@ def tls_error(uri: str, host: str) -> str:
 before sending or receiving anything. Someone could be trying to intercept this connection
 (common on public Wi-Fi), or the site is misconfigured.</p>
 <p class="muted"><code>{html.escape(uri)}</code></p>
-<div class="actions"><a href="bee:home">Go home</a></div>
+<div class="actions"><a href="#" onclick="webkit.messageHandlers.litebee.postMessage('home');return false">Go home</a></div>
 """
     return _page("Connection not secure", body)

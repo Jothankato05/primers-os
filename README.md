@@ -78,6 +78,7 @@ primers-distro/        ISO build system
   overlays/            files copied into the OS (launchers, desktop config, module registry)
   installer/calamares/ installer configuration and branding
   tools/               check-packages.py (validates every package name)
+branding/              official Primers OS logo pack (SVG + PNG) — source of all OS artwork
 docs/decisions/        architecture decision records
 .github/workflows/     CI (tests + lint) and ISO build/release
 ```

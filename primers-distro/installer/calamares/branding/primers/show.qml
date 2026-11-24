@@ -18,10 +18,10 @@ Presentation {
     Slide {
         Rectangle {
             anchors.fill: parent
-            color: "#0a0a0f"
+            color: "#12161C"
             Image {
                 id: logo1
-                source: "logo.png"
+                source: "mark-dark.png"
                 width: 96; height: 96
                 fillMode: Image.PreserveAspectFit
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -35,7 +35,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#00e5ff"; font.pixelSize: 26; font.bold: true
+                color: "#F5F2EA"; font.pixelSize: 26; font.bold: true
                 text: "Welcome to PRIMERS OS"
             }
             Text {
@@ -44,7 +44,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#c8c8e8"; font.pixelSize: 16
+                color: "#B9BEC6"; font.pixelSize: 16
                 text: "An AI-native desktop built on Ubuntu 22.04 LTS. Lightweight, fast, and ready for work, study and play."
             }
         }
@@ -53,10 +53,10 @@ Presentation {
     Slide {
         Rectangle {
             anchors.fill: parent
-            color: "#0a0a0f"
+            color: "#12161C"
             Image {
                 id: logo2
-                source: "logo.png"
+                source: "mark-dark.png"
                 width: 96; height: 96
                 fillMode: Image.PreserveAspectFit
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -70,7 +70,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#00e5ff"; font.pixelSize: 26; font.bold: true
+                color: "#F5F2EA"; font.pixelSize: 26; font.bold: true
                 text: "Meet the PRIMERS Brain"
             }
             Text {
@@ -79,7 +79,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#c8c8e8"; font.pixelSize: 16
+                color: "#B9BEC6"; font.pixelSize: 16
                 text: "Press Super+Enter any time. Ask it 'how is my system?', 'am I safe?' or 'any advice?' — it monitors, explains and learns how you work."
             }
         }
@@ -88,10 +88,10 @@ Presentation {
     Slide {
         Rectangle {
             anchors.fill: parent
-            color: "#0a0a0f"
+            color: "#12161C"
             Image {
                 id: logo3
-                source: "logo.png"
+                source: "mark-dark.png"
                 width: 96; height: 96
                 fillMode: Image.PreserveAspectFit
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -105,7 +105,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#00e5ff"; font.pixelSize: 26; font.bold: true
+                color: "#F5F2EA"; font.pixelSize: 26; font.bold: true
                 text: "Windows apps and games"
             }
             Text {
@@ -114,7 +114,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#c8c8e8"; font.pixelSize: 16
+                color: "#B9BEC6"; font.pixelSize: 16
                 text: "Double-click any .exe to run it with Wine. Lutris, GameMode, MangoHud and Vulkan drivers are already set up."
             }
         }
@@ -123,10 +123,10 @@ Presentation {
     Slide {
         Rectangle {
             anchors.fill: parent
-            color: "#0a0a0f"
+            color: "#12161C"
             Image {
                 id: logo4
-                source: "logo.png"
+                source: "mark-dark.png"
                 width: 96; height: 96
                 fillMode: Image.PreserveAspectFit
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -140,7 +140,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#00e5ff"; font.pixelSize: 26; font.bold: true
+                color: "#F5F2EA"; font.pixelSize: 26; font.bold: true
                 text: "Secure by default"
             }
             Text {
@@ -149,7 +149,7 @@ Presentation {
                 width: parent.width * 0.8
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                color: "#c8c8e8"; font.pixelSize: 16
+                color: "#B9BEC6"; font.pixelSize: 16
                 text: "Firewall on, CPU mitigations on, automatic security updates, and a defensive security engine watching processes and network connections. Add software any time with 'primers-install'."
             }
         }
