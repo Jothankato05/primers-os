@@ -64,6 +64,28 @@ jobs:
       - name: Build ISO
         run: sudo PRIMERS_WORK_DIR=/mnt/primers-work ./primers-distro/build.sh
 
+      - name: Enable KVM for the VM tests
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get install -y qemu-system-x86 ovmf python3-pil
+          ls -l /dev/kvm
+
+      - name: VM tests (the image itself, booted; a failure stops the release)
+        timeout-minutes: 60
+        run: |
+          iso=$(ls primers-distro/*.iso | head -n1)
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape
+
+      - name: Upload VM test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-test-results
+          path: vm-results/
+          retention-days: 30
+
       - name: Checksums (SHA256SUMS)
         id: files
         working-directory: primers-distro

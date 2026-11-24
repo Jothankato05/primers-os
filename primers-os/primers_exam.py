@@ -53,7 +53,8 @@ def print_status(exam: exam_mode.ExamMode) -> int:
         return 0
     print(f"  Firewall:   {'active' if st['firewall'] else 'NOT ACTIVE'}")
     print(f"  USB drives: {'blocked' if st['usb_blocked'] else 'NOT BLOCKED'}")
-    return 0 if st["firewall"] and st["usb_blocked"] else 1
+    print(f"  Consoles:   {'locked (no Ctrl+Alt+F1..F12, no SysRq)' if st['consoles_locked'] else 'NOT LOCKED'}")
+    return 0 if st["firewall"] and st["usb_blocked"] and st["consoles_locked"] else 1
 
 
 def main(argv=None) -> int:

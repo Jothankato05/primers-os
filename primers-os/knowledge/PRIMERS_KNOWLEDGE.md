@@ -331,6 +331,14 @@ Every OS challenger hits the same wall. We name it and plan for it.
 ### 7.10 Proof points to collect (feed these back into this file)
 Boot time and RAM use on real lab hardware, number of revived PCs, licence savings per lab, exam sessions run without incident, student satisfaction score, offline transfers through FlowDrop.
 
+Current build status (updated with each release candidate; tested in virtual machines unless it says otherwise):
+- Release: PRIMERS OS 1.0 Genesis release candidate 1 (v1.0.0-rc1) is a pre-release for testing. No real-hardware results yet.
+- Lab Mode: In build. Shared lab account wiped at every sign-in, sign-out and boot; tested in virtual machines.
+- Study Mode: In build. Focus timer; Lite Bee pauses distracting sites; tested in virtual machines.
+- Exam Mode: In build. Full-screen exam kiosk, per-account firewall, USB block and exam log (in rc1). Since rc1 the escape routes are also closed (text consoles, Magic SysRq, browser shortcuts and developer tools, screenshots, clipboard, clock, DNS tunnelling, sudo/su/pkexec/shell), each checked by an automated test; this arrives in the next release candidate. Not yet run on real lab hardware or with a real CBT platform.
+- Benchmark: In build. Measures boot time, RAM and disk against the design targets; no figures from real lab hardware yet.
+- Primers ID: Concept. Not built yet.
+
 ---
 
 ## 8. Partners, Clients and Pipeline

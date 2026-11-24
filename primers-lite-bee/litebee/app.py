@@ -569,6 +569,7 @@ class LiteBeeApp(Gtk.Application):
         super().__init__(application_id=None if separate else APP_ID,
                          flags=Gio.ApplicationFlags.NON_UNIQUE if separate else Gio.ApplicationFlags.FLAGS_NONE)
         self.kiosk = kiosk
+        self.selftest = 0
         self.exit_code = 0
         self.urls_to_open = urls_to_open
         self.screenshot = screenshot
@@ -628,6 +629,7 @@ class LiteBeeApp(Gtk.Application):
         self.context = WebKit2.WebContext.new_with_website_data_manager(
             WebKit2.WebsiteDataManager.new_ephemeral())
         self.context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+        self.context.connect("download-started", lambda _c, d: d.cancel())   # no downloads at all
         self.content = WebKit2.UserContentManager()
         self.filter_ready = True
 
@@ -638,6 +640,8 @@ class LiteBeeApp(Gtk.Application):
                 self.window = KioskWindow(self, self.kiosk)
                 self.window.show_all()
                 self.window.start()
+                if self.selftest:
+                    GLib.timeout_add_seconds(self.selftest, self._selftest_done)
             self.window.present()
             return
         if self.window:
@@ -846,6 +850,12 @@ class LiteBeeApp(Gtk.Application):
     #  Screenshot mode (used by tests)
     # ------------------------------------------------------------------ #
 
+    def _selftest_done(self):
+        from litebee.kiosk import selftest_report
+        print(selftest_report(self.window), flush=True)
+        self.quit()
+        return False
+
     def notify_loaded(self, view):
         if self.screenshot and not self._screenshot_done:
             self._screenshot_done = True
@@ -872,6 +882,7 @@ def main(argv=None) -> int:
     parser.add_argument("--kiosk", action="store_true",
                         help="PRIMERS OS Exam Mode: show only the running exam, full screen")
     parser.add_argument("--screenshot", metavar="PNG", help=argparse.SUPPRESS)
+    parser.add_argument("--selftest", type=int, metavar="SECONDS", help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {VERSION}")
     args = parser.parse_args(argv)
     GLib.set_prgname("lite-bee")
@@ -886,6 +897,7 @@ def main(argv=None) -> int:
             print("lite-bee: no exam is running (see primers-exam status)", file=sys.stderr)
             return 2
         app = LiteBeeApp([], screenshot=args.screenshot, kiosk=policy)
+        app.selftest = args.selftest or 0
         status = app.run([sys.argv[0]])
         return app.exit_code or status
     app = LiteBeeApp(args.urls, screenshot=args.screenshot)

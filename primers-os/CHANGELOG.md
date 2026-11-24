@@ -48,6 +48,16 @@
   other programs; "Finish exam" signs out), an nftables table limits that
   account to the exam servers, USB drives are blocked and activity is
   logged (`primers-exam log`). Fails closed if the firewall can't be set.
+- **Exam Mode escape routes closed** (ADR 0003): text consoles, Ctrl+Alt+
+  Backspace and Magic SysRq off; no shell, sudo, su or pkexec for the lab
+  account (all polkit actions denied); kiosk filters browser shortcuts and
+  blocks developer tools, view-source/file/data pages, printing,
+  downloads, drag and drop and screen capture; clipboard cleared each
+  session; a crashed kiosk ends the session; no DNS for the lab account
+  (exam servers pinned in /etc/hosts); autologin suspended during exams;
+  exam timer immune to clock changes. VM test suite runs in the ISO build.
+- Release workflow: SHA256SUMS signed with Sigstore (keyless), RC tags as
+  pre-releases, final tags only as drafts, required release notes.
 - The GNOME session stack (gdm3, gnome-shell, gnome-session) is no longer
   pulled into the image: Openbox is the only login session.
 - `benchmark` in the Brain measures boot-to-login time, RAM and disk

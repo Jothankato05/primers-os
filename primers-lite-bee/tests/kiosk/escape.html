@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><title>escape-test</title></head><body>
+<h1>Escape test</h1><pre id="log"></pre>
+<script>
+const results = {};
+function note(k, v) { results[k] = v; document.title = "escape-test " + JSON.stringify(results); }
+const tries = [
+  ["file", "file:///etc/passwd"], ["data", "data:text/html,<h1>notes</h1>"],
+  ["viewsource", "view-source:/escape.html"], ["about", "about:config"],
+  ["other_host", "http://localhost/page2.html"], ["download", "/blob.bin"],
+];
+let i = 0;
+function next() {
+  if (i < tries.length) { const [k, u] = tries[i++]; note(k, "tried"); location.href = u; setTimeout(next, 400); return; }
+  const w = window.open("/page2.html"); note("window_open", w ? "object" : "null");
+  try { window.print(); note("print", "called"); } catch (e) { note("print", "error"); }
+  if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+    navigator.mediaDevices.getDisplayMedia({video: true}).then(() => note("display_capture", "ALLOWED"),
+      e => note("display_capture", "denied:" + e.name));
+  } else { note("display_capture", "unsupported"); }
+  navigator.clipboard && navigator.clipboard.readText ? navigator.clipboard.readText().then(t => note("clipboard_read", "ALLOWED"), e => note("clipboard_read", "denied")) : note("clipboard_read", "unsupported");
+}
+setTimeout(next, 300);
+</script></body></html>

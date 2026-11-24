@@ -24,6 +24,9 @@ intel-microcode
 amd64-microcode
 bluez
 blueman
+# Lets the automated VM tests run checks inside the guest; it only starts
+# when a virtual machine provides its channel, never on real hardware
+qemu-guest-agent
 
 # ── Bootloaders (used by the installer on BIOS and UEFI) ────
 grub-common
@@ -79,6 +82,7 @@ lxtask
 numlockx
 zenity
 notification-daemon
+xsel
 papirus-icon-theme
 gnome-themes-extra
 plymouth

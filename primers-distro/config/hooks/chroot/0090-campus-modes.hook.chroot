@@ -41,7 +41,21 @@ if [ -n "$others" ]; then
   echo "E: login sessions besides Openbox would bypass Exam Mode:" $others >&2
   exit 1
 fi
-rm -f /etc/primers/exam.conf /etc/polkit-1/localauthority/90-mandatory.d/60-primers-exam.pkla
+rm -f /etc/primers/exam.conf /etc/polkit-1/localauthority/90-mandatory.d/60-primers-exam.pkla \
+      /etc/X11/xorg.conf.d/90-primers-exam.conf /etc/sysctl.d/90-primers-exam.conf
+install -d /etc/X11/xorg.conf.d
+# The lab account's shell during an exam refuses to run anything; it is a
+# registered shell so the account stays on the login screen's user list
+chmod 0755 /usr/lib/primers/exam-shell
+grep -qx /usr/lib/primers/exam-shell /etc/shells || echo /usr/lib/primers/exam-shell >> /etc/shells
+command -v xsel setxkbmap >/dev/null || { echo "E: xsel/setxkbmap missing (exam clipboard and key lock)" >&2; exit 1; }
+
+# The guest agent (for automated VM tests) must only ever start inside a VM
+if ! grep -q 'BindsTo=dev-virtio\\x2dports-org.qemu.guest_agent.0.device' \
+     /lib/systemd/system/qemu-guest-agent.service; then
+  echo "E: qemu-guest-agent is not bound to the VM's virtio channel" >&2
+  exit 1
+fi
 out=$(primers-exam status)
 grep -q "Exam Mode: off" <<<"$out" || { echo "E: primers-exam status: $out" >&2; exit 1; }
 echo "Exam Mode: available (no exam running)"

@@ -49,11 +49,12 @@ jobs:
       - name: Install GTK, WebKit and a virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0 python3-pytest xvfb
+          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 gir1.2-webkit2-4.0 python3-pytest xvfb xdotool
       - name: Unit tests
         working-directory: primers-lite-bee
         run: /usr/bin/python3 -m pytest -q tests
       - name: Browser smoke test (real WebKit, Ultra mode blocks images)
+        timeout-minutes: 5
         working-directory: primers-lite-bee
         env:
           LITEBEE_HOME: ${{ runner.temp }}/litebee
@@ -69,6 +70,7 @@ jobs:
           grep '^{' ultra.out | tail -n1 > ultra.json
           python3 -c "import json; d=json.load(open('ultra.json')); assert d['mode']=='ultra' and d['bytes'] < 5000, d; print('Ultra mode page bytes:', d['bytes'])"
       - name: Exam kiosk smoke test (only the exam server loads)
+        timeout-minutes: 5
         working-directory: primers-lite-bee
         env:
           LITEBEE_HOME: ${{ runner.temp }}/litebee-kiosk
@@ -82,6 +84,31 @@ jobs:
           python3 -c "import json; d=json.load(open('kiosk.json')); assert d['kiosk'] and d['title'] == 'Exam' and d['blocked'] >= 1 and d['uri'].startswith('http://127.0.0.1:8765/'), d; print('kiosk:', d)"
           rm "$PRIMERS_EXAM_CONF"
           if ./lite-bee --kiosk; then echo "kiosk must refuse to start without an exam"; exit 1; fi
+      - name: Exam kiosk escape routes (dev tools, view-source, file, data, windows, print, downloads, keys)
+        working-directory: primers-lite-bee
+        timeout-minutes: 5
+        env:
+          LITEBEE_HOME: ${{ runner.temp }}/litebee-escape
+          HOME: ${{ runner.temp }}/escape-home
+          PRIMERS_EXAM_CONF: ${{ runner.temp }}/exam-escape.conf
+        run: |
+          mkdir -p "$HOME" "$RUNNER_TEMP/www-escape"
+          cp tests/kiosk/escape.html "$RUNNER_TEMP/www-escape/"
+          printf '<title>page 2</title>' > "$RUNNER_TEMP/www-escape/page2.html"
+          head -c 50000 /dev/urandom > "$RUNNER_TEMP/www-escape/blob.bin"
+          (cd "$RUNNER_TEMP/www-escape" && python3 -m http.server 8766 --bind 127.0.0.1 &)
+          printf 'EXAM_URL=http://127.0.0.1:8766/escape.html\nALLOW=127.0.0.1\nPORTS=80,443,8766\n' > "$PRIMERS_EXAM_CONF"
+          Xvfb :91 -screen 0 1280x800x24 &
+          export DISPLAY=:91
+          sleep 2
+          ./lite-bee --kiosk --selftest 25 > escape.out 2>&1 &
+          kiosk=$!
+          sleep 10
+          for k in F12 ctrl+shift+i ctrl+shift+j ctrl+u ctrl+p ctrl+s ctrl+o ctrl+n ctrl+t ctrl+w ctrl+q ctrl+l F11 F7 ctrl+shift+p; do
+            xdotool key "$k"; sleep 0.4
+          done
+          wait "$kiosk"
+          python3 tests/kiosk/check_escape.py escape.out "$HOME"
 
   distro-lint:
     name: Distro lint
@@ -101,7 +128,9 @@ jobs:
             overlays/usr/lib/primers/unmetered-network overlays/usr/bin/primers-lab \
             overlays/usr/bin/primers-study overlays/usr/lib/primers/study-panel \
             overlays/usr/bin/primers-exam overlays/usr/lib/primers/exam-session \
-            overlays/etc/X11/Xsession.d/98primers-exam
+            overlays/etc/X11/Xsession.d/98primers-exam overlays/usr/lib/primers/exam-shell
+      - name: VM test harness compiles
+        run: python3 -m py_compile primers-distro/tests/vm/*.py
       - name: Validate JSON, YAML, XML and QML
         working-directory: primers-distro
         run: |

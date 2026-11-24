@@ -16,6 +16,20 @@ On each PC:
 
 PCs with 2 GB of RAM are the target minimum; 4 GB is smooth.
 
+### Lock the firmware (required for exams)
+
+The operating system can't protect a PC whose firmware lets anyone boot
+something else. On every lab PC, in the BIOS/UEFI setup:
+
+- set a **firmware (supervisor) password**, kept by the lab administrator;
+- turn **booting from USB, CD/DVD and the network off**, and put the
+  internal disk first in the boot order;
+- keep **Secure Boot on**;
+- if the case can be opened, fit a lock or a tamper seal: clearing the
+  firmware password usually needs access to the motherboard.
+
+Do this after installing PRIMERS OS (installing needs USB boot).
+
 ## 2. Turn on Lab Mode
 
 Sign in with the staff account, open a terminal and run:
@@ -55,7 +69,12 @@ sudo primers-exam start https://cbt.example.edu.ng
 ```
 
 If the exam site loads anything from another server (a CDN, a login
-server), add each with `--allow host.name`. Then try it: sign in to the lab
+server), add each with `--allow host.name`. Start the exam with nobody
+signed in to the PC's desktop (or sign out afterwards): the login screen
+then restarts with the consoles locked. While an exam runs, candidates can't
+switch to text consoles, use Magic SysRq keys, open a terminal, run sudo,
+su or pkexec, change the clock, look up any name but the exam servers', take
+screenshots, use USB drives, or get out of the exam page. Then try it: sign in to the lab
 account and check the exam loads. Candidates see only the exam, full
 screen; they press **Finish exam** when done, which signs them out and wipes
 the account. After the exam:

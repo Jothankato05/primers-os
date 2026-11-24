@@ -200,7 +200,21 @@ the only login session in the image is Openbox, so there is no other to pick).
   site loads from with `--allow`. Addresses are refreshed at boot and at
   every exam sign-in; if the firewall can't be set up, the exam session is
   refused.
-- **USB drives** can't be mounted in the lab account (polkit).
+- **USB drives** can't be mounted in the lab account; every other polkit
+  action is denied to it too (pkexec, clock, network settings).
+- **Escape routes closed** ([ADR 0003](../docs/decisions/0003-exam-escape-hardening.md)):
+  no text consoles (Ctrl+Alt+F1..F12, getty), Ctrl+Alt+Backspace or Magic
+  SysRq; no shell, sudo, su or pkexec for the lab account; no browser
+  shortcuts, developer tools, view-source:, file: or data: pages, printing,
+  downloads, drag and drop, or screen capture in the kiosk; the clipboard is
+  cleared at the start and end of each session; a kiosk that crashes or is
+  killed ends the session; the lab account gets no DNS of its own (exam
+  servers are pinned in `/etc/hosts`), so DNS can't be used as a tunnel;
+  automatic sign-in to other accounts is suspended. The BIOS can't be locked
+  from the OS: see the pilot guide.
+- **Tested in a VM on every image build**: `tests/vm/run_vm_tests.py
+  exam-escape` boots the ISO under QEMU/KVM, starts an exam, signs a
+  candidate in and tries every route above.
 - **Log:** sessions, pages visited, blocked pages and "finished" are logged
   under `primers-exam`: `sudo primers-exam log`.
 - Lab Mode still wipes the account before and after every session.
