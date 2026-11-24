@@ -32,8 +32,15 @@ images:
 slideshow:    "show.qml"
 slideshowAPI: 2
 
+# Calamares 3.2.x reads these names (current-step colours use *Select*)
 style:
-  SidebarBackground:        "#0a0a0f"
-  SidebarText:              "#c8c8e8"
-  SidebarTextCurrent:       "#0a0a0f"
-  SidebarBackgroundCurrent: "#00e5ff"
+  SidebarBackground:         "#0a0a0f"
+  SidebarText:               "#c8c8e8"
+  SidebarTextSelect:         "#0a0a0f"
+  SidebarTextSelected:       "#0a0a0f"
+  SidebarBackgroundSelected: "#00e5ff"
+  SidebarTextHighlight:      "#00e5ff"
+  sidebarBackground:         "#0a0a0f"
+  sidebarText:               "#c8c8e8"
+  sidebarTextSelect:         "#0a0a0f"
+  sidebarTextHighlight:      "#00e5ff"
