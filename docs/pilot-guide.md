@@ -46,13 +46,32 @@ Check any time:
 primers-lab status
 ```
 
-## 3. Study Mode for students
+## 3. Run an exam (Exam Mode)
+
+Exam Mode needs Lab Mode. Before the exam, on each PC, as staff:
+
+```bash
+sudo primers-exam start https://cbt.example.edu.ng
+```
+
+If the exam site loads anything from another server (a CDN, a login
+server), add each with `--allow host.name`. Then try it: sign in to the lab
+account and check the exam loads. Candidates see only the exam, full
+screen; they press **Finish exam** when done, which signs them out and wipes
+the account. After the exam:
+
+```bash
+sudo primers-exam log      # sessions, pages, blocked attempts, finishes
+sudo primers-exam stop
+```
+
+## 4. Study Mode for students
 
 Any student can type `study 25` in the PRIMERS Brain (or right-click the
 desktop › Study Mode). Primers Lite Bee then pauses social media, video,
 games and betting sites for 25 minutes and the panel counts down.
 
-## 4. Collect proof points
+## 5. Collect proof points
 
 The plan asks for boot time and RAM use on real lab hardware. On each PC:
 
@@ -70,11 +89,12 @@ contain hardware facts and timings only, no names or files.
 Also record, per lab: how many PCs were revived (couldn't run Windows 11),
 licence cost saved per seat, and a short student satisfaction survey.
 
-## 5. If something goes wrong
+## 6. If something goes wrong
 
 | Problem | What to do |
 |---|---|
 | The lab account isn't on the login screen | Restart the PC once after `primers-lab enable`. |
 | Clicking the lab account returns to the login screen | Lab Mode refused to start a session it couldn't wipe. See why: `journalctl -t primers-lab`. |
 | A student lost work | Expected in Lab Mode. Remind students to save to USB or online; the sign-in notice says so. |
+| The exam page doesn't load | `primers-exam status` (firewall active?). If the site needs other servers, stop and start again with `--allow` for each. `sudo primers-exam log` shows blocked pages. |
 | Turn Lab Mode off | `sudo primers-lab disable` (deletes the lab account). |

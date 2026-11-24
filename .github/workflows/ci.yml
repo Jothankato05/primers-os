@@ -68,6 +68,20 @@ jobs:
           xvfb-run -a ./lite-bee --mode ultra --screenshot "$RUNNER_TEMP/ultra.png" http://127.0.0.1:8765/ | tee ultra.out
           grep '^{' ultra.out | tail -n1 > ultra.json
           python3 -c "import json; d=json.load(open('ultra.json')); assert d['mode']=='ultra' and d['bytes'] < 5000, d; print('Ultra mode page bytes:', d['bytes'])"
+      - name: Exam kiosk smoke test (only the exam server loads)
+        working-directory: primers-lite-bee
+        env:
+          LITEBEE_HOME: ${{ runner.temp }}/litebee-kiosk
+          PRIMERS_EXAM_CONF: ${{ runner.temp }}/exam.conf
+        run: |
+          # The exam page tries to leave for a server that isn't on the list
+          printf '<title>Exam</title><h1>Question 1</h1><script>setTimeout(function(){location.href="http://localhost:8765/index.html"},100)</script>' > "$RUNNER_TEMP/www/exam.html"
+          printf 'EXAM_URL=http://127.0.0.1:8765/exam.html\nALLOW=127.0.0.1\nPORTS=80,443,8765\n' > "$PRIMERS_EXAM_CONF"
+          xvfb-run -a ./lite-bee --kiosk --screenshot "$RUNNER_TEMP/kiosk.png" | tee kiosk.out
+          grep '^{' kiosk.out | tail -n1 > kiosk.json
+          python3 -c "import json; d=json.load(open('kiosk.json')); assert d['kiosk'] and d['title'] == 'Exam' and d['blocked'] >= 1 and d['uri'].startswith('http://127.0.0.1:8765/'), d; print('kiosk:', d)"
+          rm "$PRIMERS_EXAM_CONF"
+          if ./lite-bee --kiosk; then echo "kiosk must refuse to start without an exam"; exit 1; fi
 
   distro-lint:
     name: Distro lint
@@ -85,7 +99,9 @@ jobs:
             overlays/usr/bin/primers-install overlays/usr/bin/primers-terminal \
             overlays/etc/skel/.config/openbox/autostart ../primers-lite-bee/lite-bee \
             overlays/usr/lib/primers/unmetered-network overlays/usr/bin/primers-lab \
-            overlays/usr/bin/primers-study overlays/usr/lib/primers/study-panel
+            overlays/usr/bin/primers-study overlays/usr/lib/primers/study-panel \
+            overlays/usr/bin/primers-exam overlays/usr/lib/primers/exam-session \
+            overlays/etc/X11/Xsession.d/98primers-exam
       - name: Validate JSON, YAML, XML and QML
         working-directory: primers-distro
         run: |
@@ -95,7 +111,7 @@ jobs:
           for f in ["installer/calamares/settings.conf", "installer/calamares/branding/primers/branding.desc",
                     *glob.glob("installer/calamares/modules/*.conf")]:
               yaml.safe_load(open(f))
-          for f in glob.glob("overlays/etc/skel/.config/openbox/*.xml"):
+          for f in glob.glob("overlays/etc/skel/.config/openbox/*.xml") + glob.glob("overlays/usr/share/primers/exam/*.xml"):
               xml.dom.minidom.parse(f)
           print("configs OK")
           EOF

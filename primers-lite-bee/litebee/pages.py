@@ -167,3 +167,14 @@ Change the list in <code>~/.config/primers/study-sites</code>.</p>
 <div class="actions"><a href="bee:home">Home</a></div>
 """
     return _page("Study Mode", body)
+
+
+def exam_error(uri: str, message: str) -> str:
+    """Shown in the exam kiosk when an exam page fails to load."""
+    body = f"""
+<h1>The exam page didn't load</h1>
+<p class="muted">{html.escape(message)}</p>
+<div class="actions"><a href="{html.escape(uri, quote=True)}">Try again</a></div>
+<p class="muted">If this keeps happening, raise your hand and tell the invigilator.</p>
+"""
+    return _page("Exam page didn't load", body)

@@ -27,7 +27,7 @@ except ValueError:  # Ubuntu 22.04 ships 4.0 alongside
     gi.require_version("WebKit2", "4.0")
 from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk, WebKit2  # noqa: E402
 
-from litebee import APP_ID, APP_NAME, VERSION, filters, network, pages, storage, study, urls  # noqa: E402
+from litebee import APP_ID, APP_NAME, VERSION, exam, filters, network, pages, storage, study, urls  # noqa: E402
 from litebee.datameter import DataMeter  # noqa: E402
 from litebee.modes import MODES, Mode, resolve  # noqa: E402
 from litebee.session import Session, Settings  # noqa: E402
@@ -46,6 +46,9 @@ notebook tab label { color: #c9d3dc; }
 .bee-data { color: #8aa0b4; padding: 0 8px; }
 .bee-progress progress { background: #e6ad39; min-height: 2px; }
 .bee-progress trough { min-height: 2px; background: transparent; }
+.bee-exam-title { color: #f4efe6; font-size: 15px; }
+.bee-exam-clock { color: #f4efe6; font-weight: bold; font-size: 15px; }
+.bee-exam-notice { color: #e6ad39; font-weight: bold; }
 """
 
 
@@ -561,9 +564,12 @@ class BrowserWindow(Gtk.ApplicationWindow):
 
 class LiteBeeApp(Gtk.Application):
     def __init__(self, urls_to_open: List[str], screenshot: Optional[str] = None,
-                 private: bool = False):
-        super().__init__(application_id=APP_ID if not screenshot else None,
-                         flags=Gio.ApplicationFlags.NON_UNIQUE if screenshot else Gio.ApplicationFlags.FLAGS_NONE)
+                 private: bool = False, kiosk: Optional[exam.ExamPolicy] = None):
+        separate = bool(screenshot or kiosk)
+        super().__init__(application_id=None if separate else APP_ID,
+                         flags=Gio.ApplicationFlags.NON_UNIQUE if separate else Gio.ApplicationFlags.FLAGS_NONE)
+        self.kiosk = kiosk
+        self.exit_code = 0
         self.urls_to_open = urls_to_open
         self.screenshot = screenshot
         self.settings = Settings.load()
@@ -571,8 +577,9 @@ class LiteBeeApp(Gtk.Application):
         self.meter = DataMeter(naira_per_gb=self.settings.naira_per_gb)
         self.study = study.StudyGate()
         self.connection = network.detect()
-        self.mode: Mode = resolve(self.settings.mode, self.connection)
-        self.window: Optional[BrowserWindow] = None
+        # An exam site must work exactly as its authors built it: full mode
+        self.mode: Mode = MODES["full"] if kiosk else resolve(self.settings.mode, self.connection)
+        self.window = None
         self._filters: Dict[str, object] = {}
         self._screenshot_done = False
         self.filter_ready = False
@@ -588,6 +595,9 @@ class LiteBeeApp(Gtk.Application):
                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
 
+        if self.kiosk:
+            self._startup_kiosk()
+            return
         data_mgr = WebKit2.WebsiteDataManager(base_data_directory=storage.data_dir(),
                                               base_cache_directory=storage.cache_dir())
         if hasattr(data_mgr, "set_itp_enabled"):
@@ -612,7 +622,24 @@ class LiteBeeApp(Gtk.Application):
         GLib.timeout_add_seconds(4, lambda: (self.filter_ready or self._filter_installed(), False)[1])
         GLib.timeout_add_seconds(30, self.check_connection)
 
+    def _startup_kiosk(self):
+        # Nothing of the exam session is written to disk, and no content
+        # blocking that could break the exam site.
+        self.context = WebKit2.WebContext.new_with_website_data_manager(
+            WebKit2.WebsiteDataManager.new_ephemeral())
+        self.context.set_cache_model(WebKit2.CacheModel.DOCUMENT_VIEWER)
+        self.content = WebKit2.UserContentManager()
+        self.filter_ready = True
+
     def do_activate(self):
+        if self.kiosk:
+            if not self.window:
+                from litebee.kiosk import KioskWindow
+                self.window = KioskWindow(self, self.kiosk)
+                self.window.show_all()
+                self.window.start()
+            self.window.present()
+            return
         if self.window:
             for u in self.urls_to_open:
                 self.window.new_tab(urls.to_url(u, self.settings.search_engine))
@@ -832,7 +859,8 @@ class LiteBeeApp(Gtk.Application):
         print(json.dumps({"screenshot": self.screenshot, "mode": self.mode.key,
                           "uri": self.window.current.view.get_uri(),
                           "title": self.window.current.view.get_title(),
-                          "bytes": self.window.current.page_bytes}))
+                          "bytes": self.window.current.page_bytes,
+                          "kiosk": bool(self.kiosk), "blocked": getattr(self.window, "blocked", 0)}))
         self.quit()
         return False
 
@@ -841,6 +869,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="lite-bee", description=f"{APP_NAME} — fast, data-saving browser")
     parser.add_argument("urls", nargs="*", help="addresses or searches to open")
     parser.add_argument("--mode", choices=["auto", "full", "lite", "ultra"], help="set the data mode and remember it")
+    parser.add_argument("--kiosk", action="store_true",
+                        help="PRIMERS OS Exam Mode: show only the running exam, full screen")
     parser.add_argument("--screenshot", metavar="PNG", help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {VERSION}")
     args = parser.parse_args(argv)
@@ -850,5 +880,13 @@ def main(argv=None) -> int:
         s = Settings.load()
         s.mode = args.mode
         s.save()
+    if args.kiosk:
+        policy = exam.load()
+        if policy is None:
+            print("lite-bee: no exam is running (see primers-exam status)", file=sys.stderr)
+            return 2
+        app = LiteBeeApp([], screenshot=args.screenshot, kiosk=policy)
+        status = app.run([sys.argv[0]])
+        return app.exit_code or status
     app = LiteBeeApp(args.urls, screenshot=args.screenshot)
     return app.run([sys.argv[0]])

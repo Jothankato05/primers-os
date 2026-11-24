@@ -9,3 +9,16 @@
 # Duplicate Wine: Lutris only *recommends* it; the image ships stable 'wine'
 wine-development
 libwine-development
+
+# GNOME's session stack, pulled in as recommendations and first alternatives
+# (network-manager-gnome: "gnome-shell | polkit agent", blueman:
+# "notification-daemon"). PRIMERS OS is an Openbox desktop: these add
+# hundreds of MB, and their login-screen sessions would let a candidate
+# pick a desktop instead of the Exam Mode kiosk. Real alternatives are in
+# base.list (lxpolkit, notification-daemon).
+gdm3
+ubuntu-session
+gnome-shell
+gnome-session-bin
+gnome-control-center
+gnome-settings-daemon

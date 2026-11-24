@@ -29,7 +29,7 @@ from utils.logger import PrimersLogger
 VOICE_SAFE_ACTIONS = {
     "list_processes", "system_status", "security_status", "list_threats",
     "list_alerts", "list_connections", "find_process", "math", "help",
-    "version", "advise", "kernel", "ask", "datasaver", "lab", "benchmark",
+    "version", "advise", "kernel", "ask", "datasaver", "lab", "benchmark", "exam",
 }
 
 
@@ -557,6 +557,25 @@ class PrimersShell:
                 print(C.err("  ✗ Lab Mode is not fully set up: run sudo primers-lab enable again."))
             elif not st.get("sign_in_ready"):
                 print(C.warn("  Restart the computer to finish: the lab account can sign in after that."))
+        print(f"\n{divider()}\n")
+
+    def _cmd_exam(self, cmd: ParsedCommand):
+        from core import exam_mode
+        st = exam_mode.ExamMode().status()
+        print(f"\n{divider()}")
+        print(f"  {C.hi('EXAM MODE')}")
+        print(divider())
+        if st["active"] is None:
+            print(C.err(f"  ✗ Exam Mode settings are damaged: {st['error']}"))
+        elif not st["active"]:
+            print("\n  No exam is running on this computer.")
+            print(C.dim("  Invigilators: sudo primers-exam start https://your-exam-site  (needs Lab Mode)"))
+        else:
+            print(f"\n  {C.warn('An exam is running.')} The shared lab account opens only:")
+            print(f"    {C.info(st['url'])}")
+            print(f"  Servers:  {', '.join(st['allow'])}   {C.dim('since ' + st['started'])}")
+            checks = [("firewall active", st["firewall"]), ("USB drives blocked", st["usb_blocked"])]
+            print("  " + "   ".join((C.ok("✓ ") if ok else C.err("✗ ")) + name for name, ok in checks))
         print(f"\n{divider()}\n")
 
     def _cmd_benchmark(self, cmd: ParsedCommand):

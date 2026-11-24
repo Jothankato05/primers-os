@@ -1,0 +1,32 @@
+#!/bin/sh
+# PRIMERS OS Exam Mode session for the shared lab account: a window manager
+# with nothing to click or press, and Primers Lite Bee showing only the exam.
+# Ends when the candidate presses "Finish exam" or the exam is stopped.
+conf=/etc/primers/exam.conf
+me=$(id -un)
+xset s off -dpms 2>/dev/null           # no screen blanking during the exam
+openbox --config-file /usr/share/primers/exam/openbox.xml &
+wm=$!
+logger -t primers-exam "exam session started ($me)"
+failures=0
+while [ -r "$conf" ]; do
+  started=$(date +%s)
+  lite-bee --kiosk
+  status=$?
+  case $status in
+    3) logger -t primers-exam "exam finished by the candidate ($me)"; break ;;
+    4) break ;;
+  esac
+  [ -r "$conf" ] || break
+  if [ $(( $(date +%s) - started )) -lt 30 ]; then failures=$((failures + 1)); else failures=0; fi
+  if [ "$failures" -ge 5 ]; then
+    logger -t primers-exam "exam browser keeps failing (status $status); ending the session"
+    zenity --error --no-wrap --title="Exam" \
+      --text="The exam could not be opened on this computer.\n\nRaise your hand and tell the invigilator." 2>/dev/null
+    break
+  fi
+  logger -t primers-exam "exam browser closed unexpectedly (status $status); reopening"
+  sleep 2
+done
+kill "$wm" 2>/dev/null
+logger -t primers-exam "exam session ended ($me)"

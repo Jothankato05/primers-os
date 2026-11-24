@@ -42,6 +42,14 @@
   starts a focus timer; Primers Lite Bee pauses social media, video, games
   and betting sites until it ends (before any data is spent on typed or
   clicked links), the panel counts down and a notice marks the break.
+- **Exam Mode** (`sudo primers-exam start URL [--allow HOST]`): on top of
+  Lab Mode, the shared account opens only the exam site in a full-screen
+  Lite Bee kiosk (no address bar, downloads, files, printing, dev tools or
+  other programs; "Finish exam" signs out), an nftables table limits that
+  account to the exam servers, USB drives are blocked and activity is
+  logged (`primers-exam log`). Fails closed if the firewall can't be set.
+- The GNOME session stack (gdm3, gnome-shell, gnome-session) is no longer
+  pulled into the image: Openbox is the only login session.
 - `benchmark` in the Brain measures boot-to-login time, RAM and disk
   against the PRIMERS design targets (2 GB RAM, < 600 MB idle, < 15 s boot
   on SSD / 30 s on HDD, < 8 GB install) and saves a JSON report with

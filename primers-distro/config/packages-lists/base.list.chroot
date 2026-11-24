@@ -13,6 +13,7 @@ policykit-1
 apparmor
 unattended-upgrades
 ufw
+nftables
 zram-tools
 laptop-detect
 rsync
@@ -77,6 +78,7 @@ galculator
 lxtask
 numlockx
 zenity
+notification-daemon
 papirus-icon-theme
 gnome-themes-extra
 plymouth

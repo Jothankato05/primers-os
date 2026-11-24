@@ -1,0 +1,191 @@
+"""
+Lite Bee kiosk window for PRIMERS OS Exam Mode (``lite-bee --kiosk``).
+
+Full screen, no address bar, tabs, menus, downloads, file picker, printing
+or developer tools. Only the exam servers listed in /etc/primers/exam.conf
+can be shown; anything else is refused and logged. "Finish exam" ends the
+program with status FINISHED, which ends the exam session; when the
+invigilator stops the exam the window closes by itself (EXAM_OVER).
+"""
+
+import syslog
+import time
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("WebKit2", "4.0")
+from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
+
+from litebee import exam, pages  # noqa: E402
+
+FINISHED = 3     # the candidate pressed "Finish exam"
+EXAM_OVER = 4    # the exam was stopped (exam.conf removed)
+LOG_TAG = "primers-exam"
+
+
+def log(message: str) -> None:
+    syslog.openlog(LOG_TAG, syslog.LOG_PID, syslog.LOG_USER)
+    syslog.syslog(syslog.LOG_NOTICE, message)
+
+
+class _Current:
+    """What the screenshot/test helpers read from a window."""
+
+    def __init__(self, view: WebKit2.WebView):
+        self.view = view
+        self.page_bytes = 0
+        self.error_uri = None
+
+
+class KioskWindow(Gtk.ApplicationWindow):
+    def __init__(self, app, policy: exam.ExamPolicy):
+        super().__init__(application=app, title="PRIMERS OS Exam")
+        self.app, self.policy = app, policy
+        self.blocked = 0
+        self.finishing = False
+        self._last_logged = None
+        self._ticks = 0
+        self.set_decorated(False)
+
+        bar = Gtk.Box(spacing=14)
+        bar_bg = Gtk.EventBox()
+        bar_bg.get_style_context().add_class("bee-header")
+        bar_bg.add(bar)
+        title = Gtk.Label()
+        title.set_markup("<b>PRIMERS OS · Exam</b>")
+        title.get_style_context().add_class("bee-exam-title")
+        host = Gtk.Label(label=policy.main_host)
+        host.get_style_context().add_class("bee-data")
+        self.notice = Gtk.Label()
+        self.notice.get_style_context().add_class("bee-exam-notice")
+        self.clock = Gtk.Label()
+        self.clock.get_style_context().add_class("bee-exam-clock")
+        finish = Gtk.Button(label="Finish exam")
+        finish.get_style_context().add_class("bee-mode")
+        finish.connect("clicked", self.on_finish)
+        bar.pack_start(title, False, False, 6)
+        bar.pack_start(host, False, False, 0)
+        bar.pack_start(self.notice, True, True, 0)
+        bar.pack_end(finish, False, False, 4)
+        bar.pack_end(self.clock, False, False, 0)
+
+        self.view = app.make_view()
+        self.current = _Current(self.view)
+        self.view.connect("decide-policy", self.on_decide_policy)
+        self.view.connect("create", self.on_create)
+        self.view.connect("context-menu", lambda *_: True)        # no "Inspect", "Save as"...
+        self.view.connect("run-file-chooser", lambda _v, req: (req.cancel(), True)[1])  # no files
+        self.view.connect("print", lambda *_: True)               # no printing exam questions
+        self.view.connect("load-changed", self.on_load_changed)
+        self.view.connect("load-failed", self.on_load_failed)
+        self.view.connect("load-failed-with-tls-errors", self.on_tls_error)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.pack_start(bar_bg, False, False, 0)
+        root.pack_start(self.view, True, True, 0)
+        self.add(root)
+        self.connect("delete-event", lambda *_: not self.finishing)   # only "Finish exam" closes it
+        self._tick()
+        GLib.timeout_add_seconds(1, self._tick)
+        self.fullscreen()
+
+    def start(self):
+        log(f"exam opened: {self.policy.url}")
+        self.view.load_uri(self.policy.url)
+
+    # ------------------------------------------------------------------ #
+
+    def _tick(self):
+        self.clock.set_text(time.strftime("%H:%M"))
+        self._ticks += 1
+        if self._ticks % 5 == 0 and not self.finishing and exam.load() is None:
+            log("exam stopped by the invigilator; closing the exam")
+            self.finish(EXAM_OVER)
+            return False
+        return True
+
+    def _say(self, text: str):
+        self.notice.set_text(text)
+        GLib.timeout_add_seconds(6, lambda: (self.notice.get_text() == text and self.notice.set_text(""), False)[1])
+
+    def _blocked(self, uri: str):
+        self.blocked += 1
+        log(f"blocked {uri[:300]}")
+        self._say("That page isn't part of the exam.")
+
+    def _load_later(self, uri: str):
+        GLib.idle_add(lambda: (self.view.load_uri(uri), False)[1])
+
+    def on_decide_policy(self, view, decision, decision_type):
+        if decision_type in (WebKit2.PolicyDecisionType.NAVIGATION_ACTION,
+                             WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION):
+            uri = decision.get_navigation_action().get_request().get_uri() or ""
+            if not self.policy.allows(uri):
+                decision.ignore()
+                self._blocked(uri)
+                return True
+            if decision_type == WebKit2.PolicyDecisionType.NEW_WINDOW_ACTION:
+                decision.ignore()          # one window only: open it here instead
+                self._load_later(uri)
+                return True
+        elif decision_type == WebKit2.PolicyDecisionType.RESPONSE:
+            uri = decision.get_request().get_uri() or ""
+            main = getattr(decision, "is_main_frame_main_resource", lambda: True)()
+            if not self.policy.allows(uri):
+                decision.ignore()
+                if main:
+                    self._blocked(uri)
+                return True
+            if main and not decision.is_mime_type_supported():
+                decision.ignore()
+                self._say("Files can't be downloaded during the exam.")
+                return True
+        return False
+
+    def on_create(self, view, action):
+        uri = action.get_request().get_uri() or ""
+        if self.policy.allows(uri):
+            self._load_later(uri)
+        else:
+            self._blocked(uri)
+        return None
+
+    def on_load_changed(self, view, event):
+        if event == WebKit2.LoadEvent.COMMITTED:
+            uri = view.get_uri() or ""
+            if uri and uri != self._last_logged and self.policy.allows(uri):
+                self._last_logged = uri
+                log(f"visited {uri[:300]}")
+        elif event == WebKit2.LoadEvent.FINISHED:
+            self.app.notify_loaded(view)
+
+    def on_load_failed(self, view, event, uri, error):
+        if error.matches(WebKit2.NetworkError.quark(), WebKit2.NetworkError.CANCELLED) or \
+                error.matches(WebKit2.PolicyError.quark(), WebKit2.PolicyError.FRAME_LOAD_INTERRUPTED_BY_POLICY_CHANGE):
+            return False
+        log(f"could not load {uri[:300]}: {error.message}")
+        view.load_alternate_html(pages.exam_error(uri, error.message), uri, None)
+        return True
+
+    def on_tls_error(self, view, uri, cert, errors):
+        log(f"certificate not trusted: {uri[:300]}")
+        view.load_alternate_html(pages.exam_error(
+            uri, "The exam server's security certificate could not be verified."), uri, None)
+        return True
+
+    def on_finish(self, *_):
+        dlg = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.YES_NO, text="Finish the exam and sign out?")
+        dlg.format_secondary_text("Make sure you have submitted your answers on the exam site first. "
+                                  "Everything on this computer is cleared when you sign out.")
+        answer = dlg.run()
+        dlg.destroy()
+        if answer == Gtk.ResponseType.YES:
+            log("candidate finished the exam")
+            self.finish(FINISHED)
+
+    def finish(self, code: int):
+        self.finishing = True
+        self.app.exit_code = code
+        self.app.quit()

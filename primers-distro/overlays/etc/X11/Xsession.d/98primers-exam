@@ -1,0 +1,11 @@
+# PRIMERS OS Exam Mode (sourced by the X session start-up of every user).
+# While an exam runs, the shared lab account gets the exam kiosk instead of
+# the desktop, whichever session was picked at the login screen. Lab Mode
+# rebuilds that account's home from a root-owned template before every
+# session, so nothing the candidate controls runs before this point.
+if [ -r /etc/primers/exam.conf ] && [ -r /etc/primers/lab.conf ] && [ -x /usr/lib/primers/exam-session ]; then
+  if [ "$(id -un)" = "$(sed -n 's/^LAB_USER=//p' /etc/primers/lab.conf)" ]; then
+    # shellcheck disable=SC2034  # read by 99x11-common_start, which runs it
+    STARTUP=/usr/lib/primers/exam-session
+  fi
+fi

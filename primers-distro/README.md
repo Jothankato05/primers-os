@@ -92,7 +92,7 @@ config/
     0060-performance-kernel     /etc/default/grub, CPU governor service
     0070-configure-installer    "Install PRIMERS OS" launcher
     0080-configure-browser      Primers Lite Bee icons, default browser, checks
-    0090-campus-modes           Lab Mode prerequisites (off in the image), Study Mode
+    0090-campus-modes           Lab, Study and Exam Mode checks (all off in the image)
 overlays/                       copied verbatim into the OS root
   usr/bin/primers               launches the brain
   usr/bin/primers-terminal      brain in a terminal window (falls back to a shell)
@@ -100,6 +100,7 @@ overlays/                       copied verbatim into the OS root
   usr/bin/primers-compat        Windows program launcher (Wine)
   usr/bin/primers-lab           Lab Mode for shared computers
   usr/bin/primers-study         Study Mode focus timer
+  usr/bin/primers-exam          Exam Mode (kiosk + firewall for computer-based tests)
   usr/lib/primers/modules/      module registry (JSON)
   etc/skel/                     defaults for every new user (Openbox, tint2, PCManFM…)
 installer/calamares/            installer: settings.conf, modules/*.conf, branding/
@@ -175,6 +176,39 @@ Students see a notice at sign-in, and `lab` in the PRIMERS Brain explains it.
 primers-lab status          # on or off, last reset
 sudo primers-lab reset      # wipe the lab account now (ends its session)
 sudo primers-lab disable    # turn it off and delete the lab account
+```
+
+### Exam Mode (computer-based tests)
+
+Runs on top of Lab Mode. The invigilator starts an exam on each PC:
+
+```bash
+sudo primers-exam start https://cbt.example.edu.ng --allow cdn.example.edu.ng
+```
+
+While it runs, signing in to the shared lab account opens **only the exam
+site**, full screen in Primers Lite Bee: no address bar, tabs, menus,
+downloads, file picker, printing, developer tools, key shortcuts or other
+programs, and a **Finish exam** button that signs the candidate out
+(`/etc/X11/Xsession.d/98primers-exam` replaces whatever session was picked;
+the only login session in the image is Openbox, so there is no other to pick).
+
+- **Network:** an nftables table (`inet primers_exam`) lets the lab account
+  reach only the exam servers' web ports; every other connection from that
+  account is refused, whatever program makes it. Other accounts are not
+  affected, and ufw reloads don't touch it. Add any other server the exam
+  site loads from with `--allow`. Addresses are refreshed at boot and at
+  every exam sign-in; if the firewall can't be set up, the exam session is
+  refused.
+- **USB drives** can't be mounted in the lab account (polkit).
+- **Log:** sessions, pages visited, blocked pages and "finished" are logged
+  under `primers-exam`: `sudo primers-exam log`.
+- Lab Mode still wipes the account before and after every session.
+
+```bash
+primers-exam status        # running? firewall and USB block in place?
+sudo primers-exam log      # what happened during this exam
+sudo primers-exam stop     # end the exam (open exam sessions close)
 ```
 
 ### Study Mode (focus timer)

@@ -46,6 +46,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
     "alerts":                  ("list_alerts",     "Show system alerts"),
     "datasaver":               ("datasaver",       "Data Saver: metered network & paused downloads"),
     "lab":                     ("lab",             "Lab Mode: shared account wiped at sign-out"),
+    "exam":                    ("exam",            "Exam Mode: is a computer-based test running here?"),
     "benchmark":               ("benchmark",       "Measure boot time, RAM and disk against PRIMERS targets (--json)"),
     "study":                   ("study",           "Study Mode: focus timer, pauses distracting sites (study 25 | stop)"),
     "focus":                   ("study",           "Study Mode: focus timer, pauses distracting sites (study 25 | stop)"),
@@ -89,7 +90,7 @@ COMMAND_MAP: Dict[str, Tuple[str, str]] = {
 }
 
 HELP_GROUPS = {
-    "System":       ["status", "alerts", "datasaver", "lab", "benchmark", "kernel", "version"],
+    "System":       ["status", "alerts", "datasaver", "lab", "exam", "benchmark", "kernel", "version"],
     "Process":      ["ps", "kill", "launch", "find", "suspend", "resume", "priority"],
     "Security":     ["security", "threats", "connections", "cyber"],
     "Intelligence": ["ask", "advise", "learn", "task"],
@@ -119,6 +120,7 @@ NL_PATTERNS: List[Tuple[str, str]] = [
     (r"^(?:run\s+(?:a\s+)?)?benchmark(?:\s+(?:this|my)\s+(?:pc|computer|machine|laptop))?$|"
      r"^how\s+fast\s+(?:is\s+)?(?:this|my)\s+(?:pc|computer|machine|laptop)(?:\s+boot(?:ing)?)?\??$|"
      r"^how\s+(?:long|fast)\s+does\s+(?:this|my)\s+(?:pc|computer|machine|laptop)\s+(?:take\s+to\s+)?boot\??$", "benchmark"),
+    (r"^(?:is\s+)?exam\s+mode(?:\s+(?:on|off|running|status))?\??$|^is\s+(?:an\s+|the\s+)?exam\s+running\??$", "exam"),
     (r"^find\s+(?:process\s+)?(?P<arg>\S+)$",                                                         "find_process"),
     (r"^(?:calculate|compute|solve)\s+(?P<arg>.+)$",                                                  "math"),
     (r"^what(?:'s|\s+is)\s+(?P<arg>[\d\s+\-*/^%().,]+?)\s*\??$",                                     "math"),

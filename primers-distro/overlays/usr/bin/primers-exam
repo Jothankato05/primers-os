@@ -1,0 +1,4 @@
+#!/bin/sh
+# PRIMERS OS Exam Mode: lock the shared lab account to an exam site.
+#   sudo primers-exam start URL [--allow HOST]... | stop | log      primers-exam status
+exec python3 -I /usr/share/primers/brain/primers_exam.py "$@"

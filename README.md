@@ -59,6 +59,7 @@ press Enter at the prompt.
 | **Gaming** | Lutris, GameMode, MangoHud, Mesa Vulkan (64/32-bit); `primers-install gaming` adds Steam |
 | **Apps** | Primers Lite Bee, Firefox (Mozilla's official .deb), VLC, OBS Studio, text editor, image viewer, archive manager |
 | **Modules** | `primers-install devtools \| creative \| gaming \| office \| ai-ml \| cyber \| voice` |
+| **Exam Mode** | `sudo primers-exam start https://cbt.example.edu.ng`: the shared lab account opens only the exam, full screen, can reach only the exam server, can't use USB drives, and everything is logged |
 | **Study Mode** | `study 25` starts a focus timer: Lite Bee pauses social media, video, games and betting sites, the panel counts down, a notice says when to take a break |
 | **Benchmark** | `benchmark` in the Brain measures boot time, idle RAM and disk against the PRIMERS targets and saves a shareable report (hardware facts only) |
 | **Lab Mode** | For shared lab PCs: `sudo primers-lab enable` adds a passwordless `lab` account that is wiped at every sign-out and boot, so each student starts clean |
@@ -110,5 +111,5 @@ read-only and listens on `localhost` only.
 
 ## Roadmap
 
-- **1.0 Genesis** (this release) — installable OS, Brain with learning, automation, dashboard, plugins, Lab Mode, Study Mode
-- **Next** — Exam Mode, local speech recognition, graphical settings for the Brain, OTA module catalogue
+- **1.0 Genesis** (this release) — installable OS, Brain with learning, automation, dashboard, plugins, Lab, Study and Exam modes
+- **Next** — local speech recognition, graphical settings for the Brain, OTA module catalogue

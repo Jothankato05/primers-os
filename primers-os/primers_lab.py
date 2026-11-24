@@ -76,6 +76,21 @@ def _print_status(lab: lab_mode.LabMode) -> int:
     return 0
 
 
+def exam_hook(lab: lab_mode.LabMode, event: str, user) -> int:
+    """During an exam, refresh the exam firewall at boot and before every
+    lab session. No firewall, no exam session (fail closed)."""
+    if event not in ("boot", "session-setup") or (event == "session-setup" and not lab.is_lab_session(user)):
+        return 0
+    from core import exam_mode
+    exam = exam_mode.ExamMode(lab)
+    try:
+        exam.refresh()
+        return 0
+    except (exam_mode.ExamError, OSError) as e:
+        exam.log(f"{event}: exam firewall not in place: {e}")
+        return 1
+
+
 def main(argv=None) -> int:
     args = _parser().parse_args(argv)
     lab = lab_mode.LabMode()
@@ -97,7 +112,10 @@ def main(argv=None) -> int:
     if args.command == "hook":
         user = os.environ.get("USER") or None
         try:
-            return lab.hook(args.event, user)
+            rc = lab.hook(args.event, user)
+            if rc == 0:
+                rc = exam_hook(lab, args.event, user)
+            return rc
         except Exception as e:  # a crash must never let a dirty lab session start
             lab.log(f"hook {args.event} crashed: {e!r}")
             return 1 if (args.event == "boot" or lab.is_lab_session(user)) else 0
