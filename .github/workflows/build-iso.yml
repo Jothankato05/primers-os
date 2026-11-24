@@ -30,8 +30,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools \
-            grub-pc-bin grub-efi-amd64-bin grub-common gnupg curl
+          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools gnupg curl
 
       - name: Check package names
         run: python3 primers-distro/tools/check-packages.py
@@ -93,7 +92,7 @@ jobs:
 
             **Install:** write the ISO to a USB stick (balenaEtcher, Rufus in DD mode, or
             `sudo dd if=<iso> of=/dev/sdX bs=4M status=progress`), boot from it and
-            double-click **Install PRIMERS OS**. Secure Boot must be disabled to boot the
-            live USB.
+            double-click **Install PRIMERS OS**. Works with Secure Boot on. After the
+            install, remove the USB stick and press Enter when asked.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

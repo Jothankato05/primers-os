@@ -123,16 +123,13 @@ clear_from() {
 check_host() {
   [ "$(id -u)" -eq 0 ] || die "Run as root: sudo $0 $*"
   local missing=() dep
-  for dep in debootstrap mksquashfs xorriso grub-mkrescue mformat chroot gpg curl; do
+  for dep in debootstrap mksquashfs xorriso mformat mcopy mmd chroot gpg curl; do
     command -v "$dep" >/dev/null 2>&1 || missing+=("$dep")
   done
-  [ -d /usr/lib/grub/i386-pc ]     || missing+=("grub-pc-bin")
-  [ -d /usr/lib/grub/x86_64-efi ]  || missing+=("grub-efi-amd64-bin")
   if [ ${#missing[@]} -gt 0 ]; then
     die "Missing build tools: ${missing[*]}
   Install with:
-    sudo apt-get install -y debootstrap squashfs-tools xorriso mtools \\
-      grub-pc-bin grub-efi-amd64-bin grub-common gnupg curl"
+    sudo apt-get install -y debootstrap squashfs-tools xorriso mtools gnupg curl"
   fi
   if [ -n "${BUILD_CA_FILE:-}" ] && [ ! -f "$BUILD_CA_FILE" ]; then
     die "BUILD_CA_FILE=$BUILD_CA_FILE does not exist"
@@ -425,11 +422,55 @@ fi
 EOF
 }
 
+make_bios_boot() {
+  # BIOS: GRUB from the image itself (same version as installed systems)
+  local lib="$CHROOT/usr/lib/grub/i386-pc"
+  [ -f "$lib/cdboot.img" ] || die "grub-pc-bin missing from the image"
+  mkdir -p "$IMAGE/boot/grub/i386-pc"
+  cp "$lib"/*.mod "$lib"/*.lst "$IMAGE/boot/grub/i386-pc/"
+  chroot "$CHROOT" grub-mkimage -O i386-pc -p /boot/grub -o /tmp/primers-core.img \
+    biosdisk iso9660 part_msdos part_gpt normal configfile search search_fs_file
+  cat "$lib/cdboot.img" "$CHROOT/tmp/primers-core.img" > "$IMAGE/boot/grub/bios.img"
+  rm -f "$CHROOT/tmp/primers-core.img"
+}
+
+make_efi_boot() {
+  # UEFI with Secure Boot: Microsoft-signed shim -> Canonical-signed GRUB
+  # -> Canonical-signed kernel, exactly as on Ubuntu's own media.
+  local shim="" cand
+  for cand in shimx64.efi.signed.latest shimx64.efi.signed.previous shimx64.efi.dualsigned; do
+    if [ -f "$CHROOT/usr/lib/shim/$cand" ]; then shim="$CHROOT/usr/lib/shim/$cand"; break; fi
+  done
+  local grub="$CHROOT/usr/lib/grub/x86_64-efi-signed/gcdx64.efi.signed"
+  local mok="$CHROOT/usr/lib/shim/mmx64.efi"
+  [ -n "$shim" ] && [ -f "$grub" ] && [ -f "$mok" ] || die "shim-signed / grub-efi-amd64-signed missing from the image"
+
+  mkdir -p "$IMAGE/EFI/BOOT"
+  cp "$shim" "$IMAGE/EFI/BOOT/BOOTX64.EFI"
+  cp "$grub" "$IMAGE/EFI/BOOT/grubx64.efi"
+  cp "$mok"  "$IMAGE/EFI/BOOT/mmx64.efi"
+
+  # FAT image: El Torito EFI boot image for DVDs, ESP partition for USB sticks
+  local img="$IMAGE/boot/grub/efiboot.img"
+  rm -f "$img"
+  dd if=/dev/zero of="$img" bs=1M count=8 status=none
+  mformat -i "$img" -h 2 -s 32 -t 256 -v PRIMERS_EFI ::
+  mmd -i "$img" ::/EFI ::/EFI/BOOT
+  mcopy -i "$img" "$IMAGE/EFI/BOOT/BOOTX64.EFI" "$IMAGE/EFI/BOOT/grubx64.efi" \
+        "$IMAGE/EFI/BOOT/mmx64.efi" ::/EFI/BOOT/
+}
+
 stage_image() {
   [ -x "$CHROOT/bin/bash" ] || die "No chroot found — run the earlier stages first"
   umount_chroot
 
   log "Preparing ISO tree"
+  # REUSE_SQUASHFS=1 keeps an existing root filesystem image (boot-only changes)
+  local kept=""
+  if [ "${REUSE_SQUASHFS:-0}" = "1" ] && [ -f "$IMAGE/casper/filesystem.squashfs" ]; then
+    kept="$WORK/filesystem.squashfs.kept"
+    mv "$IMAGE/casper/filesystem.squashfs" "$kept"
+  fi
   rm -rf "$IMAGE"
   mkdir -p "$IMAGE"/{casper,.disk,boot/grub/themes/primers}
 
@@ -444,13 +485,17 @@ stage_image() {
   chroot "$CHROOT" dpkg-query -W --showformat='${Package} ${Version}\n' > "$IMAGE/casper/filesystem.manifest"
   printf '%s\n' casper calamares > "$IMAGE/casper/filesystem.manifest-remove"
 
-  log "Compressing root filesystem (squashfs, $SQUASHFS_COMP) — this takes a while"
-  rm -f "$IMAGE/casper/filesystem.squashfs"
-  local comp_opts=(-comp "$SQUASHFS_COMP")
-  [ "$SQUASHFS_COMP" = "xz" ] && comp_opts+=(-Xbcj x86 -b 1M)
-  mksquashfs "$CHROOT" "$IMAGE/casper/filesystem.squashfs" \
-    "${comp_opts[@]}" -noappend -wildcards \
-    -e 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*'
+  if [ -n "$kept" ]; then
+    log "Reusing existing root filesystem image (REUSE_SQUASHFS=1)"
+    mv "$kept" "$IMAGE/casper/filesystem.squashfs"
+  else
+    log "Compressing root filesystem (squashfs, $SQUASHFS_COMP) — this takes a while"
+    local comp_opts=(-comp "$SQUASHFS_COMP")
+    [ "$SQUASHFS_COMP" = "xz" ] && comp_opts+=(-Xbcj x86 -b 1M)
+    mksquashfs "$CHROOT" "$IMAGE/casper/filesystem.squashfs" \
+      "${comp_opts[@]}" -noappend -wildcards \
+      -e 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*'
+  fi
   du -sx --block-size=1 "$CHROOT" | cut -f1 > "$IMAGE/casper/filesystem.size"
 
   echo "$PRIMERS_NAME $PRIMERS_VERSION \"$PRIMERS_CODENAME\" - Release $ARCH ($(date -u +%Y%m%d))" > "$IMAGE/.disk/info"
@@ -467,13 +512,23 @@ stage_image() {
   (cd "$IMAGE" && find . -type f ! -name md5sum.txt ! -path './boot/grub/*' -print0 \
      | xargs -0 md5sum > md5sum.txt)
 
-  log "Creating hybrid ISO (BIOS + UEFI): $OUTPUT"
+  log "Preparing boot loaders (BIOS GRUB, UEFI shim + signed GRUB)"
+  make_bios_boot
+  make_efi_boot
+
+  log "Creating hybrid ISO (BIOS + UEFI + Secure Boot, DVD or USB): $OUTPUT"
   rm -f "$OUTPUT"
-  grub-mkrescue -o "$OUTPUT" "$IMAGE" -- \
+  xorriso -as mkisofs \
+    -iso-level 3 -full-iso9660-filenames -joliet -joliet-long -rational-rock \
     -volid "$ISO_VOLUME" \
-    -joliet on \
-    -publisher "Primers Organisation" \
-    -application_id "$PRIMERS_NAME $PRIMERS_VERSION $PRIMERS_CODENAME"
+    -publisher "Primers Group" \
+    -appid "$PRIMERS_NAME $PRIMERS_VERSION $PRIMERS_CODENAME" \
+    -eltorito-boot boot/grub/bios.img -no-emul-boot -boot-load-size 4 -boot-info-table \
+    --eltorito-catalog boot/grub/boot.cat --grub2-boot-info \
+    --grub2-mbr "$CHROOT/usr/lib/grub/i386-pc/boot_hybrid.img" \
+    -eltorito-alt-boot -e boot/grub/efiboot.img -no-emul-boot \
+    -append_partition 2 0xef "$IMAGE/boot/grub/efiboot.img" \
+    -o "$OUTPUT" "$IMAGE"
 
   (cd "$(dirname "$OUTPUT")" && sha256sum "$(basename "$OUTPUT")" > "$(basename "$OUTPUT").sha256")
 }

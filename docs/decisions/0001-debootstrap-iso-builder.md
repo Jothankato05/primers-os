@@ -26,7 +26,8 @@ installed in a chroot.
 
 Replace live-build with a small, staged `build.sh` that runs `debootstrap`,
 installs packages in a chroot with apt, applies overlays and hooks, builds
-a casper squashfs and makes a hybrid BIOS/UEFI ISO with `grub-mkrescue`. The
+a casper squashfs and assembles a hybrid BIOS/UEFI ISO with `xorriso`, using
+Ubuntu's signed shim and GRUB for UEFI so Secure Boot works. The
 existing package lists, hooks and overlays are kept. Firefox comes from
 Mozilla's signed APT repository (fingerprint-pinned in `build.sh`).
 
@@ -38,7 +39,7 @@ Mozilla's signed APT repository (fingerprint-pinned in `build.sh`).
   installed system boots from its own GRUB to the login screen and desktop.
 - `tools/check-packages.py` validates every package name against the jammy
   archive in CI, so naming errors fail in seconds.
-- The live ISO's GRUB from `grub-mkrescue` is unsigned: the live USB needs
-  Secure Boot disabled. Installed systems use Ubuntu's signed shim/GRUB.
-  Signing the live boot path is future work.
+- The live ISO boots with Secure Boot enabled (shim → signed GRUB → signed
+  kernel, as on Ubuntu media); the first version used `grub-mkrescue`, whose
+  unsigned GRUB needed Secure Boot turned off.
 - We maintain ~400 lines of shell instead of a live-build configuration.

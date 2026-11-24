@@ -23,7 +23,7 @@ the [Releases page](https://github.com/Jothankato05/primers-os/releases).
 **Or build the ISO yourself** (Ubuntu 22.04/24.04 host, ~20 GB free disk):
 
 ```bash
-sudo apt-get install -y debootstrap squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin grub-common gnupg curl
+sudo apt-get install -y debootstrap squashfs-tools xorriso mtools gnupg curl
 ```
 
 ```bash
@@ -40,10 +40,10 @@ qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 -cdrom primers-distro/primers-os-1
 ```
 
 **Install:** write the ISO to a USB stick (balenaEtcher, Rufus in DD mode, or
-`dd`), boot it, and double-click **Install PRIMERS OS** on the desktop. The
-installer handles BIOS and UEFI machines, offers full-disk encryption, and the
-installed system supports Secure Boot (the live USB itself needs Secure Boot
-turned off).
+`dd`), boot it — Secure Boot can stay on — and double-click **Install PRIMERS
+OS** on the desktop. The installer handles BIOS and UEFI machines and offers
+full-disk encryption. When it finishes and restarts, remove the USB stick and
+press Enter at the prompt.
 
 ---
 
@@ -107,4 +107,4 @@ read-only and listens on `localhost` only.
 ## Roadmap
 
 - **1.0 Genesis** (this release) — installable OS, Brain with learning, automation, dashboard, plugins
-- **Next** — Secure Boot for the live USB, local speech recognition, graphical settings for the Brain, OTA module catalogue
+- **Next** — Study / Exam / Lab modes, local speech recognition, graphical settings for the Brain, OTA module catalogue

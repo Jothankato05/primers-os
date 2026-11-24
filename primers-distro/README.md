@@ -12,7 +12,7 @@ ISO that boots on **BIOS and UEFI** and writes straight to a USB stick.
 - Build tools:
 
 ```bash
-sudo apt-get install -y debootstrap squashfs-tools xorriso mtools grub-pc-bin grub-efi-amd64-bin grub-common gnupg curl
+sudo apt-get install -y debootstrap squashfs-tools xorriso mtools gnupg curl
 ```
 
 ## Build
@@ -154,10 +154,20 @@ sudo mkdir -p /etc/primers && sudo touch /etc/primers/updates-on-metered
 | `voice` | microphone support + SpeechRecognition for Brain voice commands |
 | `macos-compat` | instructions for Darling (not packaged for Ubuntu 22.04) |
 
+### Boot chain
+
+The ISO boots the same way Ubuntu's does:
+
+- **UEFI (Secure Boot on or off):** Microsoft-signed shim → Canonical-signed
+  GRUB (`gcdx64.efi.signed`) → Canonical-signed kernel. Verified in QEMU with
+  Secure Boot enforced (Microsoft keys enrolled); an unsigned GRUB is refused
+  by the same firmware.
+- **BIOS:** GRUB 2.06 core image built from the image's own `grub-pc-bin`.
+- **Media:** El Torito entries for DVDs, plus an EFI system partition and
+  hybrid MBR so the ISO can be written straight to a USB stick.
+
 ## Known limitations
 
-- The live USB needs **Secure Boot disabled** (the ISO uses unsigned GRUB
-  from `grub-mkrescue`). Installed systems use the signed boot chain.
 - macOS applications are not supported.
 - Wine is Ubuntu 22.04's Wine 6.0; many recent games run better through
   Lutris's own Wine/Proton builds.

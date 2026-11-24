@@ -22,6 +22,12 @@
   terminals in Night Ink / Chalk with Ready Green for states; the boot
   splash shows the mark with its blinking cursor. The GRUB theme boots
   without the GRUB 2.12 "null src bitmap" stop.
+- Live USB boots with Secure Boot on: the ISO now uses Ubuntu's signed boot
+  chain (Microsoft-signed shim → Canonical-signed GRUB → signed kernel) for
+  UEFI, a GRUB 2.06 core from the image for BIOS, and an EFI partition for
+  USB sticks. The build host no longer needs any GRUB packages.
+- OS identity survives Ubuntu updates: os-release and the login banners are
+  diverted from base-files, so updates can't rename the system to Ubuntu.
 - Data Saver for system updates: package-list refresh, automatic upgrades
   and firmware refresh wait for an unmetered connection (mobile data and
   phone hotspots are skipped); `datasaver` command in the Brain.

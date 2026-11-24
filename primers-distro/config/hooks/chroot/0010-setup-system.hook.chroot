@@ -6,6 +6,24 @@
 # on installed machines (which get the user chosen in the installer).
 set -euo pipefail
 
+# ── OS identity that survives Ubuntu updates ────────────────
+# os-release and the login banners belong to Ubuntu's base-files package;
+# divert them so a base-files update can't rename the system back to
+# Ubuntu. lsb-release stays Ubuntu's: add-apt-repository and other tools
+# rely on it to find the Ubuntu release.
+divert() {
+  if ! dpkg-divert --list "$1" | grep -q .; then
+    dpkg-divert --quiet --local --rename --divert "$1.ubuntu" --add "$1"
+  fi
+}
+divert /usr/lib/os-release
+install -m 0644 /usr/share/primers/os-release /usr/lib/os-release
+ln -sf ../usr/lib/os-release /etc/os-release
+divert /etc/issue
+divert /etc/issue.net
+printf 'PRIMERS OS 1.0 Genesis \\n \\l\n\n' > /etc/issue
+printf 'PRIMERS OS 1.0 Genesis\n' > /etc/issue.net
+
 echo "primers-os" > /etc/hostname
 cat > /etc/hosts <<'EOF'
 127.0.0.1   localhost
