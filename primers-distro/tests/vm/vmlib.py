@@ -16,6 +16,7 @@ import os
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 from typing import Callable, List, Optional, Sequence
 
@@ -130,8 +131,12 @@ class VM:
         self.qmp: Optional[QMP] = None
         self._qga: Optional[QGA] = None
         os.makedirs(workdir, exist_ok=True)
-        self.qmp_path = os.path.join(workdir, f"{name}.qmp")
-        self.qga_path = os.path.join(workdir, f"{name}.qga")
+        # Unix socket paths are limited to 107 bytes: use a short directory
+        # when the work directory's path is long
+        sockdir = workdir if len(os.path.abspath(workdir)) + len(name) < 90 else \
+            tempfile.mkdtemp(prefix="pvm-")
+        self.qmp_path = os.path.join(sockdir, f"{name}.qmp")
+        self.qga_path = os.path.join(sockdir, f"{name}.qga")
         self.vars_path = os.path.join(workdir, f"{name}-vars.fd")
 
     @staticmethod
