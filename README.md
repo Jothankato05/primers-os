@@ -18,7 +18,11 @@ This repository contains both halves of the OS:
 ## Get PRIMERS OS
 
 **Download:** tagged releases (`v*`) are built by GitHub Actions and attached to
-the [Releases page](https://github.com/Jothankato05/primers-os/releases).
+the [Releases page](https://github.com/Jothankato05/primers-os/releases), with a
+`SHA256SUMS` file signed by the release workflow (Sigstore). Each release's notes
+say what was tested and what wasn't, and how to verify the download.
+Release candidates (`v1.0.0-rc1`) are published as pre-releases; a final release
+is only ever created as a draft and published by hand.
 
 **Or build the ISO yourself** (Ubuntu 22.04/24.04 host, ~20 GB free disk):
 
