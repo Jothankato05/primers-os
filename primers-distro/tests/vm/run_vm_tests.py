@@ -257,7 +257,7 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
               "systemctl start primers-lab-reset.service")
     c("setup: Lab Mode enabled", r.rc == 0, r.err)
-    # The login screen lists staff and lab: have it select lab, as it does
+    # The login screen lists labadmin and lab: have it select lab, as it does
     # once lab has signed in there
     vm.sh("d=/var/lib/lightdm/.cache/lightdm-gtk-greeter && install -d -o lightdm -g lightdm \"$d\" && "
           "printf '[greeter]\\nlast-user=lab\\n' > \"$d/state\" && chown lightdm:lightdm \"$d/state\"")

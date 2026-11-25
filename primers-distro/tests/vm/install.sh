@@ -34,8 +34,8 @@ echo "== machineid, fstab, hostname"
 uuid=$(blkid -s UUID -o value "$part")
 printf '# /etc/fstab: written by the PRIMERS OS installer\nUUID=%s / ext4 defaults,errors=remount-ro 0 1\n' \
   "$uuid" > "$target/etc/fstab"
-echo staff-primers > "$target/etc/hostname"
-printf '127.0.0.1 localhost\n127.0.1.1 staff-primers\n::1 localhost ip6-localhost ip6-loopback\n' \
+echo labadmin-primers > "$target/etc/hostname"
+printf '127.0.0.1 localhost\n127.0.1.1 labadmin-primers\n::1 localhost ip6-localhost ip6-loopback\n' \
   > "$target/etc/hosts"
 
 for fs in dev dev/pts proc sys run; do
@@ -50,10 +50,10 @@ in_target rmdir --ignore-fail-on-non-empty /etc/skel/Desktop 2>/dev/null || true
 in_target env DEBIAN_FRONTEND=noninteractive apt-get -y -q remove --purge calamares casper > /dev/null 2>&1 || true
 in_target env DEBIAN_FRONTEND=noninteractive apt-get -y -q autoremove --purge > /dev/null 2>&1 || true
 
-echo "== users (staff, administrator)"
-in_target useradd --create-home --shell /bin/bash --comment "Lab staff" \
-  --groups adm,audio,cdrom,dip,plugdev,users,video,sudo staff
-printf 'staff:%s\n' "$password" | in_target chpasswd
+echo "== users (the staff administrator account, labadmin)"
+in_target useradd --create-home --user-group --shell /bin/bash --comment "Lab staff" \
+  --groups adm,audio,cdrom,dip,plugdev,users,video,sudo labadmin
+printf 'labadmin:%s\n' "$password" | in_target chpasswd
 
 echo "== initramfs, grubcfg, bootloader"
 in_target update-initramfs -u -k all > /dev/null

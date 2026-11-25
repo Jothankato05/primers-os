@@ -10,8 +10,10 @@ On each PC:
 
 1. Write the ISO to a USB stick (balenaEtcher, Rufus in DD mode, or `dd`).
 2. Boot from it (Secure Boot can stay on) and double-click **Install PRIMERS OS**.
-3. Create the **staff (administrator) account** in the installer. Students
-   never get this password.
+3. Create the **staff (administrator) account** in the installer, with a
+   login name such as `labadmin` (the installer refuses names the system
+   already uses, such as `staff` or `lab`). Students never get this
+   password.
 4. When the installer restarts the PC, remove the USB stick and press Enter.
 
 PCs with 2 GB of RAM are the target minimum; 4 GB is smooth.
