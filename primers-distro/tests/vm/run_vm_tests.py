@@ -80,13 +80,42 @@ def kiosk_pid(vm: VM) -> str:
     return vm.sh("pgrep -u lab -f 'litebee --kiosk' | head -n1").out.strip()
 
 
+def screen_drawn(vm: VM) -> bool:
+    """Something is on the screen (not a blank display that is still starting)."""
+    path = vm.screenshot("_screen-check")
+    try:
+        from PIL import Image
+    except ImportError:
+        return True
+    with Image.open(path) as img:
+        return len(set(img.convert("RGB").resize((64, 40)).getdata())) > 12
+
+
+def greeter_requests(vm: VM) -> int:
+    out = vm.sh("grep -c 'Greeter requests' /var/log/lightdm/lightdm.log").out.strip()
+    return int(out) if out.isdigit() else 0
+
+
 def sign_in_lab(vm: VM, suite: Suite, shot: str) -> str:
-    vm.wait_until(lambda: vm.sh("pgrep -u lightdm -f lightdm-gtk-greeter").rc == 0, 180, "login screen")
-    time.sleep(5)
-    vm.key("tab")
-    time.sleep(0.5)
-    vm.key("ret")
-    vm.wait_until(lambda: bool(kiosk_pid(vm)), 180, "the exam kiosk")
+    """Sign in to the lab account at the login screen, with the keyboard.
+    Keys sent before the login screen is drawn are lost (slow under
+    emulation), so wait for it to be on screen, and check LightDM got the
+    sign-in; the retries use different keys because the first Tab or Enter
+    may or may not have landed."""
+    vm.wait_until(lambda: vm.sh("pgrep -u lightdm -f lightdm-gtk-greeter").rc == 0, 300, "login screen")
+    vm.wait_until(lambda: screen_drawn(vm), 300, "the login screen to be drawn")
+    time.sleep(3)
+    for keys in (["tab", "ret"], ["ret"], ["esc", "tab", "ret"]):
+        before = greeter_requests(vm)
+        for k in keys:
+            vm.key(k)
+            time.sleep(0.5)
+        try:
+            vm.wait_until(lambda: greeter_requests(vm) > before or bool(kiosk_pid(vm)), 45, "the sign-in")
+            break
+        except VMError:
+            vm.screenshot(f"{shot}-sign-in-retry")
+    vm.wait_until(lambda: bool(kiosk_pid(vm)), 300, "the exam kiosk")
     time.sleep(8)
     vm.screenshot(shot)
     return kiosk_pid(vm)

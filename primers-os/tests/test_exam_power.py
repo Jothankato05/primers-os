@@ -89,7 +89,7 @@ def test_exam_start_and_stop_are_in_the_durable_log(exam):
     exam.stop()
     records, _ = exam.examlog.records()
     assert [r.message.split(":")[0] for r in records] == ["exam started", "exam stopped"]
-    assert all(r.uid == os.getuid() and r.boot == "b0a7-1d" for r in records)
+    assert all(r.uid == os.getuid() and r.boot == "b0a71d" for r in records)   # the journal's form
     assert sent == [r.message for r in records]              # the journal gets them too
     # After the exam, `primers-exam log` shows the exam that just ended
     assert "exam started: https://cbt.uni.edu.ng/test" in exam.journal()

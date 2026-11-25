@@ -91,7 +91,7 @@ class ExamLog:
     def boot_id(self) -> str:
         try:
             with open(self.boot_id_path, encoding="ascii") as f:
-                return f.read().strip()
+                return f.read().strip().replace("-", "")    # the journal's form
         except OSError:
             return ""
 
