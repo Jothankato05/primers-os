@@ -22,7 +22,7 @@ jobs:
   build:
     if: ${{ !github.event.inputs.reuse_run_id }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 240
+    timeout-minutes: 300
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     permissions:
@@ -103,7 +103,7 @@ jobs:
           echo "TCEXAM_TESTID=$(sed -n 's/^TESTID=//p' <<<"$out")" >> "$GITHUB_ENV"
 
       - name: VM tests (the image itself, booted; a failure stops the release)
-        timeout-minutes: 150
+        timeout-minutes: 180
         run: |
           iso=$(ls primers-distro/*.iso | head -n1)
           rc=0
@@ -116,6 +116,9 @@ jobs:
           # the probe, started with its command and taken in the kiosk from sign-in to submission
           python3 primers-distro/tests/vm/run_vm_tests.py exam-moodle --iso "$iso" --out vm-results/exam-moodle || rc=1
           python3 primers-distro/tests/vm/run_vm_tests.py exam-tcexam --iso "$iso" --out vm-results/exam-tcexam || rc=1
+          # primers-fleet: an invigilator PC pairs three lab PCs on one LAN, starts, watches and
+          # stops the exam on all of them and collects the logs; unpaired PCs and keys are refused
+          python3 primers-distro/tests/vm/run_vm_tests.py fleet --iso "$iso" --out vm-results/fleet || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

@@ -103,6 +103,7 @@ fonts-liberation
 # ── PRIMERS brain runtime ───────────────────────────────────
 python3
 python3-psutil
+python3-cryptography
 python3-flask
 python3-pil
 

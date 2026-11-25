@@ -1,0 +1,16 @@
+[Unit]
+Description=PRIMERS fleet agent (the paired invigilator PC can run exams on this PC)
+Documentation=file:///usr/share/doc/primers/pilot-guide.md
+After=network-online.target
+Wants=network-online.target
+# Only on a lab PC paired with an invigilator PC ('primers-fleet join')
+ConditionDirectoryNotEmpty=/etc/primers/fleet/controllers
+
+[Service]
+ExecStart=/usr/bin/primers-fleet agent
+Restart=on-failure
+RestartSec=5
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

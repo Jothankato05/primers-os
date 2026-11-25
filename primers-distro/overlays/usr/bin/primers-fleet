@@ -1,0 +1,4 @@
+#!/bin/sh
+# PRIMERS OS fleet control: the invigilator's PC runs exams on paired lab PCs.
+#   sudo primers-fleet pair | join PC CODE | status | exam-start URL | exam-stop | collect DIR
+exec python3 -I /usr/share/primers/brain/primers_fleet.py "$@"

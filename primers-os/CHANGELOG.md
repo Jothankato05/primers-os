@@ -3,6 +3,18 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **primers-fleet** (ADR 0006): the invigilator's PC runs exams on a whole
+  lab. `sudo primers-fleet pair` shows a one-time code; `sudo primers-fleet
+  join <invigilator PC> <code>` on each lab PC pairs it (both prove they
+  know the code; scrypt-stretched, so a recorded pairing can't be guessed
+  offline). Then `status [--watch]` (reachable, Lab Mode, exam, candidate
+  signed in, last event), `exam-start URL [--allow ...]`, `exam-stop` and
+  `collect DIR` (every exam log, with SHA256SUMS) for all or `--pc` some
+  PCs. TLS 1.3 with both certificates pinned at pairing; the lab PC's
+  firewall admits only the invigilator's address; lab PCs run only those
+  commands (no shell); both sides log every command, pairing and refusal
+  to /var/log/primers/fleet.jsonl. `forget` and `leave` unpair. VM test:
+  an invigilator PC and three lab PCs on one LAN.
 - **Real CBT platforms** (ADR 0005): `primers-exam probe URL` opens the
   exam site in a probe window (the kiosk's engine, a throw-away profile),
   records every server and port it uses while staff go through a practice

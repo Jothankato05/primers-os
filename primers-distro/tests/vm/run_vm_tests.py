@@ -17,6 +17,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -25,6 +26,7 @@ import tempfile
 import threading
 import time
 import traceback
+from typing import List
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vmlib import VM, VMError  # noqa: E402
@@ -1160,8 +1162,169 @@ def exam_tcexam(vm: VM, suite: Suite) -> None:
     c("exam stops", r.rc == 0, r.out + r.err)
 
 
+# ------------------------------------------------------------------ #
+#  primers-fleet: an invigilator PC and three lab PCs on one LAN
+# ------------------------------------------------------------------ #
+
+FLEET_LAN = "192.168.77"
+FLEET_MCAST = "230.0.0.1:47700"
+FLEET_LABS = ("lab-01", "lab-02", "lab-03")
+
+
+def lan_nic(index: int) -> List[str]:
+    """A second network card on a LAN shared by the test's VMs (QEMU's
+    multicast socket network), with a MAC that says which VM it is."""
+    return ["-netdev", f"socket,id=lan,mcast={FLEET_MCAST},localaddr=127.0.0.1",
+            "-device", f"e1000,netdev=lan,mac=52:54:00:77:00:{index:02x}"]
+
+
+def join_lan(vm: VM, index: int, hostname: str) -> str:
+    """The LAN card gets 192.168.77.(10+index), NetworkManager kept off it."""
+    address = f"{FLEET_LAN}.{10 + index}"
+    r = vm.sh(f"set -e; dev=$(ip -o link | awk -F': ' '/52:54:00:77:00:{index:02x}/ {{print $2}}'); "
+              f"test -n \"$dev\"; nmcli device set \"$dev\" managed no || true; "
+              f"ip addr flush dev \"$dev\"; ip addr add {address}/24 dev \"$dev\"; ip link set \"$dev\" up; "
+              f"hostnamectl set-hostname {hostname}")
+    if r.rc != 0:
+        raise VMError(f"{hostname}: couldn't join the test LAN: {r.err}")
+    return address
+
+
+def fleet_status(vm: VM) -> dict:
+    """'primers-fleet status' on the invigilator PC, as JSON."""
+    r = vm.sh("primers-fleet status --json", timeout=120)
+    try:
+        return json.loads(r.out)
+    except ValueError:
+        return {}
+
+
+def fleet_scenario(ctrl: VM, suite: Suite) -> None:
+    c = suite.check
+    labs = [VM(ctrl.workdir, iso=ctrl.iso, name=name, memory=ctrl.memory, cpus=ctrl.cpus,
+               extra=lan_nic(i + 1)) for i, name in enumerate(FLEET_LABS)]
+    vms = [ctrl] + labs
+    try:
+        for v in vms:
+            v.start()
+        for v in vms:
+            v.wait_agent(timeout=1500)
+        for v in vms:
+            v.wait_until(lambda v=v: v.sh("pgrep -x openbox").rc == 0, 900, f"{v.name}: the live desktop")
+        ctrl_ip = join_lan(ctrl, 0, "invigilator")
+        lab_ips = [join_lan(v, i + 1, v.name) for i, v in enumerate(labs)]
+        c("setup: four PCs on one LAN", all(ctrl.sh(f"ping -c1 -W5 {ip}").rc == 0 for ip in lab_ips))
+        c("the firewall is on (incoming denied) on every PC",
+          all("Status: active" in v.sh("ufw status").out for v in vms))
+        for v in labs:      # campus setup on each lab PC: the exam server's name, Lab Mode on
+            r = v.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
+                     "systemctl start primers-lab-reset.service")
+            c(f"setup: Lab Mode on {v.name}", r.rc == 0, r.err)
+
+        # Not paired yet: lab-03 can't be reached or controlled
+        c("an unpaired PC's agent port is closed",
+          ctrl.sh(f"timeout 5 bash -c '</dev/tcp/{lab_ips[2]}/7480'").rc != 0)
+        r = ctrl.sh("primers-fleet exam-stop --pc lab-03")
+        c("an unpaired PC can't be named in a command", r.rc != 0 and "not paired" in r.err, r.out + r.err)
+
+        # Pairing: the invigilator opens it and reads out the code
+        ctrl.sh("setsid -f primers-fleet pair --minutes 20 > /root/pair.log 2>&1 < /dev/null")
+        ctrl.wait_until(lambda: "primers-fleet join" in ctrl.sh("cat /root/pair.log").out, 120, "the pairing code")
+        m = re.search(r"primers-fleet join (\S+) ([2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{4})", ctrl.sh("cat /root/pair.log").out)
+        code = m.group(2) if m else ""
+        c("pairing shows a one-time code", bool(code), ctrl.sh("cat /root/pair.log").out)
+        wrong = "ABCD-EFGH-JKMN" if code != "ABCD-EFGH-JKMN" else "ZZZZ-ZZZZ-ZZZZ"
+        r = labs[2].sh(f"primers-fleet join {ctrl_ip} {wrong}", timeout=120)
+        c("a wrong code pairs nothing", r.rc != 0 and labs[2].sh("ls /etc/primers/fleet/controllers 2>/dev/null").out == "",
+          r.out + r.err)
+        for v in labs:
+            r = v.sh(f"primers-fleet join {ctrl_ip} {code}", timeout=180)
+            c(f"{v.name} pairs with the invigilator PC", r.rc == 0, r.out + r.err)
+        listed = ctrl.sh("primers-fleet list").out
+        c("the invigilator PC lists the three lab PCs", all(n in listed for n in FLEET_LABS), listed)
+        c("each lab PC runs the agent", all(v.sh("systemctl is-active primers-fleet-agent.service").out.strip()
+                                            == "active" for v in labs))
+        r = labs[1].sh(f"timeout 5 bash -c '</dev/tcp/{lab_ips[0]}/7480'")
+        c("a lab PC's agent port is open to the invigilator PC only (not to another lab PC)", r.rc != 0)
+        # Pairing ends (the command runs as primers_fleet.py; [p] keeps pgrep off its own shell)
+        ctrl.sh("pkill -f '[p]rimers_fleet.py pair'")
+        ctrl.wait_until(lambda: ctrl.sh("pgrep -f '[p]rimers_fleet.py pair'").rc != 0, 60, "pairing to close")
+        c("the pairing port is closed again when pairing ends", "7481" not in ctrl.sh("ufw status").out,
+          ctrl.sh("ufw status").out)
+
+        st = fleet_status(ctrl)
+        c("status: every lab PC answers, Lab Mode on, no exam",
+          sorted(st) == list(FLEET_LABS) and all(r.get("ok") and r["status"].get("lab") is True and
+                                                 r["status"].get("exam") is False for r in st.values()),
+          json.dumps(st)[:1500])
+
+        # The exam, started from the invigilator's PC on all three
+        for v in labs:
+            v.sh("loginctl terminate-user primers")
+        r = ctrl.sh(f"primers-fleet exam-start {EXAM_URL}", timeout=900)
+        c("exam-start on every lab PC", r.rc == 0 and r.out.count("exam on") == 3, r.out + r.err)
+        c("each lab PC is in Exam Mode with the exam",
+          all(EXAM_URL in v.sh("primers-exam status").out for v in labs),
+          "\n".join(v.sh("primers-exam status").out for v in labs))
+        kiosk = sign_in_lab(labs[0], suite, "fleet-01-lab-01-kiosk")
+        c("a candidate on lab-01 gets the exam kiosk", bool(kiosk))
+        labs[0].wait_until(lambda: f"visited {EXAM_URL}" in labs[0].sh("cat /var/log/primers/exam.jsonl").out,
+                           180, "lab-01: the exam page")
+        st = fleet_status(ctrl)
+        c("status: exam on everywhere, the candidate on lab-01 shows",
+          all(r.get("ok") and r["status"].get("exam") for r in st.values()) and
+          st.get("lab-01", {}).get("status", {}).get("candidate") is True, json.dumps(st)[:1500])
+        r = ctrl.sh("primers-fleet status")
+        c("status view (table)", r.rc == 0 and all(n in r.out for n in FLEET_LABS) and "signed in" in r.out, r.out)
+
+        # A controller that isn't paired (another key on the same PC) is refused, and logged
+        rogue = ("python3 -I -c \"import sys; sys.path.insert(0, '/usr/share/primers/brain'); "
+                 "from core import fleet as f; p = f.FleetPaths('/root/rogue', '/root/rogue.jsonl'); "
+                 "f.ensure_identity(p); pc = [x for x in f.load_pcs(f.FleetPaths()) if x.name == 'lab-01'][0]; "
+                 "print(f.call(p, pc, 'exam-stop'))\"")
+        r = ctrl.sh(rogue, timeout=120)
+        c("a controller that isn't paired can't stop the exam", "'ok': False" in r.out and
+          EXAM_URL in labs[0].sh("primers-exam status").out, r.out + r.err)
+        c("the refusal is in lab-01's fleet log", '"refused"' in labs[0].sh("cat /var/log/primers/fleet.jsonl").out)
+
+        # The exam logs, collected
+        r = ctrl.sh("primers-fleet collect /root/exam-logs && cd /root/exam-logs && sha256sum -c SHA256SUMS",
+                    timeout=300)
+        c("collect: every PC's exam log, checksums verify", r.rc == 0 and r.out.count(": OK") == 3, r.out + r.err)
+        c("collect: lab-01's log has the candidate's page",
+          f"visited {EXAM_URL}" in ctrl.sh("cat /root/exam-logs/lab-01/exam.jsonl").out)
+
+        r = ctrl.sh("primers-fleet exam-stop", timeout=900)
+        c("exam-stop on every lab PC", r.rc == 0 and r.out.count("exam off") == 3, r.out + r.err)
+        c("no lab PC is in Exam Mode any more",
+          all("Exam Mode: off" in v.sh("primers-exam status").out for v in labs),
+          "\n".join(v.sh("primers-exam status").out for v in labs))
+        ctrl_fp = ctrl.sh("primers-fleet id").out.strip()
+        logs = [v.sh("cat /var/log/primers/fleet.jsonl").out for v in labs]
+        c("every command is in each lab PC's log, with the invigilator PC's fingerprint",
+          all('"cmd": "exam-start"' in t and '"cmd": "exam-stop"' in t and ctrl_fp in t for t in logs),
+          logs[0][-1500:])
+        c("and in the invigilator PC's log", ctrl.sh("grep -c '\"event\": \"sent\"' /var/log/primers/fleet.jsonl")
+          .out.strip().isdigit())
+
+        # A PC that leaves can't be controlled any more
+        r = labs[2].sh("primers-fleet leave")
+        c("lab-03 leaves", r.rc == 0, r.out + r.err)
+        st = fleet_status(ctrl)
+        c("lab-03 no longer answers the invigilator PC", st.get("lab-03", {}).get("ok") is False and
+          st.get("lab-01", {}).get("ok"), json.dumps(st)[:1000])
+    finally:
+        for v in labs:
+            try:
+                v.screenshot(f"99-{v.name}")
+            except Exception:
+                pass
+            v.stop()
+
+
 SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
-             "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam}
+             "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam,
+             "fleet": fleet_scenario}
 DISK_SCENARIOS = ("exam-power-cut", "installed")
 
 
@@ -1190,7 +1353,10 @@ def main() -> int:
         print(f"(this machine has no IPv6: {e})", flush=True)
     disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
     os.makedirs(disk_dir, exist_ok=True)
-    vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario,
+    fleet_test = args.scenario == "fleet"           # four VMs at once: smaller ones
+    vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware,
+            name="invigilator" if fleet_test else args.scenario,
+            memory=2048 if fleet_test else 4096, extra=lan_nic(0) if fleet_test else (),
             disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario in DISK_SCENARIOS else None)
     relay = os.path.join(HERE, "relay.py")
     vm.guestfwd = [(CDN_OLD, CDN_PORT, f"{sys.executable} {relay} {CDN_PORT}"),

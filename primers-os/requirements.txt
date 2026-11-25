@@ -2,3 +2,5 @@ psutil>=5.9
 flask>=2.0
 # Optional: voice commands (also needs a microphone and PyAudio)
 # SpeechRecognition>=3.10
+# primers-fleet: keys, certificates (PRIMERS OS ships python3-cryptography 3.4.8)
+cryptography>=3.4

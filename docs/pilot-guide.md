@@ -118,6 +118,43 @@ up to the moment of the cut (`sudo primers-exam log` shows the exam that is
 running, or the last one; `--all` shows every exam). This needs an
 installed PC: a live USB forgets everything when it restarts.
 
+### Run the whole lab from the invigilator's PC (primers-fleet)
+
+Instead of going to every PC, the invigilator can start, watch and stop the
+exam on all of them from one PRIMERS PC (a staff laptop or desk PC, never a
+lab PC: it holds the key that controls the lab).
+
+**Pair once** (per lab, before the first exam). On the invigilator's PC:
+
+```bash
+sudo primers-fleet pair
+```
+
+It shows a one-time code and the command to type on each lab PC, e.g.:
+
+```bash
+sudo primers-fleet join 192.168.1.10 4KQ7-M2XD-9PTA
+```
+
+Each PC appears on the invigilator's screen as it joins; press Ctrl+C when
+all have. Only PCs that typed the code are paired; the code is useless once
+pairing ends. Each lab PC then accepts commands from that invigilator PC
+only (its firewall lets only that address in).
+
+**On exam day**, on the invigilator's PC:
+
+```bash
+sudo primers-fleet status --watch 10      # every PC: reachable, Lab Mode, exam, candidate, last event
+sudo primers-fleet exam-start https://cbt.example.edu.ng/login/index.php --allow cdn.jsdelivr.net
+sudo primers-fleet exam-stop
+sudo primers-fleet collect ~/exam-logs     # every PC's exam log, with SHA256SUMS
+```
+
+`--pc lab-07` limits a command to some PCs. Lab Mode must already be on
+on each lab PC. Every command is recorded on both sides in
+`/var/log/primers/fleet.jsonl`. To unpair: `sudo primers-fleet forget NAME`
+on the invigilator's PC, `sudo primers-fleet leave` on the lab PC.
+
 ## 4. Study Mode for students
 
 Any student can type `study 25` in the PRIMERS Brain (or right-click the
@@ -150,6 +187,8 @@ licence cost saved per seat, and a short student satisfaction survey.
 | Clicking the lab account returns to the login screen | Lab Mode refused to start a session it couldn't wipe. See why: `journalctl -t primers-lab`. |
 | Part of the exam page is missing or broken (maths, images, fonts) | The site uses a server that isn't allowed. `sudo primers-exam log` lists what was blocked; run `primers-exam probe` again, going through every kind of exam page, and restart the exam with its command. |
 | TCExam's sign-in keeps returning to the login page | TCExam marks its cookies Secure by default, which browsers drop on plain `http`. Serve TCExam over `https`, or set `K_COOKIE_SECURE` to `false` in TCExam's `shared/config/tce_config.php`. |
+| `primers-fleet status` shows a PC as unreachable | Check it is on and on the network. If the invigilator PC's or the lab PC's address changed, run `sudo primers-fleet pair` again and `sudo primers-fleet join ...` on that PC. |
+| `primers-fleet join` says the other PC doesn't know the code | Check the code and the invigilator PC's address; pairing must still be open (`primers-fleet pair` running there). |
 | A student lost work | Expected in Lab Mode. Remind students to save to USB or online; the sign-in notice says so. |
 | The exam page doesn't load | `primers-exam status` (firewall active?). If the site needs other servers, stop and start again with `--allow` for each. `sudo primers-exam log` shows blocked pages. |
 | The power went off during an exam | Switch the PC back on and let the candidate sign in again. `sudo primers-exam status` should say Exam Mode: ON with every line locked or active. |

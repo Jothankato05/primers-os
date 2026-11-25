@@ -52,6 +52,13 @@ install -d -m 2750 -o root -g adm /var/log/primers
 systemctl enable primers-exam-log.service
 # Exam servers that change address during an exam (CDNs) are followed
 systemctl enable primers-exam-refresh.timer
+# primers-fleet (ADR 0006): the agent runs only once the PC is paired with an
+# invigilator PC (its unit's condition); its keys are root's alone
+systemctl enable primers-fleet-agent.service
+grep -q '^ConditionDirectoryNotEmpty=/etc/primers/fleet/controllers$' /etc/systemd/system/primers-fleet-agent.service \
+  || { echo "E: primers-fleet-agent must only run on a paired PC" >&2; exit 1; }
+python3 -c 'import cryptography.x509, ssl; assert ssl.HAS_TLSv1_3' \
+  || { echo "E: primers-fleet needs python3-cryptography and TLS 1.3" >&2; exit 1; }
 # The boot menu lock re-emits 10_linux's first entry: it must still look
 # the way the lock expects (an entry with --class options)
 grep -q '^CLASS="--class gnu-linux --class gnu --class os"$' /etc/grub.d/10_linux \
