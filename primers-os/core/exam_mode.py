@@ -351,8 +351,10 @@ def grub_script_text(password_hash: str) -> str:
 
 
 def _default_run(argv: Sequence[str]) -> subprocess.CompletedProcess:
+    # update-grub looks at every disk for other systems: it can take minutes
+    timeout = 600 if argv and argv[0] == "update-grub" else 30
     try:
-        return subprocess.run(list(argv), capture_output=True, text=True, timeout=30)
+        return subprocess.run(list(argv), capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         return subprocess.CompletedProcess(list(argv), 1, "", str(e))
 

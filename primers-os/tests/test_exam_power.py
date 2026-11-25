@@ -331,3 +331,15 @@ def test_exam_log_writer_is_started_with_the_exam(exam):
     enabled(exam.lab)
     exam.start("https://cbt.uni.edu.ng/test")
     assert ["systemctl", "start", "primers-exam-log.service"] in exam.lab.fake.calls
+
+
+def test_update_grub_gets_minutes_not_seconds(monkeypatch):
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen[argv[0]] = kw["timeout"]
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    em._default_run(["update-grub"])
+    em._default_run(["nft", "list", "tables"])
+    assert seen == {"update-grub": 600, "nft": 30}

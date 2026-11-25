@@ -257,7 +257,11 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
               "systemctl start primers-lab-reset.service")
     c("setup: Lab Mode enabled", r.rc == 0, r.err)
-    r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=300)
+    # The login screen lists staff and lab: have it select lab, as it does
+    # once lab has signed in there
+    vm.sh("d=/var/lib/lightdm/.cache/lightdm-gtk-greeter && install -d -o lightdm -g lightdm \"$d\" && "
+          "printf '[greeter]\\nlast-user=lab\\n' > \"$d/state\" && chown lightdm:lightdm \"$d/state\"")
+    r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=900)
     c("setup: exam started", r.rc == 0, r.out + r.err)
     st = vm.sh("primers-exam status")
     c("the boot menu is locked during the exam", st.rc == 0 and "Boot menu:  locked" in st.out, st.out)
@@ -335,7 +339,7 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     c("after the reboot the exam server is reachable", r.out == "200", repr(r))
 
     # 5. Stopping the exam unlocks everything, boot menu included
-    r = vm.sh("primers-exam stop", timeout=300)
+    r = vm.sh("primers-exam stop", timeout=900)
     cfg = vm.sh("cat /boot/grub/grub.cfg").out
     c("stopping the exam unlocks the boot menu", r.rc == 0 and "superusers" not in cfg
       and "--unrestricted" not in cfg and "(recovery mode)" in cfg, r.out + r.err)
