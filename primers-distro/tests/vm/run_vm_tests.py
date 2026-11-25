@@ -4,6 +4,7 @@ End-to-end tests of PRIMERS OS in a virtual machine.
 
   run_vm_tests.py exam-escape --iso primers-os.iso --out results/
   run_vm_tests.py exam-power-cut --iso primers-os.iso --out results/
+  run_vm_tests.py installed --firmware sb --iso primers-os.iso --out results/
 
 Boots the ISO in QEMU (KVM when available), drives the keyboard through
 QMP, checks the guest through qemu-guest-agent, and serves a demo exam site
@@ -96,7 +97,18 @@ def greeter_requests(vm: VM) -> int:
     return int(out) if out.isdigit() else 0
 
 
-def sign_in_lab(vm: VM, suite: Suite, shot: str) -> str:
+def lab_desktop_pid(vm: VM) -> str:
+    return vm.sh("pgrep -u lab -x openbox | head -n1").out.strip()
+
+
+def prefer_lab_at_login(vm: VM) -> None:
+    """The login screen lists the administrator and lab: have it select lab,
+    as it does once lab has signed in there."""
+    vm.sh("d=/var/lib/lightdm/.cache/lightdm-gtk-greeter && install -d -o lightdm -g lightdm \"$d\" && "
+          "printf '[greeter]\\nlast-user=lab\\n' > \"$d/state\" && chown lightdm:lightdm \"$d/state\"")
+
+
+def sign_in_lab(vm: VM, suite: Suite, shot: str, signed_in=kiosk_pid) -> str:
     """Sign in to the lab account at the login screen, with the keyboard.
     Keys sent before the login screen is drawn are lost (slow under
     emulation), so wait for it to be on screen, and check LightDM got the
@@ -111,14 +123,14 @@ def sign_in_lab(vm: VM, suite: Suite, shot: str) -> str:
             vm.key(k)
             time.sleep(0.5)
         try:
-            vm.wait_until(lambda: greeter_requests(vm) > before or bool(kiosk_pid(vm)), 45, "the sign-in")
+            vm.wait_until(lambda: greeter_requests(vm) > before or bool(signed_in(vm)), 45, "the sign-in")
             break
         except VMError:
             vm.screenshot(f"{shot}-sign-in-retry")
-    vm.wait_until(lambda: bool(kiosk_pid(vm)), 300, "the exam kiosk")
+    vm.wait_until(lambda: bool(signed_in(vm)), 300, "the lab session")
     time.sleep(8)
     vm.screenshot(shot)
-    return kiosk_pid(vm)
+    return signed_in(vm)
 
 
 def exam_escape(vm: VM, suite: Suite) -> None:
@@ -137,10 +149,20 @@ def exam_escape(vm: VM, suite: Suite) -> None:
     # The live user signs out; starting the exam restarts the login screen locked
     vm.sh("loginctl terminate-user primers")
     vm.wait_until(lambda: vm.sh("pgrep -u primers -x openbox").rc != 0, 60, "sign-out")
-    r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=180)
+    escape_checks(vm, suite)
+
+
+def escape_checks(vm: VM, suite: Suite, installed: bool = False) -> None:
+    """Every escape route of ADR 0003, from starting the exam to stopping it.
+    Needs Lab Mode on, the exam server's name in /etc/hosts and nobody
+    signed in to the desktop."""
+    c = suite.check
+    r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=900)
     c("setup: exam started", r.rc == 0 and "sign out of the desktop" not in r.err, r.out + r.err)
     r = vm.sh("primers-exam status")
     c("setup: firewall, USB block and console lock in place", r.rc == 0, r.out)
+    if installed:
+        c("the boot menu is locked on the installed system", "Boot menu:  locked" in r.out, r.out)
 
     kiosk = sign_in_lab(vm, suite, "02-kiosk")
     c("setup: candidate signs in to the kiosk", bool(kiosk))
@@ -237,7 +259,7 @@ def exam_escape(vm: VM, suite: Suite) -> None:
     c("no pkexec", vm.run(["runuser", "-u", "lab", "--", "pkexec", "--disable-internal-agent", "true"]).rc != 0)
 
     # 8. Stopping the exam puts everything back
-    r = vm.sh("primers-exam stop", timeout=180)
+    r = vm.sh("primers-exam stop", timeout=900)
     c("exam stops", r.rc == 0, r.out + r.err)
     state = vm.sh("getent passwd lab | cut -d: -f7; cat /proc/sys/kernel/sysrq; "
                   "systemctl show -p LoadState --value getty@tty2.service; "
@@ -286,10 +308,7 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
               "systemctl start primers-lab-reset.service")
     c("setup: Lab Mode enabled", r.rc == 0, r.err)
-    # The login screen lists labadmin and lab: have it select lab, as it does
-    # once lab has signed in there
-    vm.sh("d=/var/lib/lightdm/.cache/lightdm-gtk-greeter && install -d -o lightdm -g lightdm \"$d\" && "
-          "printf '[greeter]\\nlast-user=lab\\n' > \"$d/state\" && chown lightdm:lightdm \"$d/state\"")
+    prefer_lab_at_login(vm)
     r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=900)
     c("setup: exam started", r.rc == 0, r.out + r.err)
     st = vm.sh("primers-exam status")
@@ -376,7 +395,78 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     c("Exam Mode is off after stop", "Exam Mode: off" in st.out, st.out)
 
 
-SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut}
+# ------------------------------------------------------------------ #
+#  Installed systems: BIOS, and UEFI with Secure Boot enforced
+# ------------------------------------------------------------------ #
+
+def install_from_live(vm: VM, suite: Suite) -> bool:
+    """Boot the live ISO, install on the VM's disk, boot the installed system."""
+    subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", vm.disk, "24G"], check=True)
+    vm.start()
+    vm.wait_agent(timeout=1200)
+    vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
+    with open(os.path.join(HERE, "install.sh"), encoding="utf-8") as f:
+        script = f.read()
+    r = vm.run(["/bin/bash", "-s", "/dev/vda", STAFF_PASSWORD], timeout=2400, input_text=script)
+    if not suite.check(f"install ({vm.firmware}): PRIMERS OS installed on the VM's disk",
+                       r.rc == 0 and "installed on /dev/vda" in r.out, (r.out + r.err)[-3000:]):
+        return False
+    vm.stop()
+    vm.iso = None
+    vm.start()
+    vm.wait_agent(timeout=900)
+    root = vm.sh("findmnt -n -o SOURCE /").out.strip()
+    return suite.check("the installed system boots from its own disk",
+                       root.startswith("/dev/vda") and "boot=casper" not in vm.sh("cat /proc/cmdline").out, root)
+
+
+SECURE_BOOT_VAR = "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+
+
+def installed_system(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    if not install_from_live(vm, suite):
+        return
+    vm.screenshot("in-01-installed-login")
+
+    # Firmware and boot chain
+    if vm.firmware == "sb":
+        sb = vm.sh(f"od -An -t u1 {SECURE_BOOT_VAR} | awk '{{print $NF}}'").out.strip()
+        lockdown = vm.sh("cat /sys/kernel/security/lockdown").out.strip()
+        c("UEFI Secure Boot is enforced on the installed system", sb == "1", f"SecureBoot={sb!r}")
+        c("the kernel runs locked down (it was verified)", "[integrity]" in lockdown or "[confidentiality]" in lockdown,
+          lockdown)
+        boot = vm.sh("efibootmgr -v").out
+        c("the firmware boots the signed shim", "shimx64.efi" in boot.lower() or "\\EFI\\BOOT" in boot.upper(), boot)
+    else:
+        c("legacy BIOS boot (no EFI)", vm.sh("test -d /sys/firmware/efi").rc != 0)
+
+    # Lab Mode: turned on, then a real restart
+    r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable")
+    c("Lab Mode turned on", r.rc == 0, r.out + r.err)
+    prefer_lab_at_login(vm)
+    vm.reboot()
+    st = vm.sh("primers-lab status")
+    c("after a restart Lab Mode is on and the lab account can sign in",
+      st.rc == 0 and "after the next restart" not in st.out and "lab" in st.out, st.out)
+    c("the boot service reset the lab account", "reset lab account 'lab' (boot)" in
+      vm.sh("journalctl -b -t primers-lab --no-pager").out)
+    desktop = sign_in_lab(vm, suite, "in-02-lab-desktop", signed_in=lab_desktop_pid)
+    c("the lab account signs in to a desktop", bool(desktop))
+    r = vm.as_user("lab", "echo 'my notes' > ~/notes.txt && mkdir -p ~/Downloads && touch ~/Downloads/x.pdf && ls ~")
+    c("setup: the student saves files", r.rc == 0 and "notes.txt" in r.out, repr(r))
+    vm.reboot()                         # left signed in: the plug is pulled on them
+    left = vm.sh("ls -A /home/lab").out
+    c("after a restart the student's files are gone", "notes.txt" not in left and "x.pdf" not in
+      vm.sh("ls -A /home/lab/Downloads 2>/dev/null").out, left)
+    c("Lab Mode is still on after a second restart", vm.sh("primers-lab status").rc == 0)
+
+    # The full exam escape suite, on the installed system
+    escape_checks(vm, suite, installed=True)
+
+
+SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system}
+DISK_SCENARIOS = ("exam-power-cut", "installed")
 
 
 def main() -> int:
@@ -393,7 +483,7 @@ def main() -> int:
     disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
     os.makedirs(disk_dir, exist_ok=True)
     vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario,
-            disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario == "exam-power-cut" else None)
+            disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario in DISK_SCENARIOS else None)
     suite = Suite(vm, args.out)
     print(f"== {args.scenario} ==", flush=True)
     try:

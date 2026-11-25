@@ -220,6 +220,34 @@ class VM:
                 time.sleep(3)
         raise VMError("the guest agent never came up")
 
+    def boot_id(self) -> str:
+        return self.sh("cat /proc/sys/kernel/random/boot_id").out.strip()
+
+    def reboot(self, timeout: float = 900) -> None:
+        """A clean restart from inside the guest; returns once it is back."""
+        before = self.boot_id()
+        self.log(f"[{self.name}] reboot")
+        try:
+            self._qga.sync()
+            self._qga.call("guest-exec", path="/bin/systemctl", arg=["reboot"])
+        except (VMError, OSError):
+            pass                        # the agent may go before it answers
+        self._qga.close()
+        self._qga = None
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(5)
+            try:
+                self.wait_agent(timeout=max(10, deadline - time.time()))
+                if self.boot_id() not in ("", before):
+                    return
+            except VMError:
+                pass
+            if self._qga:
+                self._qga.close()
+            self._qga = None
+        raise VMError("the guest did not come back after a reboot")
+
     def run(self, argv: Sequence[str], timeout: float = 120, input_text: Optional[str] = None) -> Result:
         if self._qga is None:
             self.wait_agent()
