@@ -142,13 +142,18 @@ def exam_escape(vm: VM, suite: Suite) -> None:
 
     # 4. Kiosk killed: the session ends, back to the login screen, no desktop
     vm.sh(f"kill -KILL {kiosk}")
-    ended = True
-    try:
-        vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 90, "the exam session to end")
-    except VMError:
-        ended = False
-    c("a killed kiosk ends the session (no relaunch, no desktop)", ended
-      and vm.sh("pgrep -u lightdm -f lightdm-gtk-greeter").rc == 0)
+    desktop_seen, ended, deadline = [], False, time.time() + 240
+    while time.time() < deadline:
+        seen = vm.sh("pgrep -u lab -a -x 'tint2|pcmanfm|xterm|openbox-session|primers-terminal|lite-bee'").out
+        if seen.strip():
+            desktop_seen.append(seen.strip())
+        if vm.sh("pgrep -u lab").rc != 0 and vm.sh("pgrep -u lightdm -f lightdm-gtk-greeter").rc == 0:
+            ended = True
+            break
+        time.sleep(2)
+    c("a killed kiosk ends the session and the login screen returns", ended,
+      "lab processes or no login screen after 240 s")
+    c("no desktop or second kiosk ever appears after the kill", not desktop_seen, "; ".join(desktop_seen))
     c("the log records the stopped kiosk",
       "stopped unexpectedly" in vm.sh("journalctl -t primers-exam --no-pager").out)
     vm.screenshot("03-after-kill")
