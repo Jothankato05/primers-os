@@ -78,6 +78,7 @@ def test_both_splash_themes_are_built_from_the_official_artwork():
     hook = open(os.path.join(os.path.dirname(__file__), "..", "..", "primers-distro", "config", "hooks", "chroot",
                              "0050-configure-desktop.hook.chroot")).read()
     assert 'icon = load("app-icon-1024.png")' in hook and 'lockup = load("lockup-horizontal-dark.png")' in hook
-    assert '("primers", [on] * 16 + [off] * 16), ("primers-still", [on] * 32)' in hook
+    # Plymouth spreads a throbber's frames over a fixed 2 s: on 8, off 8, twice = 0.5 s steps
+    assert '("primers", ([on] * 8 + [off] * 8) * 2), ("primers-still", [on] * 32)' in hook
     assert "primers-still/primers-still.plymouth 150" in hook
     assert "BackgroundStartColor=0x12161c" in hook
