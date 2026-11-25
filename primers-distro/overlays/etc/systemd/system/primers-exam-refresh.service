@@ -1,0 +1,13 @@
+# PRIMERS OS Exam Mode: follow exam servers whose addresses change during an
+# exam (CDNs move). Looks the allowed servers up again, updates the pinned
+# addresses and the exam firewall; earlier addresses stay allowed for an
+# hour so connections already open don't break. Run by
+# primers-exam-refresh.timer while an exam is on.
+[Unit]
+Description=PRIMERS OS Exam Mode: follow exam server addresses
+ConditionPathExists=/etc/primers/exam.conf
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/primers-exam refresh

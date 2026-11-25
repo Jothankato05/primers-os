@@ -201,33 +201,91 @@ def test_stop_undoes_everything(exam):
         exam.stop()
 
 
+def allow4(rules: str) -> str:
+    line = next(l for l in rules.splitlines() if "set allow4" in l)
+    return line.split("elements = {", 1)[1].split("}", 1)[0].strip() if "elements" in line else ""
+
+
 def test_refresh(exam):
     enabled(exam.lab)
+    now = [1_000_000.0]
+    exam.clock = lambda: now[0]
     assert exam.refresh() is False
     exam.start("https://cbt.uni.edu.ng/")
     exam.net.hosts["cbt.uni.edu.ng"] = ["196.46.20.99"]          # the server moved
+    now[0] += 300
     assert exam.refresh() is True
-    assert "elements = { 196.46.20.99 }" in exam.net.rules[-1]
+    # New connections go to the new address; the old one stays allowed for a while
+    assert "196.46.20.99\tcbt.uni.edu.ng" in open(exam.paths.hosts).read()
+    assert "196.46.20.10" not in open(exam.paths.hosts).read()
+    assert allow4(exam.net.rules[-1]) == "196.46.20.10, 196.46.20.99"
+    assert any("cbt.uni.edu.ng moved: now also 196.46.20.99" in line for line in exam.lab.fake.logs)
+
+    now[0] += em.ADDRESS_GRACE                                  # an hour later: only the new one
+    assert exam.refresh() is True
+    assert allow4(exam.net.rules[-1]) == "196.46.20.99"
 
     exam.net.hosts = {}                                         # offline: keep the last good addresses
     assert exam.refresh() is True
-    assert "elements = { 196.46.20.99 }" in exam.net.rules[-1]
+    assert allow4(exam.net.rules[-1]) == "196.46.20.99"
     assert any("last known addresses" in line for line in exam.lab.fake.logs)
 
     exam.net.table = False                                      # power cut, offline: still the last ones
     assert exam.refresh() is True
-    assert "elements = { 196.46.20.99 }" in exam.net.rules[-1]
+    assert allow4(exam.net.rules[-1]) == "196.46.20.99"
     assert "196.46.20.99\tcbt.uni.edu.ng" in open(exam.paths.hosts).read()
 
 
 def test_refresh_with_nothing_known_blocks_everything(exam):
     enabled(exam.lab)
+    now = [1_000_000.0]
+    exam.clock = lambda: now[0]
     exam.start("https://cbt.uni.edu.ng/")
     exam.net.hosts = {}
     with open(exam.paths.hosts, "w") as f:                      # pinned block lost
         f.write("127.0.0.1 localhost\n")
+    now[0] += em.ADDRESS_GRACE + 1                              # and nothing seen recently
     assert exam.refresh() is True
     assert "elements" not in exam.net.rules[-1] and "counter reject" in exam.net.rules[-1]
+
+
+def test_the_timer_refresh_only_touches_addresses(exam):
+    enabled(exam.lab)
+    exam.start("https://cbt.uni.edu.ng/")
+    applied = len(exam.net.rules)
+    calls = len(exam.lab.fake.calls)
+    assert exam.refresh(addresses_only=True) is True
+    assert len(exam.net.rules) == applied                      # nothing changed: firewall left alone
+    assert not [c for c in exam.lab.fake.calls[calls:] if c[0] in ("usermod", "sysctl", "update-grub")
+                or c[:2] == ["systemctl", "mask"]]
+    exam.net.hosts["cbt.uni.edu.ng"] = ["196.46.20.99"]
+    assert exam.refresh(addresses_only=True) is True
+    assert len(exam.net.rules) == applied + 1
+    assert allow4(exam.net.rules[-1]) == "196.46.20.10, 196.46.20.99"
+    exam.net.table = False                                      # firewall gone: put back
+    assert exam.refresh(addresses_only=True) is True
+    assert len(exam.net.rules) == applied + 2
+
+
+def test_addresses_per_server_are_capped(exam):
+    enabled(exam.lab)
+    now = [1_000_000.0]
+    exam.clock = lambda: now[0]
+    exam.start("https://cbt.uni.edu.ng/")
+    for i in range(40):                                         # a CDN rotating through many addresses
+        exam.net.hosts["cbt.uni.edu.ng"] = [f"196.46.21.{i}"]
+        now[0] += 60
+        exam.refresh(addresses_only=True)
+    got = allow4(exam.net.rules[-1]).split(", ")
+    assert len(got) == em.MAX_ADDRESSES_PER_HOST and "196.46.21.39" in got and "196.46.21.0" not in got
+
+
+def test_stop_forgets_the_addresses(exam):
+    enabled(exam.lab)
+    exam.start("https://cbt.uni.edu.ng/")
+    assert os.path.exists(exam._seen_path())
+    exam.stop()
+    assert not os.path.exists(exam._seen_path())
 
 
 def test_refresh_fails_closed_when_the_account_is_unsafe(exam):

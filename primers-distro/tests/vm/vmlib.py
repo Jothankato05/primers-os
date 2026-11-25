@@ -126,6 +126,7 @@ class VM:
         self.workdir, self.iso, self.disk = workdir, iso, disk
         self.firmware, self.memory, self.cpus, self.name = firmware, memory, cpus, name
         self.extra = list(extra)
+        self.guestfwd: List[tuple] = []     # (guest address, port, host command) per extra address
         self.log = log
         self.proc: Optional[subprocess.Popen] = None
         self.qmp: Optional[QMP] = None
@@ -151,7 +152,7 @@ class VM:
                 "-qmp", f"unix:{self.qmp_path},server=on,wait=off",
                 "-chardev", f"socket,path={self.qga_path},server=on,wait=off,id=qga0",
                 "-device", "virtio-serial", "-device", "virtserialport,chardev=qga0,name=org.qemu.guest_agent.0",
-                "-nic", "user,model=e1000",
+                "-nic", "user,model=e1000" + "".join(f",guestfwd=tcp:{a}:{p}-cmd:{c}" for a, p, c in self.guestfwd),
                 "-chardev", f"file,id=ser0,path={self.serial_path},append=on", "-serial", "chardev:ser0"]
         args += ["-accel", "kvm", "-cpu", "host"] if self.kvm() else ["-accel", "tcg,thread=multi"]
         if self.firmware in ("uefi", "sb"):

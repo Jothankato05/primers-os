@@ -36,10 +36,12 @@ nothing carries over from one candidate to the next.
 import contextlib
 import hashlib
 import ipaddress
+import json
 import os
 import re
 import secrets
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
@@ -86,6 +88,10 @@ class ExamPaths:
 
 
 LOG_TAG = exam_log.LOG_TAG
+# Addresses an exam server had recently stay allowed this long after DNS
+# stops giving them (CDNs move; connections already open must not break)
+ADDRESS_GRACE = 3600
+MAX_ADDRESSES_PER_HOST = 16
 LOG_SERVICE = "primers-exam-log.service"
 GRUB_USER = "primers-exam"
 GRUB_DEFAULT_TEXT = """# Written by primers-exam while an exam runs. Removed when the exam stops.
@@ -394,12 +400,14 @@ class ExamMode:
                  run: Callable[[Sequence[str]], subprocess.CompletedProcess] = _default_run,
                  log: Optional[Callable[[str], None]] = None,
                  is_root: Callable[[], bool] = lambda: os.geteuid() == 0,
-                 syslog: Callable[[str], None] = _syslog):
+                 syslog: Callable[[str], None] = _syslog,
+                 clock: Callable[[], float] = time.time):
         self.lab = lab or lab_mode.LabMode()
         self.paths = paths or ExamPaths()
         self.is_root = is_root
         self.run = run
         self.examlog = exam_log.ExamLog(self.paths.log, self.paths.boot_id)
+        self.clock = clock
         self.syslog = syslog
         self.log = log or self._log
 
@@ -513,6 +521,36 @@ class ExamMode:
             addrs = self.resolve([host]) or previous.get(host)
             if addrs:
                 out[host] = addrs
+        return out
+
+    def _seen_path(self) -> str:
+        return os.path.join(self.paths.state, "addresses.json")
+
+    def allowed(self, hosts: Sequence[str], pins: Dict[str, Addresses]) -> Addresses:
+        """What the firewall lets through: the pinned addresses, plus those
+        each server had within the last ADDRESS_GRACE seconds."""
+        now = self.clock()
+        try:
+            with open(self._seen_path(), encoding="utf-8") as f:
+                seen = {h: {a: float(t) for a, t in v.items()} for h, v in json.load(f).items()}
+        except (OSError, ValueError, AttributeError):
+            seen = {}
+        for host, addrs in pins.items():
+            entry = seen.setdefault(host, {})
+            for a in addrs.v4 | addrs.v6:
+                entry[a] = now
+        kept = {}
+        for host in hosts:
+            recent = {a: t for a, t in seen.get(host, {}).items() if now - t <= ADDRESS_GRACE}
+            newest = sorted(recent.items(), key=lambda kv: kv[1], reverse=True)[:MAX_ADDRESSES_PER_HOST]
+            if newest:
+                kept[host] = dict(newest)
+        os.makedirs(self.paths.state, exist_ok=True)
+        lab_mode._atomic_write(self._seen_path(), json.dumps(kept, sort_keys=True), 0o600)
+        out = self.addresses(hosts, pins)
+        for addrs in kept.values():
+            for a in addrs:
+                (out.v6 if ":" in a else out.v4).add(a)
         return out
 
     @staticmethod
@@ -673,6 +711,8 @@ class ExamMode:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(saved)
         with contextlib.suppress(FileNotFoundError):
+            os.unlink(self._seen_path())
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(self.paths.conf)
         lab_mode.sync_dir(os.path.dirname(self.paths.conf))
         return warnings
@@ -745,7 +785,9 @@ class ExamMode:
         if not self.resolve([host]):
             raise ExamError(f"can't find the exam server {host}: check the address and the network")
         pins = self.pins(hosts)
-        addrs = self.addresses(hosts, pins)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(self._seen_path())        # nothing carried over from an earlier exam
+        addrs = self.allowed(hosts, pins)
         ports = sorted(set(WEB_PORTS) | {port} | extra_ports)
         started = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         conf = ExamConfig(url.strip(), hosts, ports, started)
@@ -795,8 +837,10 @@ class ExamMode:
         except OSError as e:
             raise ExamError(f"can't write the exam log {self.paths.log}: {e}")
 
-    def refresh(self) -> bool:
-        """Re-apply every lock with fresh addresses (boot, every exam sign-in).
+    def refresh(self, addresses_only: bool = False) -> bool:
+        """Re-apply every lock with fresh addresses (boot, every exam sign-in),
+        or, with addresses_only (the primers-exam-refresh timer, every few
+        minutes), just follow exam servers whose addresses changed.
 
         Returns False when no exam is running. Raises ExamError when an exam
         is running but the locks can't be put in place.
@@ -805,13 +849,31 @@ class ExamMode:
         if conf is None:
             return False
         acct = self._lab_account()
+        before = self.pinned()
         fresh = self.resolve(conf.allow)
         pins = self.pins(conf.allow)
         if not fresh:
             self.log("exam servers not found (offline?); using their last known addresses")
         self._pin_hosts(pins)
+        addrs = self.allowed(conf.allow, pins)
+        changed = {h: sorted((pins[h].v4 | pins[h].v6) - (before.get(h, Addresses()).v4 | before.get(h, Addresses()).v6))
+                   for h in pins}
+        changed = {h: a for h, a in changed.items() if a and h in before}
+        for host, new in changed.items():
+            self.log(f"exam server {host} moved: now also {', '.join(new)} "
+                     f"(earlier addresses stay allowed for {ADDRESS_GRACE // 60} minutes)")
+        if addresses_only:
+            rules = nft_ruleset(acct.uid, addrs, conf.ports)
+            try:
+                with open(self.paths.rules, encoding="utf-8") as f:
+                    current = f.read()
+            except OSError:
+                current = ""
+            if rules != current or not self.firewall_active():
+                self._apply_firewall(acct.uid, addrs, conf.ports)
+            return True
         # No addresses at all (never resolved): everything is blocked
-        self._lock(acct, conf, self.addresses(conf.allow, pins))
+        self._lock(acct, conf, addrs)
         self._stop_idle_consoles()
         return True
 

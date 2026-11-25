@@ -90,6 +90,8 @@ jobs:
           python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape || rc=1
           # Installs on a VM disk, cuts its power mid-exam, checks it comes back locked (ADR 0004)
           python3 primers-distro/tests/vm/run_vm_tests.py exam-power-cut --iso "$iso" --out vm-results/exam-power-cut || rc=1
+          # Real exam sites: the probe, a CDN that moves during the exam, an IPv6-only exam server
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-network --iso "$iso" --out vm-results/exam-network || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

@@ -32,14 +32,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EXAM_PORT = 8765
 EXAM_HOST = "cbt.primers.test"
 EXAM_URL = f"http://{EXAM_HOST}:{EXAM_PORT}/exam.html"
+CDN_HOST, CDN_PORT, CDN_OLD, CDN_NEW = "cdn.primers.test", 8770, "10.0.2.100", "10.0.2.101"
+V6_HOST, V6_PORT, V6_OTHER_PORT = "cbt6.primers.test", 8771, 8772
+GUEST_HOST6 = "fec0::2"              # the host, as the VM sees it over IPv6 (QEMU user networking)
 STAFF_PASSWORD = "vm-test-staff"      # a throwaway VM's account, not a secret
 INSTALLER = "calamares"               # how the 'installed' scenario installs (--installer)
 
 
-def serve(directory: str, port: int) -> None:
+class _V6Server(http.server.ThreadingHTTPServer):
+    address_family = __import__("socket").AF_INET6
+
+
+def serve(directory: str, port: int, host: str = "127.0.0.1") -> None:
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
     handler.log_message = lambda *a: None
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
+    server = (_V6Server if ":" in host else http.server.ThreadingHTTPServer)((host, port), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
@@ -633,7 +640,89 @@ def installed_system(vm: VM, suite: Suite) -> None:
     escape_checks(vm, suite, installed=True)
 
 
-SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system}
+# ------------------------------------------------------------------ #
+#  Real exam sites: probe, a CDN that moves, an IPv6-only exam server
+# ------------------------------------------------------------------ #
+
+def lab_get(vm: VM, url: str, *opts: str) -> str:
+    """HTTP status the lab account gets for url ('000': refused/blocked)."""
+    r = vm.run(["runuser", "-u", "lab", "--", "curl", "-s", "-m", "8", "-o", "/dev/null", "-w", "%{http_code}",
+                *opts, url])
+    return r.out.strip() or "000"
+
+
+def exam_network(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    vm.start()
+    vm.wait_agent(timeout=1200)
+    vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
+    vm.sh(f"printf '10.0.2.2 {EXAM_HOST}\\n{CDN_OLD} {CDN_HOST}\\n{GUEST_HOST6} {V6_HOST}\\n' >> /etc/hosts")
+    r = vm.sh(f"curl -s -m 8 -o /dev/null -w '%{{http_code}}' http://{CDN_HOST}:{CDN_PORT}/logo.svg")
+    c("setup: the CDN answers at its first address", r.out == "200", repr(r))
+
+    # 1. The probe finds the CDN and its port, and says how to start the exam
+    cdn_url = f"http://{EXAM_HOST}:{EXAM_PORT}/exam-cdn.html"
+    r = vm.as_user("primers", f"primers-exam probe {cdn_url} --seconds 15 --json", timeout=120)
+    try:
+        probe = json.loads(r.out)
+    except ValueError:
+        probe = {}
+    c("probe: finds the CDN on its own port and suggests --allow for it",
+      probe.get("allow") == [f"{CDN_HOST}:{CDN_PORT}"] and
+      probe.get("command") == f"sudo primers-exam start {cdn_url} --allow {CDN_HOST}:{CDN_PORT}", r.out + r.err)
+
+    # 2. The exam, started as the probe said; then the CDN moves
+    r = vm.sh("primers-lab enable && systemctl start primers-lab-reset.service")
+    c("setup: Lab Mode enabled", r.rc == 0, r.err)
+    vm.sh("loginctl terminate-user primers")
+    vm.wait_until(lambda: vm.sh("pgrep -u primers -x openbox").rc != 0, 60, "sign-out")
+    r = vm.sh(f"primers-exam start {cdn_url} --allow {CDN_HOST}:{CDN_PORT}", timeout=300)
+    c("setup: exam started with the CDN allowed", r.rc == 0, r.out + r.err)
+    c("the lab account reaches the CDN", lab_get(vm, f"http://{CDN_HOST}:{CDN_PORT}/logo.svg") == "200")
+    c("the CDN's next address is still blocked", lab_get(vm, f"http://{CDN_NEW}:{CDN_PORT}/logo.svg") == "000")
+    vm.sh(f"sed -i 's/^{CDN_OLD} {CDN_HOST}$/{CDN_NEW} {CDN_HOST}/' /etc/hosts")     # the CDN moves
+    c("the address-following timer is on", vm.sh("systemctl is-enabled primers-exam-refresh.timer").out.strip()
+      == "enabled" and vm.sh("systemctl is-active primers-exam-refresh.timer").out.strip() == "active")
+    r = vm.sh("systemctl start primers-exam-refresh.service", timeout=120)          # what the timer runs
+    pinned = vm.run(["runuser", "-u", "lab", "--", "getent", "hosts", CDN_HOST]).out
+    c("after the CDN moved, the lab account's name for it points at the new address", CDN_NEW in pinned, pinned)
+    c("the CDN works at its new address", lab_get(vm, f"http://{CDN_HOST}:{CDN_PORT}/logo.svg") == "200")
+    c("its old address still works for a while (connections already open)",
+      lab_get(vm, f"http://{CDN_OLD}:{CDN_PORT}/logo.svg") == "200")
+    c("the exam log records the move", "moved: now also " + CDN_NEW in vm.sh("cat /var/log/primers/exam.jsonl").out)
+    kiosk = sign_in_lab(vm, suite, "net-01-kiosk-cdn")
+    c("the kiosk shows the exam with its CDN logo", bool(kiosk))
+    r = vm.sh("primers-exam stop", timeout=300)
+    c("exam stops", r.rc == 0, r.out + r.err)
+    vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
+
+    # 3. An exam server reachable only over IPv6
+    vm.wait_until(lambda: vm.sh("ip -6 addr show scope global | grep -q 'inet6 fec0:'").rc == 0, 120,
+                  "an IPv6 address")
+    v6_url = f"http://{V6_HOST}:{V6_PORT}/exam.html"
+    r = vm.sh(f"curl -s -m 8 -o /dev/null -w '%{{http_code}}' -4 http://10.0.2.2:{V6_PORT}/exam.html; echo; "
+              f"curl -s -m 8 -o /dev/null -w '%{{http_code}}' {v6_url}")
+    c("setup: the exam server answers over IPv6 only", r.out.split() == ["000", "200"], repr(r))
+    r = vm.sh(f"primers-exam start {v6_url}", timeout=300)
+    c("setup: an IPv6-only exam starts", r.rc == 0, r.out + r.err)
+    rules = vm.sh("nft list table inet primers_exam").out
+    c("the exam firewall allows the server's IPv6 address and no IPv4 one",
+      GUEST_HOST6 in rules and "allow4" in rules and "10.0.2.2" not in rules, rules)
+    c("the lab account reaches the exam over IPv6", lab_get(vm, v6_url) == "200")
+    c("another port on the same IPv6 server is blocked for the lab account",
+      lab_get(vm, f"http://[{GUEST_HOST6}]:{V6_OTHER_PORT}/") == "000" and
+      vm.sh(f"curl -s -m 8 -o /dev/null -w '%{{http_code}}' http://[{GUEST_HOST6}]:{V6_OTHER_PORT}/").out == "200")
+    c("the IPv4 exam server of before is blocked for the lab account",
+      lab_get(vm, f"http://10.0.2.2:{EXAM_PORT}/exam.html") == "000")
+    kiosk = sign_in_lab(vm, suite, "net-02-kiosk-ipv6")
+    c("the kiosk opens the IPv6-only exam", bool(kiosk) and
+      f"visited {v6_url}" in vm.sh("cat /var/log/primers/exam.jsonl").out)
+    r = vm.sh("primers-exam stop", timeout=300)
+    c("exam stops", r.rc == 0, r.out + r.err)
+
+
+SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
+             "exam-network": exam_network}
 DISK_SCENARIOS = ("exam-power-cut", "installed")
 
 
@@ -652,10 +741,16 @@ def main() -> int:
     INSTALLER = args.installer
     os.makedirs(args.out, exist_ok=True)
     serve(os.path.join(HERE, "www"), EXAM_PORT)
+    serve(os.path.join(HERE, "www"), CDN_PORT)                      # the "CDN" (two guest addresses)
+    serve(os.path.join(HERE, "www"), V6_PORT, "::1")                # an IPv6-only exam server
+    serve(os.path.join(HERE, "www"), V6_OTHER_PORT, "::1")          # another IPv6 server, not allowed
     disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
     os.makedirs(disk_dir, exist_ok=True)
     vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario,
             disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario in DISK_SCENARIOS else None)
+    relay = os.path.join(HERE, "relay.py")
+    vm.guestfwd = [(CDN_OLD, CDN_PORT, f"{sys.executable} {relay} {CDN_PORT}"),
+                   (CDN_NEW, CDN_PORT, f"{sys.executable} {relay} {CDN_PORT}")]
     suite = Suite(vm, args.out)
     print(f"== {args.scenario} ==", flush=True)
     try:

@@ -146,3 +146,21 @@ def test_probe_cli_prints_the_command_and_json(monkeypatch, capsys):
     assert primers_exam.main(["probe", "https://cbt.uni.edu.ng/login/index.php", "--json"]) == 1
     data = json.loads(capsys.readouterr().out)
     assert data["allow"][0] == "cdn.jsdelivr.net" and data["servers"][0]["host"] == "cbt.uni.edu.ng"
+
+
+def test_refresh_cli_follows_addresses_quietly_when_no_exam(monkeypatch):
+    import primers_exam
+    seen = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(em.ExamMode, "refresh", lambda self, addresses_only=False: seen.append(addresses_only) or False)
+    assert primers_exam.main(["refresh"]) == 0
+    assert seen == [True]
+
+
+def test_refresh_units_run_only_during_an_exam():
+    here = os.path.join(os.path.dirname(__file__), "..", "..", "primers-distro", "overlays", "etc", "systemd", "system")
+    service = open(os.path.join(here, "primers-exam-refresh.service")).read()
+    timer = open(os.path.join(here, "primers-exam-refresh.timer")).read()
+    assert "ConditionPathExists=/etc/primers/exam.conf" in service
+    assert "ExecStart=/usr/bin/primers-exam refresh" in service
+    assert "OnUnitActiveSec=5min" in timer and "WantedBy=timers.target" in timer

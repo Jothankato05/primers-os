@@ -1,0 +1,12 @@
+# PRIMERS OS Exam Mode: every 5 minutes, follow the exam servers' addresses
+# (the service does nothing when no exam is running).
+[Unit]
+Description=PRIMERS OS Exam Mode: follow exam server addresses every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

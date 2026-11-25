@@ -46,8 +46,9 @@ def _parser() -> argparse.ArgumentParser:
     when = lg.add_mutually_exclusive_group()
     when.add_argument("--since", help="from this time (UTC), e.g. 2026-11-24 or '2026-11-24 09:00'")
     when.add_argument("--all", action="store_true", help="every exam on this PC")
-    # Run by the primers-exam-log service, not by people
+    # Run by the primers-exam-log service and the primers-exam-refresh timer, not by people
     sub.add_parser("log-writer", help=argparse.SUPPRESS)
+    sub.add_parser("refresh", help=argparse.SUPPRESS)
     return p
 
 
@@ -111,6 +112,8 @@ def main(argv=None) -> int:
             print("Exam Mode is off. The lab account is back to normal.")
         elif args.command == "log":
             sys.stdout.write(exam.journal(args.since, args.all) or "No exam activity logged.\n")
+        elif args.command == "refresh":
+            exam.refresh(addresses_only=True)
         elif args.command == "log-writer":
             conf = exam.config()
             started = exam_log.parse_time(conf.started) if conf and conf.started else None
