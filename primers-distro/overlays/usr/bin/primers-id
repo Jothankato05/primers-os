@@ -1,0 +1,4 @@
+#!/bin/sh
+# PRIMERS OS: sign in with your Primers ID (OpenID Connect).
+#   primers-id login [--browser] | login --offline | status | logout
+exec python3 -I /usr/share/primers/brain/primers_id_cli.py "$@"

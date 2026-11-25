@@ -79,7 +79,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          sudo apt-get install -y qemu-system-x86 ovmf python3-pil
+          sudo apt-get install -y qemu-system-x86 ovmf python3-pil python3-cryptography
           ls -l /dev/kvm
 
       - name: PHP for the CBT test servers (TCExam 17 needs PHP 8.2+, Ubuntu 22.04 has 8.1)
@@ -126,6 +126,9 @@ jobs:
           # Brand: the boot splash (white P on Night Ink, green cursor blinking in 1.06 s steps),
           # reduced motion, login screen, desktop and exam kiosk; screenshots in the results
           python3 primers-distro/tests/vm/run_vm_tests.py brand --iso "$iso" --out vm-results/brand || rc=1
+          # Primers ID: sign in with OpenID Connect against a test provider on this runner (device flow,
+          # token checks), then offline with the PIN while the provider is unreachable, and sign out
+          python3 primers-distro/tests/vm/run_vm_tests.py primers-id --iso "$iso" --out vm-results/primers-id || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

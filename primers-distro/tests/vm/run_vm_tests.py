@@ -1635,9 +1635,76 @@ def brand(vm: VM, suite: Suite) -> None:
     vm.sh("primers-exam stop", timeout=300)
 
 
+# ------------------------------------------------------------------ #
+#  Primers ID: OIDC sign-in in the image against a mock provider on this
+#  machine (the device flow, approved here as a phone would), then offline
+#  sign-in with the PIN when the provider can't be reached
+# ------------------------------------------------------------------ #
+
+ID_PORT = 8790
+
+
+def primers_id_scenario(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "primers-os", "tests"))
+    from mock_oidc import MockProvider
+    provider = MockProvider(issuer=f"http://10.0.2.2:{ID_PORT}", port=ID_PORT)
+    try:
+        vm.start()
+        vm.wait_agent(timeout=1200)
+        vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
+        r = vm.sh("primers-id status; sed -n 's/^issuer = //p' /etc/primers/id.conf")
+        c("the image is set up for the Primers ID service", "https://id.primersgroup.ng" in r.out, r.out)
+        # The test provider: a change to the configuration only
+        r = vm.sh(f"printf '[primers-id]\\nissuer = http://10.0.2.2:{ID_PORT}\\nclient_id = primers-os\\n"
+                  "allow_http = true\\n' > /etc/primers/id.conf")
+        c("setup: the test provider, by configuration", r.rc == 0, r.err)
+
+        # The person signs in: the PC shows a code, they approve it (here: the test, as their phone)
+        vm.sh("rm -f /tmp/id-login.out; setsid -f su - primers -c 'printf \"2468\\n\" | primers-id login --pin-stdin "
+              "> /tmp/id-login.out 2>&1; echo rc=$? >> /tmp/id-login.out' > /dev/null 2>&1 < /dev/null")
+        vm.wait_until(lambda: provider.devices, 120, "the device sign-in to start")
+        code = next(iter(provider.devices.values()))["user_code"]
+        shown = vm.sh("cat /tmp/id-login.out").out
+        vm.wait_until(lambda: code in vm.sh("cat /tmp/id-login.out").out, 60, "the code on screen")
+        c("the PC shows the code to type at Primers ID", code in vm.sh("cat /tmp/id-login.out").out, shown)
+        provider.approve(code)
+        vm.wait_until(lambda: "rc=" in vm.sh("cat /tmp/id-login.out").out, 120, "the sign-in to finish")
+        out = vm.sh("cat /tmp/id-login.out").out
+        c("signed in with Primers ID (token signature and claims checked)",
+          "rc=0" in out and "Signed in as Ada Okafor" in out, out)
+        st = vm.as_user("primers", "primers-id status --json")
+        try:
+            session = json.loads(st.out)
+        except ValueError:
+            session = {}
+        c("the session names the person and keeps no secrets in view",
+          session.get("sub") == "pid-0001" and "refresh_token" not in session and "pin_hash" not in session,
+          st.out)
+        perms = vm.sh("stat -c '%a %U' /home/primers/.local/share/primers/id /home/primers/.local/share/primers/id/session.json").out.split("\n")
+        c("the session is readable by its owner only", perms[:2] == ["700 primers", "600 primers"], repr(perms))
+
+        # No way to reach Primers ID: offline sign-in with the PIN
+        vm.sh("ip route add blackhole 10.0.2.2/32")
+        r = vm.as_user("primers", "printf '\\n' | primers-id login --pin-stdin", timeout=120)
+        c("without the provider, online sign-in says so and points to the PIN",
+          r.rc == 2 and "--offline" in r.err, r.out + r.err)
+        r = vm.as_user("primers", "printf '0000\\n' | primers-id login --offline --pin-stdin")
+        c("a wrong PIN is refused", r.rc == 1 and "wrong PIN" in r.err, r.out + r.err)
+        r = vm.as_user("primers", "printf '2468\\n' | primers-id login --offline --pin-stdin")
+        c("offline sign-in with the PIN", r.rc == 0 and "offline, with your PIN" in r.out, r.out + r.err)
+        vm.sh("ip route del blackhole 10.0.2.2/32")
+        r = vm.as_user("primers", "primers-id logout && primers-id status", timeout=60)
+        c("sign out, and the refresh token is revoked at the provider",
+          "Not signed in" in r.out and len(provider.revoked) == 1, r.out + r.err)
+    finally:
+        provider.close()
+
+
 SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
              "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam,
-             "fleet": fleet_scenario, "performance": performance, "brand": brand}
+             "fleet": fleet_scenario, "performance": performance, "brand": brand,
+             "primers-id": primers_id_scenario}
 DISK_SCENARIOS = ("exam-power-cut", "installed", "performance")
 
 

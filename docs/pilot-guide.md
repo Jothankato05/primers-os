@@ -173,7 +173,32 @@ The boot splash's blinking cursor stays still (from the next boot), and
 windows and web pages stop animating (pages see the browser's "reduce
 motion" setting).
 
-## 5. Collect proof points
+## 5. Sign in with Primers ID
+
+> The live Primers ID service isn't running yet: until it is,
+> `primers-id login` says it can't be reached. Details:
+> [primers-id.md](primers-id.md).
+
+In a terminal (right-click the desktop › Terminal), each person types:
+
+```bash
+primers-id login
+```
+
+It asks for a PIN for days without internet (4 or more digits; Enter to
+skip), then shows an address and a code. Open the address on the PC or a
+phone, sign in to Primers ID there and approve the code: PRIMERS OS never
+asks for the Primers password itself. When the internet is down,
+`primers-id login --offline` takes the PIN instead, for 14 days after the
+last online sign-in (five wrong PINs lock it until the next online
+sign-in). `primers-id status` shows who is signed in; `primers-id logout`
+signs out. On Lab Mode PCs the sign-in is wiped with the lab account after
+every session, but ask students to sign out anyway.
+
+To use a campus provider, or the real Primers ID service once it is live,
+edit `/etc/primers/id.conf` (issuer and client ID): nothing else changes.
+
+## 6. Collect proof points
 
 The plan asks for boot time and RAM use on real lab hardware. On each PC:
 
@@ -197,7 +222,7 @@ does.
 Also record, per lab: how many PCs were revived (couldn't run Windows 11),
 licence cost saved per seat, and a short student satisfaction survey.
 
-## 6. If something goes wrong
+## 7. If something goes wrong
 
 | Problem | What to do |
 |---|---|

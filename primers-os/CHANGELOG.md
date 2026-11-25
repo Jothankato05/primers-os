@@ -3,6 +3,19 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Primers ID** (docs/primers-id.md, ADR 0007): `primers-id login` signs
+  the person at the desktop in with OpenID Connect: the device flow (a code
+  to approve on the PC or a phone) or, when the provider lacks it, the
+  authorization code flow with PKCE through a loopback address. The ID
+  token's signature (RS256/ES256 from the provider's JWKS), issuer,
+  audience, expiry and nonce are checked. Offline: a PIN chosen at an
+  online sign-in works for 14 days (configurable) after it; five wrong
+  PINs lock it until the next online sign-in; only a scrypt hash is kept.
+  `status`, `logout` (revokes the refresh token). The provider is set in
+  /etc/primers/id.conf only (https required). The session lives in
+  ~/.local/share/primers/id (0700/0600). 25 unit tests against a mock
+  provider over real HTTP; VM test 'primers-id' (release workflow). The
+  live Primers ID service isn't running yet.
 - **Brand** (docs/screenshots/): the boot splash, login screen, wallpaper,
   GRUB menu and installer now use the official artwork for dark
   backgrounds as it is (the app icon: Chalk P and green cursor on Night
