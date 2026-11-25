@@ -362,6 +362,7 @@ def main() -> int:
     os.makedirs(args.out, exist_ok=True)
     serve(os.path.join(HERE, "www"), EXAM_PORT)
     disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
+    os.makedirs(disk_dir, exist_ok=True)
     vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario,
             disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario == "exam-power-cut" else None)
     suite = Suite(vm, args.out)
