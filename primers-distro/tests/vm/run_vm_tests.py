@@ -1760,10 +1760,11 @@ def privacy_scenario(vm: VM, suite: Suite) -> None:
     menu = vm.sh("grep -c 'primers-privacy notice</command>' /home/labadmin/.config/openbox/menu.xml").out.strip()
     c("System › Privacy notice opens it any time", notice_open() and menu == "1", menu)
     vm.sh("pkill -u labadmin -x zenity; rm -f /etc/lightdm/lightdm.conf.d/99-vm-test.conf")
-    r = vm.sh("primers-privacy notice --text; primers-lab notice; primers-privacy notice --short")
+    r = vm.sh("primers-privacy notice --text; primers-privacy notice --short")
+    flat = " ".join(r.out.split())                  # the notice is wrapped at 74 columns
     c("the notice names the NDPA, the retention time and the rights; the lab account's short version",
-      "Nigeria Data Protection Act 2023" in r.out and "Kept for 90 days" in r.out
-      and "ndpc.gov.ng" in r.out and "System › Privacy notice" in r.out, r.out[-800:])
+      "Nigeria Data Protection Act 2023" in flat and "Kept for 90 days" in flat
+      and "ndpc.gov.ng" in flat and "System › Privacy notice" in flat, r.out[-800:])
 
     # Retention: records older than 90 days go at the daily run, the rest stay
     def line(days_ago: int, message: str) -> str:
