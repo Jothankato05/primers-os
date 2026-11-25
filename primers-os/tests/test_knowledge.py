@@ -1,3 +1,4 @@
+import os
 import pytest
 
 from services.knowledge.engine import KnowledgeBase, mark_unverified, tokenize
@@ -85,6 +86,18 @@ def test_missing_file():
     k = KnowledgeBase(path="/nonexistent")
     assert not k.available
     assert "not installed" in k.answer("who founded primers").text
+
+
+def test_one_knowledge_base_in_docs_and_the_build_installs_it():
+    import services.knowledge.engine as engine
+    repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    assert KnowledgeBase().path == os.path.join(repo, "docs", "knowledge", "PRIMERS_KNOWLEDGE.md")
+    assert engine.SEARCH_PATHS[-1] == engine.INSTALLED == "/usr/share/primers/knowledge/PRIMERS_KNOWLEDGE.md"
+    assert not os.path.exists(os.path.join(repo, "primers-os", "knowledge", "PRIMERS_KNOWLEDGE.md"))  # no second copy
+    with open(os.path.join(repo, "primers-distro", "build.sh"), encoding="utf-8") as f:
+        build = f.read()
+    assert '"$REPO_ROOT/docs/knowledge/PRIMERS_KNOWLEDGE.md"' in build
+    assert '"$CHROOT/usr/share/primers/knowledge/PRIMERS_KNOWLEDGE.md"' in build
 
 
 def test_shipped_knowledge_base_loads():

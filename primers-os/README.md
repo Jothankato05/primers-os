@@ -43,7 +43,8 @@ Anything else phrased as a question goes to **Ask Primers**.
 
 ## Ask Primers (knowledge layer)
 
-`knowledge/PRIMERS_KNOWLEDGE.md` is loaded at boot and split by heading.
+`docs/knowledge/PRIMERS_KNOWLEDGE.md` (at the repository's root; installed in the image as
+`/usr/share/primers/knowledge/PRIMERS_KNOWLEDGE.md`) is loaded at boot and split by heading.
 Questions are answered offline, in this order:
 
 1. **Emergencies first** — anything that sounds like danger shows Nigeria's

@@ -78,7 +78,6 @@ primers-os/            PRIMERS Brain (Python 3.10+)
   core/ ai/ services/  monitoring, security, learning, automation, math, GPA, graph…
   interface/           CLI shell, web dashboard, voice
   tests/               pytest suite
-  knowledge/           PRIMERS_KNOWLEDGE.md — the system knowledge layer (Ask Primers)
 primers-lite-bee/      Primers Lite Bee browser (Python + GTK + WebKit)
 primers-distro/        ISO build system
   build.sh             debootstrap → chroot → squashfs → hybrid BIOS/UEFI ISO
@@ -88,6 +87,7 @@ primers-distro/        ISO build system
   tools/               check-packages.py (validates every package name)
 branding/              official Primers OS logo pack (SVG + PNG) — source of all OS artwork
 docs/decisions/        architecture decision records
+docs/knowledge/        PRIMERS_KNOWLEDGE.md — the knowledge base Ask Primers answers from (one source; installed in /usr/share/primers/knowledge)
 docs/pilot-guide.md    running a one-lab pilot: install, Lab Mode, benchmarks
 docs/benchmarks.md     measured boot time and memory on a 2 GB PC, and the misses
 docs/primers-id.md     signing in with Primers ID (OpenID Connect), online and offline

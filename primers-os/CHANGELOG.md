@@ -3,6 +3,12 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Knowledge base**: `docs/knowledge/PRIMERS_KNOWLEDGE.md` is now the one
+  copy (moved from primers-os/knowledge/). The image installs it in
+  /usr/share/primers/knowledge and the build fails unless the brain loads
+  it there; a checkout loads it from docs/knowledge. VM test: Ask Primers
+  answers from it on a booted PC. Section 7.10 (build status) and the
+  pilot guide are updated with each finished task.
 - **Privacy** (docs/privacy.md, ADR 0008; Nigeria Data Protection Act
   2023): a privacy notice (the institution responsible, what is recorded
   and why, lawful basis, retention, who sees it, rights, the NDPC) opens at

@@ -22,9 +22,12 @@ from typing import Dict, List, Optional, Tuple
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FILE_NAME = "PRIMERS_KNOWLEDGE.md"
+INSTALLED = os.path.join("/usr/share/primers/knowledge", FILE_NAME)
+# One source: docs/knowledge/PRIMERS_KNOWLEDGE.md in the repository, which the
+# image build installs as INSTALLED. PRIMERS_KNOWLEDGE=/path overrides both.
 SEARCH_PATHS = [
-    os.path.join(BASE_DIR, "knowledge", FILE_NAME),
-    os.path.join("/usr/share/primers/knowledge", FILE_NAME),
+    os.path.join(os.path.dirname(BASE_DIR), "docs", "knowledge", FILE_NAME),   # a checkout
+    INSTALLED,                                                                  # a PRIMERS OS PC
 ]
 
 EMERGENCY_NUMBER = "112"

@@ -1701,6 +1701,11 @@ def primers_id_scenario(vm: VM, suite: Suite) -> None:
         vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
         r = vm.sh("primers-id status; sed -n 's/^issuer = //p' /etc/primers/id.conf")
         c("the image is set up for the Primers ID service", "https://id.primersgroup.ng" in r.out, r.out)
+        # Ask Primers answers from the one knowledge base, installed from docs/knowledge
+        r = vm.sh("test -f /usr/share/primers/knowledge/PRIMERS_KNOWLEDGE.md && "
+                  "! test -e /usr/share/primers/brain/knowledge && primers -c 'ask who founded Primers?'", timeout=120)
+        c("Ask Primers answers from the knowledge base in /usr/share/primers/knowledge",
+          r.rc == 0 and "Jothan Jerry Kato" in r.out, (r.out + r.err)[-600:])
         # The test provider: a change to the configuration only
         r = vm.sh(f"printf '[primers-id]\\nissuer = http://10.0.2.2:{ID_PORT}\\nclient_id = primers-os\\n"
                   "allow_http = true\\n' > /etc/primers/id.conf")

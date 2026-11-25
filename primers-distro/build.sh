@@ -309,6 +309,18 @@ stage_customize() {
   install_tree "$REPO_ROOT/docs" "$CHROOT/usr/share/doc/primers"
   [ -f "$CHROOT/usr/share/doc/primers/pilot-guide.md" ] && [ -f "$CHROOT/usr/share/doc/primers/benchmarks.md" ] \
     || die "documentation missing from the image"
+
+  # The Primers knowledge base (Ask Primers): one source in the repository,
+  # docs/knowledge/PRIMERS_KNOWLEDGE.md, installed where the brain loads it
+  log "Installing the knowledge base -> /usr/share/primers/knowledge"
+  install -D -m 0644 -o root -g root "$REPO_ROOT/docs/knowledge/PRIMERS_KNOWLEDGE.md" \
+    "$CHROOT/usr/share/primers/knowledge/PRIMERS_KNOWLEDGE.md"
+  in_chroot python3 -I -c 'import sys; sys.path.insert(0, "/usr/share/primers/brain")
+from services.knowledge.engine import KnowledgeBase, INSTALLED
+k = KnowledgeBase()
+assert k.path == INSTALLED and k.available and len(k.faqs) >= 10, (k.path, len(k.chunks))
+print(f"knowledge base: {len(k.chunks)} sections, {len(k.faqs)} ready answers")' \
+    || die "the brain doesn't load the knowledge base"
   find "$CHROOT/usr/share/primers/brain" -type d -exec chmod 0755 {} +
   find "$CHROOT/usr/share/primers/brain" -type f -exec chmod 0644 {} +
 
