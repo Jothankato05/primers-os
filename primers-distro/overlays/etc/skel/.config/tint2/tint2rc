@@ -1,25 +1,63 @@
-panel_items = TSC
+# PRIMERS OS panel
+panel_items = LTESC
 panel_size = 100% 36
 panel_position = bottom center horizontal
 panel_margin = 0 0
-panel_padding = 0 0 2
+panel_padding = 4 0 4
 panel_background_id = 1
+wm_menu = 1
 taskbar_mode = single_desktop
 task_text = 1
-task_icon = 0
-task_maximum_size = 180 30
+task_icon = 1
+task_maximum_size = 200 30
+task_padding = 6 2 6
 task_active_background_id = 2
 task_background_id = 3
 systray = 1
-systray_padding = 4 4 4
-clock_format = %H:%M  %a %d %b
-clock_font = Noto Sans 9
-clock_font_color = #c8c8e8 100
+systray_padding = 4 4 6
+systray_icon_size = 22
+time1_format = %H:%M
+time1_font = Noto Sans Bold 10
+time2_format = %a %d %b
+time2_font = Noto Sans 8
+clock_font_color = #F5F2EA 100
+clock_padding = 8 0
+launcher_padding = 4 4 6
+launcher_icon_size = 26
+launcher_icon_theme = Papirus-Dark
+launcher_item_app = /usr/share/applications/primers.desktop
+launcher_item_app = /usr/share/applications/lite-bee.desktop
+launcher_item_app = /usr/share/applications/firefox.desktop
+launcher_item_app = /usr/share/applications/pcmanfm.desktop
+launcher_item_app = /usr/share/applications/debian-xterm.desktop
+launcher_item_app = /usr/share/applications/net.lutris.Lutris.desktop
+task_font_color = #F5F2EA 100
+
+#---- Study Mode timer (shows only while a session runs) ----
+execp = new
+execp_command = /usr/lib/primers/study-panel
+execp_interval = 10
+execp_has_icon = 0
+execp_continuous = 0
+execp_font = Noto Sans Bold 9
+execp_font_color = #1E9E62 100
+execp_padding = 6 0
+execp_tooltip = Study Mode: distracting sites are paused. Stop: right-click the desktop › Study Mode
+execp_lclick_command = primers-terminal
+
 #---- Backgrounds ----
-background = #0a0a0f 95
+# 1: panel
+rounded = 0
 border_width = 0
-background = #1e1e3a 95
+background_color = #12161C 97
+border_color = #000000 0
+# 2: active task
+rounded = 3
 border_width = 1
-border_color = #00e5ff 40
-background = #10101a 80
+background_color = #1F252E 100
+border_color = #1E9E62 100
+# 3: inactive task
+rounded = 3
 border_width = 0
+background_color = #181D24 100
+border_color = #000000 0

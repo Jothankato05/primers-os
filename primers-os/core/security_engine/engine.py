@@ -9,6 +9,7 @@ import time
 import psutil
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
+from configs.settings import Settings
 from utils.logger import PrimersLogger
 
 
@@ -38,14 +39,18 @@ class SecurityEngine:
     Raises ThreatEvents when anomalies are detected.
     """
 
-    def __init__(self):
+    def __init__(self, settings: Optional[Settings] = None):
         self.logger = PrimersLogger.get_logger("security_engine")
+        self.settings = settings or Settings()
         self._running = False
+        self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
         self._events: List[ThreatEvent] = []
         self._process_history: Dict[int, dict] = {}
-        self._scan_interval = 10  # seconds
+        self._baseline_done = False
+        self._scan_interval = self.settings.SECURITY_SCAN_INTERVAL
+        self._max_events = self.settings.MAX_THREAT_LOGS
 
         # Thresholds
         self._cpu_spike_threshold = 90.0    # single process %
@@ -60,6 +65,7 @@ class SecurityEngine:
         if self._running:
             return
         self._running = True
+        self._stop.clear()
         self._thread = threading.Thread(
             target=self._scan_loop,
             daemon=True,
@@ -70,9 +76,26 @@ class SecurityEngine:
 
     def stop(self):
         self._running = False
+        self._stop.set()
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    def scan_once(self):
+        """Run one full process + network scan synchronously."""
+        self._scan_processes()
+        self._scan_network()
+
+    def unseen_count(self, since: float, min_level: str = "HIGH") -> int:
+        """Number of events at or above min_level raised after `since`."""
+        min_val = THREAT_LEVELS.get(min_level, 3)
+        with self._lock:
+            return sum(1 for e in self._events
+                       if e.timestamp > since and THREAT_LEVELS.get(e.level, 0) >= min_val)
 
     def get_events(self, min_level: str = "LOW", clear: bool = False) -> List[ThreatEvent]:
-        min_val = THREAT_LEVELS.get(min_level, 1)
+        min_val = THREAT_LEVELS.get(str(min_level).upper(), 1)
         with self._lock:
             filtered = [e for e in self._events if THREAT_LEVELS.get(e.level, 0) >= min_val]
             if clear:
@@ -93,7 +116,12 @@ class SecurityEngine:
     def scan_connections(self) -> List[dict]:
         """Return all active network connections with process info."""
         results = []
-        for conn in psutil.net_connections(kind="inet"):
+        try:
+            conns = psutil.net_connections(kind="inet")
+        except (psutil.AccessDenied, OSError) as e:
+            self.logger.warning(f"Cannot list connections: {e}")
+            return results
+        for conn in conns:
             entry = {
                 "pid": conn.pid,
                 "status": conn.status,
@@ -116,15 +144,13 @@ class SecurityEngine:
     def _scan_loop(self):
         while self._running:
             try:
-                self._scan_processes()
-                self._scan_network()
+                self.scan_once()
             except Exception as e:
                 self.logger.error(f"Security scan error: {e}")
-            time.sleep(self._scan_interval)
+            self._stop.wait(self._scan_interval)
 
     def _scan_processes(self):
-        for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent",
-                                          "status", "username", "cmdline"]):
+        for proc in psutil.process_iter(["pid", "name", "cpu_percent", "status"]):
             try:
                 info = proc.info
                 pid = info["pid"]
@@ -143,10 +169,12 @@ class SecurityEngine:
                         recommendation="Investigate or terminate if unexpected."
                     ))
 
-                # Track new processes (new since last scan)
+                # Track new processes. The first scan only records a baseline:
+                # everything already running at boot is not "new".
                 if pid not in self._process_history:
-                    self._process_history[pid] = info
-                    # New process notification (INFO level only)
+                    self._process_history[pid] = {"name": name}
+                    if not self._baseline_done:
+                        continue
                     self._raise_event(ThreatEvent(
                         timestamp=time.time(),
                         level="INFO",
@@ -164,6 +192,7 @@ class SecurityEngine:
         current_pids = set(psutil.pids())
         self._process_history = {pid: info for pid, info in self._process_history.items()
                                   if pid in current_pids}
+        self._baseline_done = True
 
     def _scan_network(self):
         try:
@@ -205,7 +234,7 @@ class SecurityEngine:
                         description=f"Process '{name}' (PID {pid}) has {count} open connections",
                         recommendation="Review if this is expected behaviour."
                     ))
-        except psutil.AccessDenied:
+        except (psutil.AccessDenied, OSError):
             pass
 
     def _raise_event(self, event: ThreatEvent):
@@ -217,9 +246,8 @@ class SecurityEngine:
                         (event.timestamp - existing.timestamp) < 60):
                     return
             self._events.append(event)
-            # Cap log at 1000 events
-            if len(self._events) > 1000:
-                self._events = self._events[-1000:]
+            if len(self._events) > self._max_events:
+                self._events = self._events[-self._max_events:]
 
         if event.level in ("HIGH", "CRITICAL"):
             self.logger.warning(f"[{event.level}] {event.description}")

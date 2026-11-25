@@ -1,0 +1,5 @@
+#!/bin/sh
+# PRIMERS OS Lab Mode: a shared, passwordless account wiped at every sign-out.
+#   sudo primers-lab enable | disable | reset      primers-lab status
+# -I: ignore PYTHON* variables and the user's site-packages (this runs as root)
+exec python3 -I /usr/share/primers/brain/primers_lab.py "$@"

@@ -1,36 +1,44 @@
 #!/bin/bash
-# PRIMERS OS Compatibility Launcher
-# Detects file type and launches with correct layer.
-FILE="$1"
+# PRIMERS OS Compatibility Launcher — runs Windows programs with Wine.
+set -euo pipefail
 
-if [ -z "$FILE" ]; then
-  echo "Usage: primers-compat <file>"
-  echo "Supported: .exe .msi (Windows via Wine)"
-  echo "           .app .dmg (macOS via Darling — install macos-compat module first)"
-  exit 1
+usage() {
+  echo "Usage: primers-compat <program.exe|installer.msi|script.bat>"
+  echo "       primers-compat --winecfg      configure Wine"
+  echo "       primers-compat --winetricks   install Windows runtimes (fonts, VC++…)"
+}
+
+[ $# -ge 1 ] || { usage; exit 1; }
+
+export WINEPREFIX="${WINEPREFIX:-$HOME/.wine}"
+export WINEDEBUG="${WINEDEBUG:--all}"
+
+case "$1" in
+  -h|--help) usage; exit 0 ;;
+  --winecfg) exec winecfg ;;
+  --winetricks) shift; exec winetricks "$@" ;;
+esac
+
+FILE="$1"; shift
+[ -e "$FILE" ] || { echo "[PRIMERS COMPAT] File not found: $FILE" >&2; exit 1; }
+
+if [ ! -d "$WINEPREFIX" ]; then
+  echo "[PRIMERS COMPAT] First run: preparing Windows environment in $WINEPREFIX…"
+  WINEARCH=win64 wineboot --init >/dev/null 2>&1 || true
 fi
 
 EXT="${FILE##*.}"
 EXT="${EXT,,}"
-
 case "$EXT" in
-  exe|msi|bat|com)
-    echo "[PRIMERS COMPAT] Launching Windows app: $FILE"
-    export WINEPREFIX="$HOME/.wine"
-    export WINEARCH=win64
-    wine "$FILE"
-    ;;
+  exe|com) exec wine "$FILE" "$@" ;;
+  msi)     exec wine msiexec /i "$FILE" "$@" ;;
+  bat|cmd) exec wine cmd /c "$FILE" "$@" ;;
+  lnk)     exec wine start "$FILE" "$@" ;;
   app|dmg)
-    if command -v darling &>/dev/null; then
-      echo "[PRIMERS COMPAT] Launching macOS app: $FILE"
-      darling "$FILE"
-    else
-      echo "[PRIMERS COMPAT] macOS compatibility not installed."
-      echo "Run: primers-install macos-compat"
-    fi
-    ;;
+    echo "[PRIMERS COMPAT] macOS applications are not supported yet." >&2
+    echo "See: primers-install macos-compat" >&2
+    exit 2 ;;
   *)
-    echo "[PRIMERS COMPAT] Unknown type '$EXT'. Attempting Wine..."
-    wine "$FILE"
-    ;;
+    echo "[PRIMERS COMPAT] '.$EXT' is not a Windows program." >&2
+    exit 2 ;;
 esac

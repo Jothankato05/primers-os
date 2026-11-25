@@ -1,21 +1,21 @@
 #!/bin/bash
-set -e
+# PRIMERS OS — PRIMERS brain checks
+# build.sh copies the brain to /usr/share/primers/brain; this hook
+# precompiles it and refuses to ship an image where it cannot start.
+set -euo pipefail
 
-# Install Python deps
-pip3 install --no-cache-dir psutil flask 2>/dev/null || \
-  apt-get install -y python3-psutil python3-flask
+BRAIN=/usr/share/primers/brain
+[ -f "$BRAIN/main.py" ] || { echo "[PRIMERS] brain missing at $BRAIN" >&2; exit 1; }
 
-# Copy brain files from build overlay
-mkdir -p /usr/share/primers/brain
-if [ -d /primers-brain ]; then
-  cp -r /primers-brain/. /usr/share/primers/brain/
-fi
+chmod 0755 /usr/bin/primers /usr/bin/primers-install /usr/bin/primers-compat
 
-# Set correct permissions
-chmod +x /usr/bin/primers /usr/bin/primers-install /usr/bin/primers-compat
+# Byte-compile with the image's own Python (catches syntax errors for 3.10)
+python3 -m compileall -q "$BRAIN"
 
-# Copy calamares branding
-mkdir -p /usr/share/calamares/branding/primers
-if [ -d /primers-installer ]; then
-  cp -r /primers-installer/. /usr/share/calamares/
-fi
+# Smoke test: the brain must boot and answer a command non-interactively
+HOME=/tmp/primers-smoke PRIMERS_DATA_DIR=/tmp/primers-smoke \
+  python3 "$BRAIN/main.py" --version
+HOME=/tmp/primers-smoke PRIMERS_DATA_DIR=/tmp/primers-smoke \
+  python3 "$BRAIN/main.py" -c "math 2^10" | grep -q "1,024"
+rm -rf /tmp/primers-smoke
+echo "[PRIMERS] brain smoke test passed"

@@ -1,4 +1,14 @@
+# PRIMERS OS session autostart (Openbox)
+# Standard folders (Documents, Downloads, Music...). Openbox can't run
+# /etc/xdg/autostart (it needs PyXDG), which keeps GNOME daemons out.
+xdg-user-dirs-update
 tint2 &
 pcmanfm --desktop &
 nm-applet &
-xterm -title "PRIMERS OS" -geometry 120x35 -bg "#0a0a0f" -fg "#c8c8e8" -e primers &
+blueman-applet &
+pasystray &
+lxpolkit &
+numlockx on &
+(sleep 2 && primers-terminal) &
+# Lab Mode: remind students that the shared lab account is wiped at sign-out
+[ -f /etc/primers/lab.conf ] && (sleep 3 && primers-lab notice) &

@@ -1,0 +1,23 @@
+#!/bin/sh
+# PRIMERS OS Data Saver — gate for background downloads.
+#
+# Exit 0 (go ahead) on unmetered or unknown networks, 1 (skip this run) when
+# NetworkManager says the connection is metered: mobile data, and phone
+# hotspots that announce themselves. Used as ExecCondition= for the daily
+# package-list refresh, automatic upgrades and firmware metadata refresh;
+# skipped runs happen on the next unmetered connection.
+#
+# To allow background downloads on metered networks:
+#   sudo mkdir -p /etc/primers && sudo touch /etc/primers/updates-on-metered
+
+[ -e /etc/primers/updates-on-metered ] && exit 0
+
+# org.freedesktop.NetworkManager.Metered: 0 unknown, 1 yes, 2 no, 3 guess-yes, 4 guess-no
+state=$(busctl get-property org.freedesktop.NetworkManager /org/freedesktop/NetworkManager \
+          org.freedesktop.NetworkManager Metered 2>/dev/null | awk '{print $2}')
+case "$state" in
+  1|3)
+    echo "PRIMERS Data Saver: metered connection — postponing background download until Wi-Fi/Ethernet"
+    exit 1 ;;
+esac
+exit 0

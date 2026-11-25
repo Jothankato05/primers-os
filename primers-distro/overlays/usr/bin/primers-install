@@ -1,55 +1,95 @@
 #!/bin/bash
-# PRIMERS OS Module Installer
-set -e
-REGISTRY="/usr/lib/primers/modules/module_registry.json"
+# PRIMERS OS Module Installer — installs curated bundles of apt packages.
+#   primers-install              list modules
+#   primers-install <module>     install a module (asks for your password)
+#   primers-install --info <m>   show what a module contains
+set -euo pipefail
 
-if [ ! -f "$REGISTRY" ]; then
-  echo "[ERROR] Module registry not found: $REGISTRY"
-  exit 1
-fi
+REGISTRY="${PRIMERS_MODULE_REGISTRY:-/usr/lib/primers/modules/module_registry.json}"
+[ -f "$REGISTRY" ] || { echo "[ERROR] Module registry not found: $REGISTRY" >&2; exit 1; }
 
-if [ -z "$1" ]; then
+list_modules() {
   echo ""
   echo "  ╔══════════════════════════════════════╗"
   echo "  ║   PRIMERS OS — Module Installer      ║"
   echo "  ╚══════════════════════════════════════╝"
   echo ""
-  python3 - "$REGISTRY" << 'PYEOF'
+  python3 - "$REGISTRY" <<'PYEOF'
 import json, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
+data = json.load(open(sys.argv[1]))
 for m in data["modules"]:
-    size = m.get("size_mb", "?")
     warn = "  ⚠" if m.get("warning") else ""
-    print(f"    {m['name']:<20} {m['description'][:45]}  ({size}MB){warn}")
+    print(f"    {m['name']:<14} {m['description'][:50]:<50} ~{m.get('size_mb', '?')}MB{warn}")
 print()
-print("  Usage:   primers-install <module_name>")
-print("  Example: primers-install gaming")
+print("  Usage:   primers-install <module>        e.g. primers-install gaming")
+print("           primers-install --info <module>")
 print()
 PYEOF
+}
+
+module_field() {
+  # module_field <module> <field>  → prints the field (lists one per line)
+  python3 - "$REGISTRY" "$1" "$2" <<'PYEOF'
+import json, sys
+data = json.load(open(sys.argv[1]))
+mod = next((m for m in data["modules"] if m["name"] == sys.argv[2]), None)
+if mod is None:
+    sys.exit(3)
+val = mod.get(sys.argv[3], "")
+if isinstance(val, list):
+    print("\n".join(val))
+elif val:
+    print(val)
+PYEOF
+}
+
+if [ $# -eq 0 ]; then list_modules; exit 0; fi
+
+if [ "$1" = "--info" ]; then
+  [ $# -ge 2 ] || { echo "Usage: primers-install --info <module>"; exit 1; }
+  module_field "$2" description >/dev/null 2>&1 || { echo "[ERROR] Unknown module: $2" >&2; exit 1; }
+  echo "  $2 — $(module_field "$2" description)"
+  echo "  Packages: $(module_field "$2" packages | tr '\n' ' ')"
+  notes="$(module_field "$2" notes)"; [ -n "$notes" ] && echo "  Notes: $notes"
   exit 0
 fi
 
 MODULE="$1"
+if ! module_field "$MODULE" name >/dev/null 2>&1; then
+  echo "  [ERROR] Module not found: $MODULE" >&2
+  echo "  Run 'primers-install' with no arguments to see available modules." >&2
+  exit 1
+fi
+
+# Re-run as root (keeps the module name, prompts for the user's password)
+if [ "$(id -u)" -ne 0 ]; then
+  exec sudo -- "$0" "$MODULE"
+fi
+
+warning="$(module_field "$MODULE" warning)"
+if [ -n "$warning" ]; then
+  echo "  ⚠  $warning"
+  read -r -p "  Continue? [y/N] " ans
+  case "$ans" in y|Y|yes|YES) ;; *) echo "  Cancelled."; exit 0 ;; esac
+fi
+
+mapfile -t PKGS < <(module_field "$MODULE" packages)
+mapfile -t I386 < <(module_field "$MODULE" needs_i386)
+
 echo ""
 echo "  [PRIMERS] Installing module: $MODULE"
-python3 - "$REGISTRY" "$MODULE" << 'PYEOF'
-import json, subprocess, sys
-with open(sys.argv[1]) as f:
-    data = json.load(f)
-mod = next((m for m in data["modules"] if m["name"] == sys.argv[2]), None)
-if not mod:
-    print(f"  [ERROR] Module not found: {sys.argv[2]}")
-    print(f"  Run 'primers-install' with no args to see available modules.")
-    sys.exit(1)
-if mod.get("warning"):
-    print(f"  ⚠  {mod['warning']}")
-    ans = input("  Continue? [y/N] ").strip().lower()
-    if ans != "y":
-        sys.exit(0)
-pkgs = " ".join(mod["packages"])
-subprocess.run(f"apt-get install -y {pkgs}", shell=True, check=True)
-if mod.get("post_install"):
-    subprocess.run(mod["post_install"], shell=True)
-print(f"\n  ✓ Module '{mod['name']}' installed successfully.")
-PYEOF
+if [ ${#I386[@]} -gt 0 ] && [ -n "${I386[0]}" ]; then
+  dpkg --add-architecture i386
+fi
+# The live image ships without package indexes to save space
+apt-get update
+if [ ${#PKGS[@]} -gt 0 ] && [ -n "${PKGS[0]}" ]; then
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -- "${PKGS[@]}"
+fi
+
+post="$(module_field "$MODULE" post_install)"
+if [ -n "$post" ]; then
+  bash -c "$post"
+fi
+echo ""
+echo "  ✓ Module '$MODULE' installed."

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Primers Lite Bee launcher
+HERE="$(dirname "$(readlink -f "$0")")"
+if [ -d "$HERE/litebee" ]; then
+  export PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}"
+else
+  export PYTHONPATH="/usr/share/primers/lite-bee${PYTHONPATH:+:$PYTHONPATH}"
+fi
+exec python3 -m litebee "$@"

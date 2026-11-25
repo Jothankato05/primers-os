@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Run with PRIMERS Compat (Wine)
+Comment=Run a Windows program
+Exec=primers-compat %f
+Icon=wine
+Terminal=false
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-msdos-program;application/x-msdownload;application/x-msi;application/x-ms-shortcut;application/x-bat;
+Categories=System;Emulator;

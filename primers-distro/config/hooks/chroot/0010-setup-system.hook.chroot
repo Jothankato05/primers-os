@@ -1,0 +1,92 @@
+#!/bin/bash
+# PRIMERS OS — base system identity
+#
+# The live user is NOT created here. casper creates it at boot from
+# /etc/casper.conf, so it only exists in the live session and never ends up
+# on installed machines (which get the user chosen in the installer).
+set -euo pipefail
+
+# ── OS identity that survives Ubuntu updates ────────────────
+# os-release and the login banners belong to Ubuntu's base-files package;
+# divert them so a base-files update can't rename the system back to
+# Ubuntu. lsb-release stays Ubuntu's: add-apt-repository and other tools
+# rely on it to find the Ubuntu release.
+divert() {
+  if ! dpkg-divert --list "$1" | grep -q .; then
+    dpkg-divert --quiet --local --rename --divert "$1.ubuntu" --add "$1"
+  fi
+}
+divert /usr/lib/os-release
+install -m 0644 /usr/share/primers/os-release /usr/lib/os-release
+ln -sf ../usr/lib/os-release /etc/os-release
+divert /etc/issue
+divert /etc/issue.net
+printf 'PRIMERS OS 1.0 Genesis \\n \\l\n\n' > /etc/issue
+printf 'PRIMERS OS 1.0 Genesis\n' > /etc/issue.net
+
+# Console/SSH login message: PRIMERS, not Ubuntu, and no Ubuntu Pro adverts.
+# The Ubuntu scripts are diverted out of /etc/update-motd.d so run-parts
+# can't find them, and package updates can't bring them back.
+install -d /usr/lib/primers/diverted
+for f in 00-header 10-help-text 91-contract-ua-esm-status; do
+  if ! dpkg-divert --list "/etc/update-motd.d/$f" | grep -q .; then
+    dpkg-divert --quiet --local --rename --divert "/usr/lib/primers/diverted/motd-$f" \
+      --add "/etc/update-motd.d/$f"
+  fi
+done
+cat > /etc/update-motd.d/00-header <<'EOF'
+#!/bin/sh
+printf "Welcome to PRIMERS OS 1.0 Genesis (%s %s %s)\n" "$(uname -o)" "$(uname -r)" "$(uname -m)"
+EOF
+chmod 0755 /etc/update-motd.d/00-header
+divert /etc/legal
+cat > /etc/legal <<'EOF'
+
+PRIMERS OS is built on Ubuntu. Its programs are free software; the exact
+distribution terms for each program are described in the individual files
+in /usr/share/doc/*/copyright.
+
+PRIMERS OS comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
+applicable law.
+
+EOF
+
+echo "primers-os" > /etc/hostname
+cat > /etc/hosts <<'EOF'
+127.0.0.1   localhost
+127.0.1.1   primers-os
+::1         localhost ip6-localhost ip6-loopback
+ff02::1     ip6-allnodes
+ff02::2     ip6-allrouters
+EOF
+
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+echo "UTC" > /etc/timezone
+
+# Locale
+sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen en_US.UTF-8
+update-locale LANG=en_US.UTF-8
+
+# System-wide PRIMERS directories (per-user data lives in ~/.local/share/primers)
+install -d -m 0755 /var/lib/primers /usr/lib/primers
+
+# Firewall on by default: deny incoming, allow outgoing
+if command -v ufw >/dev/null 2>&1; then
+  sed -i 's/^ENABLED=.*/ENABLED=yes/' /etc/ufw/ufw.conf
+fi
+
+# Networking: NetworkManager manages every interface, wired included.
+# Ubuntu's network-manager package leaves wired devices unmanaged unless the
+# distribution overrides it (as Ubuntu Desktop does) — without this, Ethernet
+# never comes up.
+install -d /etc/NetworkManager/conf.d /etc/netplan
+: > /etc/NetworkManager/conf.d/10-globally-managed-devices.conf
+rm -f /etc/NetworkManager/conf.d/10-primers-managed.conf
+cat > /etc/netplan/01-network-manager-all.yaml <<'EOF'
+# Let NetworkManager manage all devices on this system
+network:
+  version: 2
+  renderer: NetworkManager
+EOF
+chmod 600 /etc/netplan/01-network-manager-all.yaml

@@ -1,0 +1,4 @@
+#!/bin/sh
+# PRIMERS OS Study Mode: focus timer that pauses distracting sites in Lite Bee.
+#   primers-study start [MINUTES] | stop | status
+exec python3 -I /usr/share/primers/brain/primers_study.py "$@"

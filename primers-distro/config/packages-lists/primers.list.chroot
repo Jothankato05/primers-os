@@ -1,11 +1,23 @@
+# PRIMERS OS — compatibility, gaming and media stack
+
+# ── Windows applications (Wine) ─────────────────────────────
 wine
 wine64
+wine32:i386
 winetricks
 winbind
+cabextract
+
+# ── Gaming ──────────────────────────────────────────────────
 lutris
 gamemode
 mangohud
 mesa-vulkan-drivers
+mesa-vulkan-drivers:i386
 libvulkan1
+libvulkan1:i386
+libgl1-mesa-dri:i386
+
+# ── Media ───────────────────────────────────────────────────
 vlc
 obs-studio

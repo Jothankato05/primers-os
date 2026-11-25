@@ -1,3 +1,112 @@
+# Changelog
+
+## [1.0.0-genesis] — 2026-11-24
+
+### Distribution
+- **New ISO builder** (`primers-distro/build.sh`): debootstrap → chroot →
+  squashfs → hybrid BIOS/UEFI ISO, in resumable stages. Replaces live-build,
+  whose Ubuntu 22.04 version (3.0) could not build jammy images — the cause
+  of every failed CI build (see docs/decisions/0001).
+- Fixed package names for Ubuntu 22.04 (`linux-firmware`, HWE kernel, real
+  Firefox .deb from Mozilla's repository instead of the snap stub), 32-bit
+  Wine, Vulkan and Mesa, `tools/check-packages.py` to validate them.
+- Live user is created by casper at boot; installed systems no longer ship a
+  `primers:primers` account with passwordless sudo.
+- CPU vulnerability mitigations are back on (`mitigations=off` removed);
+  performance governor only on AC power; firewall enabled by default.
+- Complete Calamares installer configuration (unpack, partitioning incl.
+  encryption, users, LightDM autologin choice, GRUB on BIOS/UEFI with
+  Ubuntu's signed shim), branding and slideshow.
+- Official Primers OS logo pack (branding/primers-os-logo) applied across
+  the OS: wallpaper, icons, GRUB menu, LightDM, installer, panel and
+  terminals in Night Ink / Chalk with Ready Green for states; the boot
+  splash shows the mark with its blinking cursor. The GRUB theme boots
+  without the GRUB 2.12 "null src bitmap" stop.
+- Live USB boots with Secure Boot on: the ISO now uses Ubuntu's signed boot
+  chain (Microsoft-signed shim → Canonical-signed GRUB → signed kernel) for
+  UEFI, a GRUB 2.06 core from the image for BIOS, and an EFI partition for
+  USB sticks. The build host no longer needs any GRUB packages.
+- OS identity survives Ubuntu updates: os-release and the login banners are
+  diverted from base-files, so updates can't rename the system to Ubuntu.
+- Data Saver for system updates: package-list refresh, automatic upgrades
+  and firmware refresh wait for an unmetered connection (mobile data and
+  phone hotspots are skipped); `datasaver` command in the Brain.
+- **Lab Mode** for shared computers: `sudo primers-lab enable` adds a
+  passwordless, non-admin `lab` account whose home folder is wiped and
+  rebuilt from a template at every sign-in, sign-out and boot (also its
+  temp files, crontab, mail and private Wi-Fi profiles). Refuses to touch
+  any account it didn't create; fails closed. `lab` command in the Brain,
+  sign-in notice for students. Passwordless sign-in is only granted at
+  boot, once LightDM has loaded the wipe hooks.
+- **Study Mode**: `study 25` (or `primers-study`, or the desktop menu)
+  starts a focus timer; Primers Lite Bee pauses social media, video, games
+  and betting sites until it ends (before any data is spent on typed or
+  clicked links), the panel counts down and a notice marks the break.
+- **Exam Mode** (`sudo primers-exam start URL [--allow HOST]`): on top of
+  Lab Mode, the shared account opens only the exam site in a full-screen
+  Lite Bee kiosk (no address bar, downloads, files, printing, dev tools or
+  other programs; "Finish exam" signs out), an nftables table limits that
+  account to the exam servers, USB drives are blocked and activity is
+  logged (`primers-exam log`). Fails closed if the firewall can't be set.
+- **Exam Mode escape routes closed** (ADR 0003): text consoles, Ctrl+Alt+
+  Backspace and Magic SysRq off; no shell, sudo, su or pkexec for the lab
+  account (all polkit actions denied); kiosk filters browser shortcuts and
+  blocks developer tools, view-source/file/data pages, printing,
+  downloads, drag and drop and screen capture; clipboard cleared each
+  session; a crashed kiosk ends the session; no DNS for the lab account
+  (exam servers pinned in /etc/hosts); autologin suspended during exams;
+  exam timer immune to clock changes. VM test suite runs in the ISO build.
+- Release workflow: SHA256SUMS signed with Sigstore (keyless), RC tags as
+  pre-releases, final tags only as drafts, required release notes.
+- The GNOME session stack (gdm3, gnome-shell, gnome-session) is no longer
+  pulled into the image: Openbox is the only login session.
+- `benchmark` in the Brain measures boot-to-login time, RAM and disk
+  against the PRIMERS design targets (2 GB RAM, < 600 MB idle, < 15 s boot
+  on SSD / 30 s on HDD, < 8 GB install) and saves a JSON report with
+  hardware facts only, for collecting pilot proof points.
+- Console logins say PRIMERS OS instead of Ubuntu and no longer show
+  Ubuntu Pro adverts.
+- Wired Ethernet now works: NetworkManager manages every device (Ubuntu's
+  package leaves wired interfaces unmanaged unless the distro overrides it).
+- Desktop: launcher bar, right-click and Super+Space menus, media keys,
+  polkit agent, Bluetooth/volume tray, dark GTK theme, `primers-terminal`.
+- `primers-install`: escalates with sudo, refreshes package indexes, module
+  registry fixed for Ubuntu 22.04 (Steam, voice module, accurate contents).
+- `primers-compat`: .exe/.msi/.bat handling, first-run Wine prefix, winecfg.
+
+### Primers Lite Bee (new)
+- Our own browser (GTK UI on the system WebKit engine) and the new default:
+  Auto/Full/Lite/Ultra data modes chosen from NetworkManager/ModemManager
+  (Wi-Fi, LTE, 3G, 2G, metered hotspots), engine-level blocking of ads,
+  trackers, fonts, media and (Ultra) images, data meter with optional naira
+  cost, offline saving, reader mode, crash-safe session restore, Lite Bee
+  logo and icons. Ultra mode cut a 1.16 MB test page to 735 bytes.
+
+### PRIMERS Brain
+- Fixed: shell failed to start on Python 3.10/3.11 (3.12-only f-string), so
+  the Brain never ran on the OS; `learn stats` / `learn suggest` crashes;
+  resource alerts never fired (missing settings); plugin system and tab
+  completion broken; dashboard `/api/status` always failed; voice import
+  crashed boot when SpeechRecognition was missing; `kill process 42` was
+  parsed with "process" as the PID; ordinary sentences like "how do I run
+  tests" launched programs.
+- Security: AST-based math evaluator instead of `eval`; dashboard bound to
+  localhost with Host-header check, CSP and no HTML injection; protected
+  PIDs; voice limited to read-only commands; private (0700/0600) per-user
+  data directory; untrusted user plugins skipped.
+- New: `advise` (prioritised recommendations), one-shot mode
+  (`primers status`, `-c`), alert badge in the prompt, "did you mean"
+  suggestions, `modules`, `plugins`, `gui stop/open`, user plugin directory,
+  port exposure (local vs network) in `cyber report`.
+- Ask Primers: the Primers knowledge base ships with the OS and answers
+  offline (`ask`, or just ask a question) — emergencies first, glossary,
+  FAQ, quoted sections, never invented; `[VERIFY]` items marked unconfirmed.
+- `browse` opens Primers Lite Bee.
+- 131 Brain tests + 41 Lite Bee tests; CI on Python 3.10 and 3.12 and a real
+  WebKit smoke test for Lite Bee.
+
+---
+
 ### Update 0
 - Automated system maintenance at 2025-10-09T19:23:30
 

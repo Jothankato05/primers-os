@@ -5,65 +5,190 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      prerelease_tag:
+        description: "Publish a PRE-release with this tag (e.g. v1.0.0-rc2), built from the selected branch. Empty: build and test only."
+        required: false
+        default: ""
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 150
     permissions:
       contents: write
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      id-token: write     # Sigstore keyless signing of SHA256SUMS (no key stored anywhere)
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Release tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.prerelease_tag }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            tag="$GITHUB_REF_NAME"
+          elif [ -n "$INPUT_TAG" ]; then
+            # A run started by hand may only publish a pre-release (v1.2.3-something)
+            if ! printf '%s' "$INPUT_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$'; then
+              echo "::error::'$INPUT_TAG' is not a pre-release tag like v1.0.0-rc2; final releases are tagged by hand"
+              exit 1
+            fi
+            tag="$INPUT_TAG"
+          else
+            tag=""
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release tag: ${tag:-none (build only)}"
+
+      - name: Free disk space (the build needs ~15 GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y live-build squashfs-tools xorriso \
-            grub-pc-bin grub-efi-amd64-bin mtools isolinux syslinux \
-            syslinux-common debootstrap
+          sudo apt-get install -y debootstrap squashfs-tools xorriso mtools gnupg curl
+
+      - name: Check package names
+        run: python3 primers-distro/tools/check-packages.py
 
       - name: Build ISO
-        run: |
-          cd primers-distro
-          chmod +x build.sh clean.sh auto/config auto/build auto/clean
-          sudo bash build.sh
+        run: sudo PRIMERS_WORK_DIR=/mnt/primers-work ./primers-distro/build.sh
 
-      - name: Find ISO file
-        id: find_iso
+      - name: Enable KVM for the VM tests
         run: |
-          ISO_FILE=$(ls primers-distro/*.iso | head -n 1)
-          echo "iso_file=$ISO_FILE" >> $GITHUB_ENV
-          echo "iso_name=$(basename $ISO_FILE)" >> $GITHUB_ENV
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get install -y qemu-system-x86 ovmf python3-pil
+          ls -l /dev/kvm
 
-      - name: Upload ISO Artifact
+      - name: VM tests (the image itself, booted; a failure stops the release)
+        timeout-minutes: 60
+        run: |
+          iso=$(ls primers-distro/*.iso | head -n1)
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape
+
+      - name: Upload VM test results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.iso_name }}
-          path: ${{ env.iso_file }}
+          name: vm-test-results
+          path: vm-results/
+          retention-days: 30
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+      - name: Checksums (SHA256SUMS)
+        id: files
+        working-directory: primers-distro
+        run: |
+          ISO=$(ls *.iso | head -n1)
+          SIZE=$(stat -c %s "$ISO")
+          echo "iso=$ISO" >> "$GITHUB_OUTPUT"
+          echo "ISO size: $SIZE bytes"
+          files=("$ISO")
+          # GitHub release assets are limited to 2 GiB per file
+          if [ "$SIZE" -ge 2000000000 ]; then
+            split -b 1900M -d -a 1 "$ISO" "$ISO.part"
+            files+=("$ISO".part*)
+            echo "split=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "split=false" >> "$GITHUB_OUTPUT"
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Sign SHA256SUMS (Sigstore keyless, this workflow's GitHub identity)
+        working-directory: primers-distro
+        run: |
+          cosign sign-blob --yes --output-signature SHA256SUMS.sig --output-certificate SHA256SUMS.pem SHA256SUMS
+          # Check the signature the way users will, before anything is published
+          cosign verify-blob SHA256SUMS --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/build-iso.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: ${{ env.iso_file }}
-          tag_name: "v1.0.0-genesis"
-          name: "PRIMERS OS 1.0 Genesis"
-          body: |
-            ## PRIMERS OS 1.0 Genesis
-            
-            This is the official build of PRIMERS OS 1.0 Genesis.
-            
-            **Features:**
-            - Base: Ubuntu 22.04 LTS
-            - Desktop: Openbox + tint2
-            - Included Modules: PRIMERS Brain, AI Engine
-            
-            **Installation:**
-            1. Flash this ISO to a USB drive using Rufus or BalenaEtcher.
-            2. Boot from the USB drive.
-            3. Follow the on-screen installer (Calamares).
+          name: ${{ steps.files.outputs.iso }}
+          path: |
+            primers-distro/*.iso
+            primers-distro/SHA256SUMS*
+          compression-level: 0
+          retention-days: 14
+
+      - name: Release notes
+        if: steps.tag.outputs.tag != ''
+        env:
+          ISO: ${{ steps.files.outputs.iso }}
+          SPLIT: ${{ steps.files.outputs.split }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          notes="docs/releases/${TAG}.md"
+          if [ ! -f "$notes" ]; then
+            echo "::error::$notes is missing: every release needs notes saying what is tested and what isn't"
+            exit 1
+          fi
+          {
+            cat "$notes"
+            echo
+            echo "## Download and verify"
+            echo
+            if [ "$SPLIT" = "true" ]; then
+              echo "The ISO is larger than GitHub's 2 GiB asset limit, so it is split into parts. Download every part plus \`SHA256SUMS\`, \`SHA256SUMS.sig\` and \`SHA256SUMS.pem\`, then join them:"
+              echo
+              echo '```bash'
+              echo "cat $ISO.part* > $ISO"
+              echo '```'
+              echo
+            fi
+            echo "Check the checksums file was signed by this repository's release workflow ([cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):"
+            echo
+            echo '```bash'
+            echo "cosign verify-blob SHA256SUMS --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \\"
+            echo "  --certificate-identity https://github.com/${GITHUB_REPOSITORY}/.github/workflows/build-iso.yml@${GITHUB_REF} \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
+            echo
+            echo "Then check the ISO:"
+            echo
+            echo '```bash'
+            echo "sha256sum -c SHA256SUMS --ignore-missing"
+            echo '```'
+            echo
+            echo "Built from commit \`${GITHUB_SHA}\`."
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create release
+        if: steps.tag.outputs.tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          # When started by hand, the tag is created on the exact commit built here
+          target_commitish: ${{ github.sha }}
+          name: "PRIMERS OS ${{ steps.tag.outputs.tag }}"
+          body_path: release-notes.md
+          # Tags with a suffix (v1.0.0-rc1) are pre-releases. A final tag only
+          # makes a draft: publishing a final release is a deliberate, manual step.
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
+          draft: ${{ !contains(steps.tag.outputs.tag, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.files.outputs.split == 'true' && format('primers-distro/{0}.part*', steps.files.outputs.iso) || format('primers-distro/{0}', steps.files.outputs.iso) }}
+            primers-distro/SHA256SUMS
+            primers-distro/SHA256SUMS.sig
+            primers-distro/SHA256SUMS.pem
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

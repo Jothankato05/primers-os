@@ -1,4 +1,4 @@
-psutil
-flask
-SpeechRecognition
-pyaudio
+psutil>=5.9
+flask>=2.0
+# Optional: voice commands (also needs a microphone and PyAudio)
+# SpeechRecognition>=3.10

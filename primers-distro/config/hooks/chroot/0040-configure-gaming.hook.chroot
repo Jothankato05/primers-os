@@ -1,32 +1,37 @@
 #!/bin/bash
-set -e
+# PRIMERS OS — gaming and responsiveness tuning
+set -euo pipefail
 
-# Performance sysctl tuning
-cat > /etc/sysctl.d/99-primers-perf.conf << 'EOF'
+cat > /etc/sysctl.d/99-primers-perf.conf <<'EOF'
+# PRIMERS OS performance tuning
 vm.swappiness=10
 vm.dirty_ratio=10
 vm.dirty_background_ratio=5
-kernel.sched_migration_cost_ns=5000000
-net.core.somaxconn=65535
+# Many modern games (and Proton) need far more memory maps than the default
+vm.max_map_count=2147483642
+net.core.somaxconn=4096
 EOF
 
-# ZRAM swap — saves RAM for apps, better than disk swap
-apt-get install -y zram-tools 2>/dev/null || true
-cat > /etc/default/zramswap << 'EOF'
+# Compressed RAM swap — better than disk swap on low-memory machines
+cat > /etc/default/zramswap <<'EOF'
 ALGO=zstd
 PERCENT=25
 PRIORITY=100
 EOF
 
-# Lutris default config
-mkdir -p /etc/skel/.config/lutris
-cat > /etc/skel/.config/lutris/lutris.conf << 'EOF'
-[lutris]
-disable_runtime=false
-prefer_system_libs=false
-
-[runner-options]
-Enable DXVK=true
-Enable ESYNC=true
-Enable GameMode=true
+# Lutris defaults: GameMode on, DXVK and esync for Wine games
+install -d /etc/skel/.config/lutris/runners
+cat > /etc/skel/.config/lutris/system.yml <<'EOF'
+system:
+  gamemode: true
 EOF
+cat > /etc/skel/.config/lutris/runners/wine.yml <<'EOF'
+wine:
+  dxvk: true
+  esync: true
+EOF
+
+# Raise the open-file limit so esync works out of the box
+install -d /etc/systemd/system.conf.d /etc/systemd/user.conf.d
+printf '[Manager]\nDefaultLimitNOFILE=1048576\n' > /etc/systemd/system.conf.d/90-primers-nofile.conf
+printf '[Manager]\nDefaultLimitNOFILE=1048576\n' > /etc/systemd/user.conf.d/90-primers-nofile.conf

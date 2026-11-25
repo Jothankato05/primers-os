@@ -1,49 +1,64 @@
 {
-  "version": "1.0",
+  "version": "1.1",
+  "base": "ubuntu-22.04",
   "modules": [
     {
       "name": "devtools",
-      "description": "Python, Node, Rust, Docker, VS Code",
+      "description": "Python, Node.js, C/C++ toolchain, Docker, VS Code-ready",
       "size_mb": 1200,
-      "packages": ["python3-dev","python3-pip","python3-venv","nodejs","npm","build-essential","cmake","gcc","g++","git","docker.io","docker-compose"]
+      "packages": ["python3-dev", "python3-pip", "python3-venv", "nodejs", "npm", "build-essential",
+                   "cmake", "gdb", "git", "docker.io", "docker-compose"],
+      "post_install": "for u in $(getent group sudo | cut -d: -f4 | tr ',' ' '); do usermod -aG docker \"$u\"; done; echo 'Log out and back in to use Docker without sudo.'"
     },
     {
       "name": "creative",
-      "description": "GIMP, Inkscape, Blender, OBS, Kdenlive",
+      "description": "GIMP, Inkscape, Blender, Kdenlive, Audacity, darktable",
       "size_mb": 1800,
-      "packages": ["gimp","inkscape","blender","kdenlive","obs-studio","audacity","darktable"]
+      "packages": ["gimp", "inkscape", "blender", "kdenlive", "audacity", "darktable"]
     },
     {
       "name": "gaming",
-      "description": "Steam, Lutris, Heroic, MangoHUD, Discord",
+      "description": "Steam, gamepad support, extra Vulkan/32-bit drivers",
       "size_mb": 900,
-      "packages": ["steam","lutris","gamemode","mangohud","discord","mumble"]
+      "needs_i386": "yes",
+      "packages": ["steam-installer", "steam-devices", "mesa-utils", "vulkan-tools",
+                   "libgl1-mesa-dri:i386", "mesa-vulkan-drivers:i386"],
+      "notes": "Lutris, GameMode, MangoHud and Wine are already part of PRIMERS OS."
     },
     {
       "name": "cyber",
-      "description": "nmap, Wireshark, Metasploit, Burp Suite",
+      "description": "nmap, Wireshark, tcpdump, aircrack-ng, John, Hydra, sqlmap",
       "size_mb": 1100,
-      "packages": ["nmap","wireshark","tcpdump","aircrack-ng","john","hydra","sqlmap","nikto","gobuster"],
-      "warning": "Use only on systems you own or have explicit permission to test."
+      "packages": ["nmap", "wireshark", "tcpdump", "aircrack-ng", "john", "hydra", "sqlmap", "nikto", "gobuster"],
+      "warning": "Use these tools only on systems you own or have explicit written permission to test."
     },
     {
       "name": "ai-ml",
-      "description": "PyTorch, TensorFlow, Jupyter, scikit-learn",
+      "description": "Jupyter, NumPy, pandas, scikit-learn, Matplotlib, PyTorch",
       "size_mb": 3500,
-      "packages": ["jupyter-notebook","python3-sklearn","python3-pandas","python3-numpy","python3-matplotlib","python3-scipy"]
+      "packages": ["jupyter-notebook", "python3-sklearn", "python3-pandas", "python3-numpy",
+                   "python3-matplotlib", "python3-scipy", "python3-torch"]
     },
     {
       "name": "office",
-      "description": "LibreOffice, Thunderbird, document tools",
+      "description": "LibreOffice, Thunderbird, PDF viewer, printing",
       "size_mb": 700,
-      "packages": ["libreoffice","thunderbird","evince","gedit"]
+      "packages": ["libreoffice", "thunderbird", "evince", "cups", "system-config-printer"]
+    },
+    {
+      "name": "voice",
+      "description": "Voice commands for the PRIMERS Brain (microphone support)",
+      "size_mb": 60,
+      "packages": ["python3-pyaudio", "flac", "python3-pip"],
+      "post_install": "pip3 install --no-cache-dir 'SpeechRecognition>=3.10,<4'"
     },
     {
       "name": "macos-compat",
-      "description": "macOS app compatibility via Darling (experimental)",
-      "size_mb": 2200,
-      "packages": ["darling"],
-      "post_install": "echo 'Darling installed. Run macOS apps with: primers-compat <app>'"
+      "description": "macOS app compatibility (Darling) — experimental, manual",
+      "size_mb": 0,
+      "packages": [],
+      "notes": "Darling is not packaged for Ubuntu 22.04. See https://docs.darlinghq.org/build-instructions.html — it runs command-line macOS tools only.",
+      "post_install": "echo 'Darling must be built from source: https://docs.darlinghq.org/build-instructions.html'"
     }
   ]
 }

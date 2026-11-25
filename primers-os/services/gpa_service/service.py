@@ -1,6 +1,8 @@
 import json
 import os
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+from utils import paths
 from utils.logger import PrimersLogger
 
 class GPAService:
@@ -14,18 +16,24 @@ class GPAService:
         "C+": 2.3, "C": 2.0, "C-": 1.7, "D+": 1.3, "D": 1.0, "F": 0.0
     }
 
-    def __init__(self):
+    def __init__(self, data_path: Optional[str] = None):
         self.logger = PrimersLogger.get_logger("gpa_service")
-        # Ensure the path is correct relative to the primers-os directory
-        self.data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs", "gpa_data.json")
+        self.data_path = data_path or paths.data_file("gpa_data.json")
         self.courses = []
         self.load()
 
     def add_course(self, name: str, credit_hours: float, grade: str, semester: str) -> dict:
-        grade = grade.upper()
+        grade = (grade or "").strip().upper()
         if grade not in self.GRADE_SCALE:
-            self.logger.error(f"Invalid grade: {grade}")
-            return {"ok": False, "error": f"Invalid grade: {grade}"}
+            return {"ok": False, "error": f"Invalid grade: {grade} (use {', '.join(self.GRADE_SCALE)})"}
+        try:
+            credit_hours = float(credit_hours)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Credit hours must be a number"}
+        if not 0 < credit_hours <= 30:
+            return {"ok": False, "error": "Credit hours must be between 0 and 30"}
+        if not name or not str(name).strip() or not semester or not str(semester).strip():
+            return {"ok": False, "error": "Course name and semester are required"}
         
         course = {
             "name": name,
@@ -70,7 +78,7 @@ class GPAService:
             }
         
         semesters_data = {}
-        all_semesters = set(c["semester"] for c in self.courses)
+        all_semesters = sorted(set(c["semester"] for c in self.courses))
         
         for sem in all_semesters:
             sem_courses = [c for c in self.courses if c["semester"] == sem]
@@ -99,10 +107,8 @@ class GPAService:
 
     def save(self) -> None:
         try:
-            os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
-            with open(self.data_path, 'w') as f:
-                json.dump({"courses": self.courses}, f, indent=4)
-        except Exception as e:
+            paths.write_private(self.data_path, json.dumps({"courses": self.courses}, indent=4))
+        except OSError as e:
             self.logger.error(f"Failed to save GPA data: {e}")
 
     def load(self) -> None:
@@ -110,8 +116,9 @@ class GPAService:
             try:
                 with open(self.data_path, 'r') as f:
                     data = json.load(f)
-                    self.courses = data.get("courses", [])
-            except Exception as e:
+                    self.courses = [c for c in data.get("courses", [])
+                                    if isinstance(c, dict) and c.get("grade") in self.GRADE_SCALE]
+            except (OSError, json.JSONDecodeError, AttributeError) as e:
                 self.logger.error(f"Failed to load GPA data: {e}")
                 self.courses = []
 

@@ -1,356 +1,335 @@
-import sys
-import os
-import time
-import threading
-from datetime import datetime
-from flask import Flask, jsonify, render_template_string
+"""
+PRIMERS OS — Web Dashboard
 
-# Ensure project root is in path for imports
+A small read-only Flask app showing live system metrics. It listens on
+127.0.0.1 by default and rejects requests whose Host header is not local,
+so web pages in the user's browser cannot read it via DNS rebinding.
+"""
+
+import os
+import sys
+import threading
+from typing import Optional
+
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from core.system_monitor.monitor import SystemMonitor
-from core.process_manager.manager import ProcessManager
-from core.security_engine.engine import SecurityEngine
-from core.kernel_interface.interface import KernelInterface
-from services.gpa_service.service import GPAService
-from utils.logger import PrimersLogger
+from configs.settings import Settings  # noqa: E402
+from utils.logger import PrimersLogger  # noqa: E402
 
-app = Flask(__name__)
 logger = PrimersLogger.get_logger("gui_dashboard")
 
-# Global instances (initialized in main block or via start_gui)
-monitor = None
-manager = None
-security = None
-kernel = None
-gpa_service = None
+try:
+    from flask import Flask, abort, jsonify, request
+    from werkzeug.serving import make_server
+    FLASK_AVAILABLE = True
+    FLASK_ERROR = ""
+except ImportError as _e:  # pragma: no cover - depends on the host
+    FLASK_AVAILABLE = False
+    FLASK_ERROR = str(_e)
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "[::1]", "::1"}
+
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRIMERS OS — Dashboard</title>
-    <style>
-        :root {
-            --bg: #0d0d0d;
-            --panel: #1a1a1a;
-            --accent: #00e5ff;
-            --text: #e0e0e0;
-            --warn: #ffcc00;
-            --danger: #ff4444;
-            --success: #00ff88;
-            --dim: #888888;
-        }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 20px;
-        }
-        h1, h2, h3 { margin: 0; }
-        .monospace { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }
-        
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid var(--accent);
-            padding-bottom: 15px;
-            margin-bottom: 25px;
-        }
-        header h1 { color: var(--accent); font-size: 1.8rem; letter-spacing: 2px; }
-        #live-clock { color: var(--dim); font-size: 1.1rem; }
-
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-        .card {
-            background: var(--panel);
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .card h3 { color: var(--dim); font-size: 0.9rem; text-transform: uppercase; margin-bottom: 10px; }
-        .card .value { font-size: 2.2rem; font-weight: bold; color: var(--accent); }
-
-        .main-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 20px;
-        }
-        .panel {
-            background: var(--panel);
-            border: 1px solid #333;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .panel h2 { color: var(--accent); font-size: 1.2rem; margin-bottom: 15px; border-left: 4px solid var(--accent); padding-left: 10px; }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; padding: 10px; border-bottom: 1px solid #444; color: var(--dim); font-size: 0.8rem; text-transform: uppercase; }
-        td { padding: 10px; border-bottom: 1px solid #333; font-size: 0.9rem; }
-        
-        .badge {
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .badge-low { background: #333; color: var(--success); }
-        .badge-medium { background: #443300; color: var(--warn); }
-        .badge-high { background: #440000; color: var(--danger); }
-        .badge-critical { background: var(--danger); color: white; animation: pulse 1s infinite; }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .network-stats { display: flex; flex-wrap: wrap; gap: 10px; }
-        .net-tag { background: #222; padding: 5px 10px; border-radius: 4px; border: 1px solid #444; font-size: 0.85rem; }
-        .net-tag span { color: var(--accent); font-weight: bold; }
-
-        footer {
-            margin-top: 30px;
-            text-align: center;
-            color: var(--dim);
-            font-size: 0.8rem;
-            border-top: 1px solid #333;
-            padding-top: 15px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Primers OS Dashboard</title>
+<style>
+  :root {
+    /* Primers OS brand: Night Ink, Chalk; Ready Green for states only */
+    --bg: #12161C; --panel: #1A1F27; --accent: #F5F2EA; --text: #F5F2EA;
+    --warn: #E8B339; --danger: #E5534B; --success: #1E9E62; --dim: #8A909A; --line: #2A313B;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Noto Sans', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text);
+         margin: 0; padding: 20px; }
+  h1, h2, h3 { margin: 0; }
+  .mono { font-family: 'Noto Sans Mono', 'Consolas', monospace; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+           border-bottom: 1px solid var(--line); padding-bottom: 15px; margin-bottom: 25px; flex-wrap: wrap; }
+  header h1 { color: var(--accent); font-size: 1.4rem; display: flex; align-items: center; gap: 12px; }
+  header h1 svg { width: 32px; height: 32px; }
+  header small { font-size: .8rem; color: var(--dim); }
+  #clock { color: var(--dim); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 25px; }
+  .card, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+  .card { text-align: center; }
+  .card h3 { color: var(--dim); font-size: .8rem; text-transform: uppercase; margin-bottom: 8px; }
+  .card .value { font-size: 2rem; font-weight: bold; color: var(--accent); }
+  .card .value.small { font-size: 1.1rem; padding-top: 10px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .side { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .panel h2 { color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; border-left: 4px solid var(--success); padding-left: 10px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 8px; border-bottom: 1px solid #444; color: var(--dim); font-size: .75rem; text-transform: uppercase; }
+  td { padding: 8px; border-bottom: 1px solid var(--line); font-size: .9rem; word-break: break-all; }
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: .7rem; font-weight: bold; margin-right: 6px; }
+  .badge-info, .badge-low { background: #333; color: var(--success); }
+  .badge-medium { background: #443300; color: var(--warn); }
+  .badge-high { background: #440000; color: var(--danger); }
+  .badge-critical { background: var(--danger); color: #fff; }
+  .event { margin-bottom: 10px; border-bottom: 1px solid #222; padding-bottom: 6px; font-size: .85rem; }
+  .event .ts { font-size: .7rem; color: var(--dim); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag { background: #222; padding: 4px 10px; border-radius: 4px; border: 1px solid #444; font-size: .85rem; }
+  .tag b { color: var(--accent); }
+  .muted { color: var(--dim); }
+  .error { color: var(--danger); }
+  footer { margin-top: 30px; text-align: center; color: var(--dim); font-size: .8rem; border-top: 1px solid var(--line); padding-top: 15px; }
+</style>
 </head>
 <body>
-    <header>
-        <h1>⚛ PRIMERS OS <small style="font-size: 0.8rem; color: var(--dim);">v4.0.0-AI</small></h1>
-        <div id="live-clock" class="monospace">00:00:00</div>
-    </header>
+<header>
+  <h1><svg viewBox="0 0 64 64" role="img" aria-label="Primers OS"><path fill-rule="evenodd" fill="#F5F2EA" d="M12 8H36A16 16 0 0 1 52 24A16 16 0 0 1 36 40H24V56H12ZM24 19V29H35A5 5 0 0 0 35 19Z"/><rect x="31" y="46" width="16" height="10" rx="1.5" fill="#1E9E62"/></svg>
+      Dashboard <small id="version"></small></h1>
+  <div id="clock" class="mono">--:--:--</div>
+</header>
 
-    <div class="stats-row">
-        <div class="card">
-            <h3>CPU Usage</h3>
-            <div id="stat-cpu" class="value monospace">0.0%</div>
-        </div>
-        <div class="card">
-            <h3>Memory</h3>
-            <div id="stat-mem" class="value monospace">0.0%</div>
-        </div>
-        <div class="card">
-            <h3>Processes</h3>
-            <div id="stat-proc" class="value monospace">0</div>
-        </div>
-        <div class="card">
-            <h3>Uptime</h3>
-            <div id="stat-uptime" class="value monospace" style="font-size: 1.2rem; padding-top: 10px;">0d 0h 0m 0s</div>
-        </div>
+<section class="stats">
+  <div class="card"><h3>CPU</h3><div id="cpu" class="value mono">–</div></div>
+  <div class="card"><h3>Memory</h3><div id="mem" class="value mono">–</div></div>
+  <div class="card"><h3>Processes</h3><div id="procs" class="value mono">–</div></div>
+  <div class="card"><h3>Load (1m)</h3><div id="load" class="value mono">–</div></div>
+  <div class="card"><h3>Uptime</h3><div id="uptime" class="value small mono">–</div></div>
+</section>
+
+<section class="grid">
+  <div class="panel">
+    <h2>Top Processes</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>PID</th><th>Name</th><th>CPU%</th><th>MEM%</th><th>Status</th></tr></thead>
+        <tbody id="proc-body"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+      </table>
     </div>
-
-    <div class="main-grid">
-        <div class="panel">
-            <h2>Top Processes</h2>
-            <table id="proc-table">
-                <thead>
-                    <tr>
-                        <th>PID</th>
-                        <th>Name</th>
-                        <th>CPU%</th>
-                        <th>MEM%</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td colspan="5" style="text-align:center; color:var(--dim);">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 20px;">
-            <div class="panel">
-                <h2>Security Events</h2>
-                <div id="security-list">
-                    <div style="color:var(--dim);">Loading events...</div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>Network Activity</h2>
-                <div id="network-summary" class="network-stats">
-                    <div class="net-tag">Connections: <span id="net-total">0</span></div>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>Academic GPA</h2>
-                <div id="gpa-summary">
-                    <div style="font-size: 1.5rem; color: var(--accent);" class="monospace">CGPA: <span id="gpa-val">0.00</span></div>
-                    <div style="color: var(--dim); font-size: 0.9rem; margin-top: 5px;">Credits: <span id="gpa-credits">0.0</span></div>
-                </div>
-            </div>
-        </div>
+  </div>
+  <div class="side">
+    <div class="panel"><h2>Security Events</h2><div id="threats" class="muted">Loading…</div></div>
+    <div class="panel"><h2>Network</h2><div id="network" class="tags"></div></div>
+    <div class="panel"><h2>Academic GPA</h2>
+      <div class="mono" style="font-size:1.4rem;color:var(--accent)">CGPA: <span id="gpa">0.00</span></div>
+      <div class="muted">Credits: <span id="credits">0</span></div>
     </div>
+  </div>
+</section>
 
-    <footer>
-        Last updated: <span id="update-ts">Never</span> | PRIMERS OS Intelligence Layer
-    </footer>
+<footer>Last updated: <span id="updated">never</span> · PRIMERS OS Intelligence Layer · read-only</footer>
 
-    <script>
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('live-clock').innerText = now.toLocaleTimeString();
-        }
-        setInterval(updateClock, 1000);
-        updateClock();
+<script>
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  function el(tag, attrs, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+    for (const c of children) node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    return node;
+  }
+  const pct = (n) => (typeof n === "number" ? n.toFixed(1) + "%" : "–");
 
-        async function refresh() {
-            try {
-                const [status, procs, threats, network, gpa] = await Promise.all([
-                    fetch('/api/status').then(r => r.json()),
-                    fetch('/api/processes').then(r => r.json()),
-                    fetch('/api/threats').then(r => r.json()),
-                    fetch('/api/network').then(r => r.json()),
-                    fetch('/api/gpa').then(r => r.json())
-                ]);
+  function tick() { $("clock").textContent = new Date().toLocaleTimeString(); }
+  setInterval(tick, 1000); tick();
 
-                // Stats Row
-                document.getElementById('stat-cpu').innerText = status.cpu.toFixed(1) + '%';
-                document.getElementById('stat-mem').innerText = status.memory_percent.toFixed(1) + '%';
-                document.getElementById('stat-proc').innerText = status.processes;
-                document.getElementById('stat-uptime').innerText = status.uptime;
+  async function getJSON(path) {
+    const r = await fetch(path, { cache: "no-store" });
+    if (!r.ok) throw new Error(path + " → " + r.status);
+    return r.json();
+  }
 
-                // Process Table
-                const tbody = document.querySelector('#proc-table tbody');
-                tbody.innerHTML = procs.map(p => `
-                    <tr>
-                        <td class="monospace">${p.pid}</td>
-                        <td>${p.name}</td>
-                        <td class="monospace">${p.cpu.toFixed(1)}%</td>
-                        <td class="monospace">${p.memory.toFixed(1)}%</td>
-                        <td>${p.status}</td>
-                    </tr>
-                `).join('');
+  async function refresh() {
+    try {
+      const [status, procs, threats, network, gpa] = await Promise.all([
+        getJSON("/api/status"), getJSON("/api/processes"), getJSON("/api/threats"),
+        getJSON("/api/network"), getJSON("/api/gpa"),
+      ]);
+      $("version").textContent = "v" + status.version;
+      $("cpu").textContent = pct(status.cpu);
+      $("mem").textContent = pct(status.memory_percent);
+      $("procs").textContent = status.processes;
+      $("load").textContent = typeof status.load_1min === "number" ? status.load_1min.toFixed(2) : "–";
+      $("uptime").textContent = status.uptime;
 
-                // Security Events
-                const secList = document.getElementById('security-list');
-                secList.innerHTML = threats.map(t => {
-                    const level = t.level.toLowerCase();
-                    return `
-                        <div style="margin-bottom: 10px; border-bottom: 1px solid #222; padding-bottom: 5px;">
-                            <span class="badge badge-${level}">${t.level}</span>
-                            <span style="font-size: 0.85rem;">${t.description}</span>
-                            <div style="font-size: 0.7rem; color: var(--dim);">${new Date(t.timestamp * 1000).toLocaleTimeString()}</div>
-                        </div>
-                    `;
-                }).join('') || '<div style="color:var(--dim);">No recent threats.</div>';
+      const body = $("proc-body");
+      body.replaceChildren(...procs.map((p) => el("tr", {},
+        el("td", { class: "mono" }, p.pid), el("td", {}, p.name),
+        el("td", { class: "mono" }, pct(p.cpu)), el("td", { class: "mono" }, pct(p.memory)),
+        el("td", {}, p.status))));
 
-                // Network
-                const netSummary = document.getElementById('network-summary');
-                const states = {};
-                network.forEach(n => { states[n.status] = (states[n.status] || 0) + 1; });
-                document.getElementById('net-total').innerText = network.length;
-                
-                let netHtml = `<div class="net-tag">Total: <span>${network.length}</span></div>`;
-                for (const [state, count] of Object.entries(states)) {
-                    netHtml += `<div class="net-tag">${state}: <span>${count}</span></div>`;
-                }
-                netSummary.innerHTML = netHtml;
+      const t = $("threats");
+      if (!threats.length) { t.replaceChildren(el("div", { class: "muted" }, "No recent threats.")); }
+      else {
+        t.replaceChildren(...threats.slice().reverse().map((ev) => el("div", { class: "event" },
+          el("span", { class: "badge badge-" + String(ev.level).toLowerCase() }, ev.level),
+          el("span", {}, ev.description),
+          el("div", { class: "ts" }, new Date(ev.timestamp * 1000).toLocaleTimeString()))));
+      }
 
-                // GPA
-                document.getElementById('gpa-val').innerText = gpa.cgpa.toFixed(2);
-                document.getElementById('gpa-credits').innerText = gpa.credits.toFixed(1);
+      const states = {};
+      network.forEach((n) => { states[n.status] = (states[n.status] || 0) + 1; });
+      $("network").replaceChildren(
+        el("div", { class: "tag" }, "Total: ", el("b", {}, network.length)),
+        ...Object.entries(states).map(([s, c]) => el("div", { class: "tag" }, s + ": ", el("b", {}, c))));
 
-                document.getElementById('update-ts').innerText = new Date().toLocaleTimeString();
-            } catch (err) {
-                console.error("Dashboard refresh failed", err);
-            }
-        }
-
-        setInterval(refresh, 5000);
-        refresh();
-    </script>
+      $("gpa").textContent = Number(gpa.cgpa).toFixed(2);
+      $("credits").textContent = Number(gpa.credits).toFixed(1);
+      $("updated").textContent = new Date().toLocaleTimeString();
+    } catch (err) {
+      $("updated").textContent = "error — " + err.message;
+      $("updated").className = "error";
+    }
+  }
+  setInterval(refresh, 5000); refresh();
+</script>
 </body>
 </html>
 """
 
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE)
 
-@app.route('/api/status')
-def get_status():
-    snap = monitor.get_summary() if monitor else {}
-    uptime = kernel.get_uptime() if kernel else {"formatted": "0s"}
-    return jsonify({
-        "cpu": float(snap.get("cpu", "0").split()[0]),
-        "memory_percent": float(snap.get("memory", "0").split()[0]),
-        "processes": snap.get("processes", 0),
-        "uptime": uptime["formatted"],
-        "kernel_version": kernel.get_kernel_version() if kernel else "Unknown"
-    })
+def create_app(system_monitor=None, process_manager=None, security_engine=None,
+               kernel_interface=None, gpa_service=None, settings: Optional[Settings] = None,
+               allow_any_host: bool = False):
+    """Build the Flask app around the given PRIMERS components."""
+    if not FLASK_AVAILABLE:
+        raise RuntimeError(f"Flask is not installed ({FLASK_ERROR}). Install python3-flask.")
 
-@app.route('/api/processes')
-def get_processes():
-    procs = manager.list_processes(sort_by="cpu", limit=20) if manager else []
-    return jsonify([{"pid": p.pid, "name": p.name, "cpu": p.cpu, "memory": p.memory, "status": p.status} for p in procs])
+    settings = settings or Settings()
+    app = Flask(__name__)
 
-@app.route('/api/threats')
-def get_threats():
-    events = security.get_events(min_level="LOW") if security else []
-    return jsonify([{
-        "level": e.level,
-        "description": e.description,
-        "timestamp": e.timestamp
-    } for e in events[-10:]])
+    @app.before_request
+    def _only_local_hosts():
+        if allow_any_host:
+            return None
+        host = (request.host or "").rsplit(":", 1)[0] if not (request.host or "").startswith("[") \
+            else (request.host or "").split("]")[0] + "]"
+        if host not in LOCAL_HOSTS:
+            abort(403)
+        return None
 
-@app.route('/api/network')
-def get_network():
-    conns = security.scan_connections() if security else []
-    return jsonify(conns)
+    @app.after_request
+    def _security_headers(resp):
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+            "connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; "
+            "frame-ancestors 'none'")
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "DENY"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
-@app.route('/api/gpa')
-def get_gpa():
-    if gpa_service:
-        report = gpa_service.get_report()
-        return jsonify({"cgpa": report["cgpa"], "credits": report["total_credits"]})
-    return jsonify({"cgpa": 0.0, "credits": 0.0})
+    @app.route("/")
+    def index():
+        return HTML_TEMPLATE, 200, {"Content-Type": "text/html; charset=utf-8"}
 
-def run_server(host='0.0.0.0', port=5000):
-    app.run(host=host, port=port, debug=False, use_reloader=False)
+    @app.route("/api/status")
+    def api_status():
+        metrics = system_monitor.get_metrics() if system_monitor else {"ready": False}
+        uptime = kernel_interface.get_uptime() if kernel_interface else {"formatted": "–"}
+        load = kernel_interface.get_load() if kernel_interface else {}
+        return jsonify({
+            "ready": metrics.get("ready", False),
+            "version": settings.VERSION,
+            "cpu": metrics.get("cpu_percent"),
+            "memory_percent": metrics.get("memory_percent"),
+            "processes": metrics.get("process_count", 0),
+            "uptime": uptime.get("formatted", "–"),
+            "load_1min": load.get("load_1min"),
+        })
 
-def start_gui(system_monitor, process_manager, security_engine):
-    global monitor, manager, security, kernel, gpa_service
-    monitor = system_monitor
-    manager = process_manager
-    security = security_engine
-    kernel = KernelInterface()
-    gpa_service = GPAService()
-    
-    thread = threading.Thread(target=run_server, daemon=True)
-    thread.start()
-    logger.info("GUI Dashboard started at http://localhost:5000")
-    return thread
+    @app.route("/api/processes")
+    def api_processes():
+        procs = process_manager.list_processes(sort_by="cpu", limit=20) if process_manager else []
+        return jsonify([{"pid": p.pid, "name": p.name, "cpu": p.cpu, "memory": p.memory,
+                         "status": p.status} for p in procs])
+
+    @app.route("/api/threats")
+    def api_threats():
+        events = security_engine.get_events(min_level="LOW") if security_engine else []
+        return jsonify([{"level": e.level, "description": e.description, "timestamp": e.timestamp}
+                        for e in events[-10:]])
+
+    @app.route("/api/network")
+    def api_network():
+        conns = security_engine.scan_connections() if security_engine else []
+        return jsonify([{"status": c["status"], "pid": c["pid"], "name": c["name"]} for c in conns])
+
+    @app.route("/api/gpa")
+    def api_gpa():
+        if gpa_service:
+            report = gpa_service.get_report()
+            return jsonify({"cgpa": report["cgpa"], "credits": report["total_credits"]})
+        return jsonify({"cgpa": 0.0, "credits": 0.0})
+
+    return app
+
+
+class DashboardServer:
+    """Runs the dashboard in a background thread and can stop it again."""
+
+    def __init__(self, app, host: str = "127.0.0.1", port: int = 5000):
+        self.app = app
+        self.host = host
+        self.port = port
+        self._server = None
+        self._thread: Optional[threading.Thread] = None
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self):
+        if self.running:
+            return
+        self._server = make_server(self.host, self.port, self.app, threaded=True)
+        self.port = self._server.server_port  # resolves port 0 in tests
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="Dashboard")
+        self._thread.start()
+        logger.info(f"GUI dashboard listening on http://{self.host}:{self.port}")
+
+    def stop(self):
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+        self._server = None
+        self._thread = None
+        logger.info("GUI dashboard stopped")
+
+
+def start_gui(system_monitor, process_manager, security_engine, kernel_interface=None,
+              gpa_service=None, settings: Optional[Settings] = None) -> DashboardServer:
+    """Create and start the dashboard. Raises OSError if the port is busy."""
+    from core.kernel_interface.interface import KernelInterface
+    from services.gpa_service.service import GPAService
+
+    settings = settings or Settings()
+    # A dashboard deliberately exposed on the LAN must accept LAN host names
+    exposed = settings.GUI_HOST not in ("127.0.0.1", "localhost", "::1")
+    app = create_app(system_monitor, process_manager, security_engine,
+                     kernel_interface or KernelInterface(), gpa_service or GPAService(), settings,
+                     allow_any_host=exposed)
+    server = DashboardServer(app, settings.GUI_HOST, settings.GUI_PORT)
+    server.start()
+    return server
+
 
 if __name__ == "__main__":
-    # Standalone mode: initialize its own components
-    monitor = SystemMonitor()
-    manager = ProcessManager()
-    security = SecurityEngine()
-    kernel = KernelInterface()
-    gpa_service = GPAService()
-    
+    # Standalone mode: python3 interface/gui/dashboard.py
+    from core.kernel_interface.interface import KernelInterface
+    from core.process_manager.manager import ProcessManager
+    from core.security_engine.engine import SecurityEngine
+    from core.system_monitor.monitor import SystemMonitor
+    from services.gpa_service.service import GPAService
+
+    s = Settings()
+    monitor, security = SystemMonitor(s), SecurityEngine(s)
     monitor.start()
     security.start()
-    
-    run_server()
+    application = create_app(monitor, ProcessManager(), security, KernelInterface(), GPAService(), s)
+    print(f"PRIMERS dashboard on {s.gui_url}  (Ctrl+C to stop)")
+    make_server(s.GUI_HOST, s.GUI_PORT, application, threaded=True).serve_forever()

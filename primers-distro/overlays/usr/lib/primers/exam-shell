@@ -1,0 +1,6 @@
+#!/bin/sh
+# PRIMERS OS Exam Mode: the login shell of the shared lab account while an
+# exam runs. The exam session itself doesn't use a shell; anything that
+# tries to start one (su, a terminal, a console login) gets this instead.
+echo "No shell during an exam." >&2
+exit 1

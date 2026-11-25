@@ -1,0 +1,61 @@
+#!/bin/bash
+# PRIMERS OS — campus modes: Lab Mode, Study Mode and Exam Mode
+#
+# Lab Mode is OFF in the image. On each lab machine an administrator runs
+# "sudo primers-lab enable": that creates a passwordless, non-admin "lab"
+# account and wipes it at every sign-in, sign-out and boot. Here we only
+# check that the pieces it relies on are in place.
+set -euo pipefail
+
+# LightDM lets members of nopasswdlogin sign in without a password
+getent group nopasswdlogin >/dev/null || groupadd --system nopasswdlogin
+if ! grep -Eq '^auth[[:space:]]+sufficient[[:space:]]+pam_succeed_if\.so user ingroup nopasswdlogin' /etc/pam.d/lightdm; then
+  echo "E: /etc/pam.d/lightdm has no nopasswdlogin rule; Lab Mode sign-in would ask for a password" >&2
+  exit 1
+fi
+
+# Never shipped switched on
+systemctl disable primers-lab-reset.service >/dev/null 2>&1 || true
+rm -f /etc/primers/lab.conf /etc/lightdm/lightdm.conf.d/60-primers-lab.conf
+chmod 0755 /usr/bin/primers-lab
+command -v zenity >/dev/null
+
+out=$(primers-lab status)
+grep -q "Lab Mode: off" <<<"$out" || { echo "E: primers-lab status: $out" >&2; exit 1; }
+echo "Lab Mode: available (off by default)"
+
+# Study Mode: per-user focus timer (Brain "study", primers-study, panel timer)
+chmod 0755 /usr/bin/primers-study /usr/lib/primers/study-panel
+out=$(HOME=/nonexistent XDG_STATE_HOME=/nonexistent primers-study status)
+grep -q "Study Mode: off" <<<"$out" || { echo "E: primers-study status: $out" >&2; exit 1; }
+HOME=/nonexistent /usr/lib/primers/study-panel
+echo "Study Mode: available"
+
+# Exam Mode: kiosk session, firewall tool, nothing but Openbox at the login
+# screen (any other session would bypass the exam kiosk)
+chmod 0755 /usr/bin/primers-exam /usr/lib/primers/exam-session
+command -v nft >/dev/null || { echo "E: nft (nftables) missing" >&2; exit 1; }
+sh -n /etc/X11/Xsession.d/98primers-exam
+others=$(find /usr/share/xsessions /usr/share/wayland-sessions -name '*.desktop' ! -name openbox.desktop 2>/dev/null || true)
+if [ -n "$others" ]; then
+  echo "E: login sessions besides Openbox would bypass Exam Mode:" $others >&2
+  exit 1
+fi
+rm -f /etc/primers/exam.conf /etc/polkit-1/localauthority/90-mandatory.d/60-primers-exam.pkla \
+      /etc/X11/xorg.conf.d/90-primers-exam.conf /etc/sysctl.d/90-primers-exam.conf
+install -d /etc/X11/xorg.conf.d
+# The lab account's shell during an exam refuses to run anything; it is a
+# registered shell so the account stays on the login screen's user list
+chmod 0755 /usr/lib/primers/exam-shell
+grep -qx /usr/lib/primers/exam-shell /etc/shells || echo /usr/lib/primers/exam-shell >> /etc/shells
+command -v xsel setxkbmap >/dev/null || { echo "E: xsel/setxkbmap missing (exam clipboard and key lock)" >&2; exit 1; }
+
+# The guest agent (for automated VM tests) must only ever start inside a VM
+if ! grep -q 'BindsTo=dev-virtio\\x2dports-org.qemu.guest_agent.0.device' \
+     /lib/systemd/system/qemu-guest-agent.service; then
+  echo "E: qemu-guest-agent is not bound to the VM's virtio channel" >&2
+  exit 1
+fi
+out=$(primers-exam status)
+grep -q "Exam Mode: off" <<<"$out" || { echo "E: primers-exam status: $out" >&2; exit 1; }
+echo "Exam Mode: available (no exam running)"

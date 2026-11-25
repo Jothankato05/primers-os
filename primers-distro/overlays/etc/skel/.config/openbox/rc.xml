@@ -12,14 +12,38 @@
   <keyboard>
     <keybind key="Super-Return">
       <action name="Execute">
-        <command>xterm -title "PRIMERS OS" -geometry 120x35 -bg "#0a0a0f" -fg "#c8c8e8" -e primers</command>
+        <command>primers-terminal</command>
       </action>
     </keybind>
     <keybind key="Super-e">
       <action name="Execute"><command>pcmanfm</command></action>
     </keybind>
     <keybind key="Super-b">
-      <action name="Execute"><command>firefox</command></action>
+      <action name="Execute"><command>lite-bee</command></action>
+    </keybind>
+    <keybind key="Super-t">
+      <action name="Execute"><command>xterm -fa Monospace -fs 11 -bg "#12161C" -fg "#F5F2EA"</command></action>
+    </keybind>
+    <keybind key="Super-space">
+      <action name="ShowMenu"><menu>root-menu</menu></action>
+    </keybind>
+    <keybind key="C-A-Delete">
+      <action name="Execute"><command>lxtask</command></action>
+    </keybind>
+    <keybind key="A-Tab">
+      <action name="NextWindow"/>
+    </keybind>
+    <keybind key="W-Up">
+      <action name="ToggleMaximize"/>
+    </keybind>
+    <keybind key="XF86AudioRaiseVolume">
+      <action name="Execute"><command>pactl set-sink-volume @DEFAULT_SINK@ +5%</command></action>
+    </keybind>
+    <keybind key="XF86AudioLowerVolume">
+      <action name="Execute"><command>pactl set-sink-volume @DEFAULT_SINK@ -5%</command></action>
+    </keybind>
+    <keybind key="XF86AudioMute">
+      <action name="Execute"><command>pactl set-sink-mute @DEFAULT_SINK@ toggle</command></action>
     </keybind>
     <keybind key="A-F4">
       <action name="Close"/>
@@ -29,6 +53,11 @@
     </keybind>
   </keyboard>
   <mouse>
+    <context name="Root">
+      <mousebind button="Right" action="Press">
+        <action name="ShowMenu"><menu>root-menu</menu></action>
+      </mousebind>
+    </context>
     <context name="Desktop">
       <mousebind button="Right" action="Press">
         <action name="ShowMenu"><menu>root-menu</menu></action>
@@ -40,4 +69,12 @@
     <hideDelay>200</hideDelay>
     <submenuShowDelay>100</submenuShowDelay>
   </menu>
+  <applications>
+    <!-- PRIMERS notices (Lab Mode, Study Mode) come from background helpers, so
+         focus-stealing prevention would open them under the active window -->
+    <application class="Zenity">
+      <focus>yes</focus>
+      <layer>above</layer>
+    </application>
+  </applications>
 </openbox_config>

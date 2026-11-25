@@ -1,42 +1,230 @@
 #!/bin/bash
-set -e
+# PRIMERS OS — desktop look & feel, artwork, display manager
+#
+# Artwork comes from the official logo pack (branding/primers-os-logo,
+# installed to /usr/share/primers/branding by build.sh). Brand rules: Night
+# Ink #12161C, Chalk #F5F2EA, Ready Green #1E9E62 for the cursor and states
+# only; never stretch, add shadows or gradients, recolour or move the cursor,
+# or retype the wordmark.
+set -euo pipefail
 
-# Generate wallpaper
-mkdir -p /usr/share/primers
-python3 - << 'PYEOF'
-try:
-    from PIL import Image, ImageDraw
-    img = Image.new('RGB', (1920, 1080), (10, 10, 15))
-    draw = ImageDraw.Draw(img)
-    for x in range(0, 1920, 80):
-        draw.line([(x,0),(x,1080)], fill=(18,18,30), width=1)
-    for y in range(0, 1080, 80):
-        draw.line([(0,y),(1920,y)], fill=(18,18,30), width=1)
-    img.save('/usr/share/primers/wallpaper.png')
-    print('[PRIMERS] Wallpaper generated.')
-except ImportError:
-    try:
-        import subprocess
-        subprocess.run(['convert','-size','1920x1080','xc:#0a0a0f',
-                        '/usr/share/primers/wallpaper.png'], check=True)
-        print('[PRIMERS] Wallpaper generated via ImageMagick.')
-    except Exception as e:
-        print(f'[PRIMERS] Wallpaper skipped: {e}')
+BRAND=/usr/share/primers/branding
+[ -f "$BRAND/png/mark-color.png" ] || { echo "[PRIMERS] brand assets missing in $BRAND" >&2; exit 1; }
+install -d /usr/share/primers /usr/share/pixmaps
+
+# ── Plymouth boot splash: the mark with its blinking cursor ──
+PLY=/usr/share/plymouth/themes/primers
+rm -rf "$PLY"
+install -d "$PLY"
+# Generic password/entry graphics from the spinner theme; boot frames are ours
+for f in bullet capslock entry keyboard keymap-render lock; do
+  [ -f "/usr/share/plymouth/themes/spinner/$f.png" ] && cp "/usr/share/plymouth/themes/spinner/$f.png" "$PLY/"
+done
+cat > "$PLY/primers.plymouth" <<'PLYEOF'
+[Plymouth Theme]
+Name=PRIMERS OS
+Description=PRIMERS OS boot splash: the Primers mark with its blinking cursor
+ModuleName=two-step
+
+[two-step]
+Font=Noto Sans 12
+TitleFont=Noto Sans Light 30
+ImageDir=/usr/share/plymouth/themes/primers
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.75
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.382
+HorizontalAlignment=.5
+VerticalAlignment=.5
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.94
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x12161c
+BackgroundEndColor=0x12161c
+ProgressBarBackgroundColor=0x262c35
+ProgressBarForegroundColor=0x1e9e62
+DialogClearsFirmwareBackground=true
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[shutdown]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[reboot]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing updates…
+SubTitle=Do not turn off your computer
+
+[system-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading PRIMERS OS…
+SubTitle=Do not turn off your computer
+PLYEOF
+
+# ── Artwork from the official logo pack ─────────────────────
+python3 - <<'PYEOF'
+import os
+import shutil
+from PIL import Image
+
+BRAND = "/usr/share/primers/branding/png"
+INK = (18, 22, 28)
+CHALK = (245, 242, 234)
+GREEN = (30, 158, 98)
+
+
+def load(name):
+    return Image.open(os.path.join(BRAND, name)).convert("RGBA")
+
+
+def on_dark(img, keep_cursor=True):
+    """Chalk version of an ink-on-transparent asset (as in the official app
+    icon). Only ink pixels change colour; the green cursor is untouched, or
+    removed entirely for the 'cursor off' blink frame."""
+    out = img.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            is_green = g > r + 40 and g > b + 20
+            if is_green:
+                if not keep_cursor:
+                    px[x, y] = (0, 0, 0, 0)
+            else:
+                px[x, y] = CHALK + (a,)
+    return out
+
+
+def fit(img, width):
+    h = round(img.height * width / img.width)  # always keep the aspect ratio
+    return img.resize((width, h), Image.LANCZOS)
+
+
+def place(canvas, img, cx, top):
+    canvas.alpha_composite(img, (int(cx - img.width / 2), int(top)))
+
+
+mark = load("mark-color.png")            # 1024x1024, ink P + green cursor
+stacked = load("lockup-stacked.png")     # ink mark + wordmark, stacked
+mark_dark = on_dark(mark)
+stacked_dark = on_dark(stacked)
+
+# Wallpaper: Night Ink with the stacked lockup
+for w, h, name in ((1920, 1080, "wallpaper.png"),):
+    wp = Image.new("RGBA", (w, h), INK + (255,))
+    logo = fit(stacked_dark, int(h * 0.30))
+    place(wp, logo, w / 2, (h - logo.height) / 2 - h * 0.04)
+    wp.convert("RGB").save(f"/usr/share/primers/{name}", optimize=True)
+
+# Icons: the official app icons, unmodified
+sizes = {16: "app-icon-16.png", 32: "app-icon-32.png", 48: "app-icon-48.png",
+         64: "app-icon-64.png", 128: "app-icon-128.png", 256: "app-icon-256.png",
+         512: "app-icon-512.png"}
+for px, fname in sizes.items():
+    d = f"/usr/share/icons/hicolor/{px}x{px}/apps"
+    os.makedirs(d, exist_ok=True)
+    shutil.copy(os.path.join(BRAND, fname), f"{d}/primers.png")
+shutil.copy(os.path.join(BRAND, "app-icon-64.png"), "/usr/share/pixmaps/primers.png")
+shutil.copy(os.path.join(BRAND, "app-icon-256.png"), "/usr/share/primers/logo.png")
+
+# GRUB menu background: lockup at the top, menu below (no typed wordmark)
+gdir = "/usr/share/grub/themes/primers"
+if os.path.isdir(gdir):
+    gb = Image.new("RGBA", (1280, 800), INK + (255,))
+    place(gb, fit(stacked_dark, 200), 640, 70)
+    gb.convert("RGB").save(f"{gdir}/background.png", optimize=True)
+    for part in ("c", "n", "s", "e", "w", "ne", "nw", "se", "sw"):
+        colour = INK + (255,) if part == "c" else (38, 44, 53, 255)
+        Image.new("RGBA", (6, 6), colour).save(f"{gdir}/terminal_box_{part}.png")
+
+# Plymouth: 32 frames ≈ 1.06 s at Plymouth's 30 fps — cursor on, then off
+pdir = "/usr/share/plymouth/themes/primers"
+if os.path.isdir(pdir):
+    on = fit(mark_dark, 112)
+    off = fit(on_dark(mark, keep_cursor=False), 112)
+    for i in range(1, 33):
+        (on if i <= 16 else off).save(f"{pdir}/throbber-{i:04d}.png")
+    on.save(f"{pdir}/animation-0001.png")
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(f"{pdir}/bgrt-fallback.png")
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(f"{pdir}/watermark.png")
+
+# Installer branding
+brand = "/etc/calamares/branding/primers"
+if os.path.isdir(brand):
+    shutil.copy(os.path.join(BRAND, "app-icon-128.png"), f"{brand}/logo.png")
+    shutil.copy(os.path.join(BRAND, "app-icon-64.png"), f"{brand}/icon.png")
+    welcome = load("lockup-horizontal-dark.png")
+    fit(welcome, 640).save(f"{brand}/welcome.png")
+    fit(mark_dark, 96).save(f"{brand}/mark-dark.png")
+print("[PRIMERS] artwork generated from the official logo pack")
 PYEOF
 
-# LightDM greeter config
-cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
-[greeter]
-background=#0a0a0f
-font-name=Noto Sans 11
-indicators=~spacer;~clock;~spacer;~session;~power
-clock-format=%H:%M  %A %d %B
+gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
+
+update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth \
+  /usr/share/plymouth/themes/primers/primers.plymouth 200
+update-alternatives --set default.plymouth /usr/share/plymouth/themes/primers/primers.plymouth
+
+# ── GRUB theme fonts (installed system + live ISO menu) ─────
+THEME=/usr/share/grub/themes/primers
+NOTO=/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf
+if [ -f "$THEME/theme.txt" ] && [ -f "$NOTO" ]; then
+  for size in 11 14 20; do
+    grub-mkfont -s "$size" -o "$THEME/noto-sans-$size.pf2" "$NOTO"
+  done
+fi
+
+# ── Display manager ─────────────────────────────────────────
+# Live-session autologin is configured by casper at boot; installed systems
+# follow the choice made in the installer.
+install -d /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-primers.conf <<'EOF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=openbox
+greeter-setup-script=/usr/bin/numlockx on
 EOF
 
-# Set default session to OpenBox
-cat > /etc/lightdm/lightdm.conf << 'EOF'
-[Seat:*]
-autologin-user=primers
-autologin-session=openbox
-user-session=openbox
+cat > /etc/lightdm/lightdm-gtk-greeter.conf <<'EOF'
+[greeter]
+background=/usr/share/primers/wallpaper.png
+theme-name=Adwaita-dark
+icon-theme-name=Papirus-Dark
+font-name=Noto Sans 11
+indicators=~host;~spacer;~clock;~spacer;~session;~power
+clock-format=%H:%M  %A %d %B
+default-user-image=/usr/share/primers/logo.png
 EOF
+
+# ── GTK defaults for every new user ─────────────────────────
+install -d /etc/skel/.config/gtk-3.0
+cat > /etc/skel/.config/gtk-3.0/settings.ini <<'EOF'
+[Settings]
+gtk-theme-name=Adwaita-dark
+gtk-icon-theme-name=Papirus-Dark
+gtk-font-name=Noto Sans 10
+gtk-application-prefer-dark-theme=1
+EOF
+cat > /etc/skel/.gtkrc-2.0 <<'EOF'
+gtk-theme-name="Adwaita-dark"
+gtk-icon-theme-name="Papirus-Dark"
+gtk-font-name="Noto Sans 10"
+EOF
+
+# Make sure skel helpers are executable
+chmod 0755 /etc/skel/.config/openbox/autostart 2>/dev/null || true

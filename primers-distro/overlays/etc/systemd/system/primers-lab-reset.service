@@ -1,0 +1,15 @@
+# PRIMERS OS Lab Mode: wipe the shared lab account at boot, before anyone can
+# sign in, so a power cut never leaves a student's session behind.
+# Enabled by "primers-lab enable", disabled by "primers-lab disable".
+[Unit]
+Description=PRIMERS OS Lab Mode: reset the shared lab account
+ConditionPathExists=/etc/primers/lab.conf
+Before=systemd-user-sessions.service display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/primers-lab hook boot
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PRIMERS OS Exam Mode window manager: no key bindings (no Alt+F4,
+     Alt+Tab or menus), no desktop menu, nothing but the exam window. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus><focusNew>yes</focusNew><followMouse>no</followMouse></focus>
+  <desktops><number>1</number></desktops>
+  <keyboard/>
+  <mouse>
+    <dragThreshold>8</dragThreshold>
+    <context name="Client">
+      <mousebind button="Left" action="Press"><action name="Focus"/><action name="Raise"/></mousebind>
+    </context>
+  </mouse>
+  <applications>
+    <application type="normal"><decor>no</decor></application>
+    <application class="Zenity"><focus>yes</focus><layer>above</layer></application>
+  </applications>
+</openbox_config>
