@@ -481,6 +481,7 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     desktop, Erase disk, an administrator account, Install now."""
     c = suite.check
     slow = 1 if VM.kvm() else 4
+    vm.as_user("primers", "xset s off -dpms; xset s reset")      # screenshots, not a blank screen
     vm.as_user("primers", "nohup sudo -E calamares -d > /tmp/calamares.out 2>&1 &")
     vm.wait_until(lambda: INSTALLER_TITLE in vm.as_user("primers", "xwininfo -root -tree").out, 600, "the installer")
     time.sleep(10 * slow)
