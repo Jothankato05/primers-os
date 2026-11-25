@@ -1,0 +1,32 @@
+#!/bin/sh
+# PRIMERS OS: leave out of the initramfs what no PRIMERS PC needs before its
+# disk is mounted (docs/benchmarks.md). The initramfs keeps every driver for
+# disks, USB, keyboards and the usual graphics; these are left out:
+#   - data-centre network cards (10-100 Gb/s; only for booting over the
+#     network, which PRIMERS OS doesn't do) and their firmware;
+#   - AMD and NVIDIA graphics drivers and their firmware (two thirds of the
+#     initramfs): they load a few seconds later from the installed system or
+#     the live USB, firmware included; until then the boot splash uses the
+#     firmware's framebuffer, as it does on any PC.
+# Runs after the packaged hooks; mkinitramfs runs depmod afterwards.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+
+[ -n "${DESTDIR:-}" ] && [ -d "${DESTDIR}" ] && [ -n "${version:-}" ] || exit 0
+for fw in "${DESTDIR}/usr/lib/firmware" "${DESTDIR}/lib/firmware"; do
+  [ -d "$fw" ] || continue
+  for name in amdgpu radeon nvidia netronome liquidio mellanox cxgb4 qed bnx2x phanfw.bin; do
+    rm -rf "${fw:?}/${name}"
+  done
+done
+for mods in "${DESTDIR}/usr/lib/modules/${version}/kernel" "${DESTDIR}/lib/modules/${version}/kernel"; do
+  [ -d "$mods" ] || continue
+  for dir in drivers/gpu/drm/amd drivers/gpu/drm/radeon drivers/gpu/drm/nouveau \
+             drivers/net/ethernet/netronome drivers/net/ethernet/cavium drivers/net/ethernet/mellanox \
+             drivers/net/ethernet/chelsio drivers/net/ethernet/qlogic drivers/net/ethernet/broadcom/bnx2x \
+             drivers/infiniband; do
+    rm -rf "${mods:?}/${dir}"
+  done
+done
+exit 0

@@ -56,6 +56,7 @@ class KioskWindow(Gtk.ApplicationWindow):
         self.finishing = False
         self._last_logged = None
         self._error_uri = None
+        self._shown = False                # the exam page has been shown once (logged)
         self._ticks = 0
         self._started = time.monotonic()   # the exam timer ignores the wall clock
         self.set_decorated(False)
@@ -216,6 +217,10 @@ class KioskWindow(Gtk.ApplicationWindow):
                 self._last_logged = uri
                 log(f"visited {uri[:300]}")
         elif event == WebKit2.LoadEvent.FINISHED:
+            if not self._shown and (view.get_uri() or "") != self._error_uri:
+                # How long the candidate waited for the exam (docs/benchmarks.md)
+                self._shown = True
+                log(f"exam page shown ({time.monotonic() - self._started:.1f} s after the exam browser opened)")
             self.app.notify_loaded(view)
 
     def on_load_failed(self, view, event, uri, error):

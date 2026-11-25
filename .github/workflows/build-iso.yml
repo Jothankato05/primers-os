@@ -119,6 +119,10 @@ jobs:
           # primers-fleet: an invigilator PC pairs three lab PCs on one LAN, starts, watches and
           # stops the exam on all of them and collects the logs; unpaired PCs and keys are refused
           python3 primers-distro/tests/vm/run_vm_tests.py fleet --iso "$iso" --out vm-results/fleet || rc=1
+          # Performance on a 2 GB, 2-CPU PC with a hard disk and with an SSD: power-on and kernel to
+          # the login screen, idle memory, sign-in to the exam page (docs/benchmarks.md; measured,
+          # compared with the targets in the results, not a pass/fail gate)
+          python3 primers-distro/tests/vm/run_vm_tests.py performance --installer script --iso "$iso" --out vm-results/performance || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

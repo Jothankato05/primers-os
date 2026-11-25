@@ -360,6 +360,18 @@ stage_finalize() {
 
   log "Regenerating initramfs (casper)"
   in_chroot update-initramfs -u -k all
+  # The initramfs must still find disks, USB and keyboards and start the live
+  # system; the trim (etc/initramfs-tools/hooks/primers-trim) must have run
+  local initrd listing
+  initrd="$(find "$CHROOT/boot" -maxdepth 1 -name 'initrd.img-*' | sort -V | tail -n1)"
+  listing="$(in_chroot lsinitramfs "/boot/$(basename "$initrd")")"
+  for needed in /ahci.ko /nvme.ko /xhci-pci.ko /usb-storage.ko /usbhid.ko /hid-generic.ko /i915.ko scripts/casper; do
+    grep -q -- "$needed" <<< "$listing" || die "initramfs lacks $needed"
+  done
+  if grep -qE 'firmware/(amdgpu|nvidia|netronome)/' <<< "$listing"; then
+    die "initramfs still carries graphics/data-centre firmware (primers-trim didn't run)"
+  fi
+  log "initramfs: $(du -h "$initrd" | cut -f1)"
 
   log "Cleaning chroot"
   apt_in_chroot clean

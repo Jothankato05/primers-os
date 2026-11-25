@@ -303,6 +303,7 @@ def test_agent_unit_runs_only_on_a_paired_pc():
                              "systemd", "system", "primers-fleet-agent.service")).read()
     assert "ConditionDirectoryNotEmpty=/etc/primers/fleet/controllers" in unit
     assert "ExecStart=/usr/bin/primers-fleet agent" in unit
+    assert "Wants=network-online.target" not in unit       # no boot-time wait for the network (benchmarks)
 
 
 def test_join_opens_the_firewall_to_the_invigilator_pc_only_and_leave_closes_it(tmp_path, monkeypatch):

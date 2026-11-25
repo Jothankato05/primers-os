@@ -2,13 +2,18 @@
 # PRIMERS OS — bootloader defaults and CPU governor for installed systems
 set -euo pipefail
 
+# Boot menu (docs/benchmarks.md): no wait on a PC with only PRIMERS OS (hold
+# Shift or press Esc for the menu). With another system on the disk, Ubuntu's
+# os-prober script shows the menu for 10 s anyway; after an interrupted boot
+# the menu shows for 10 s (Ubuntu's default is 30).
 # Kernel command line for installed systems. CPU vulnerability mitigations
 # stay ON (the kernel default): turning them off exposes every user to
 # Spectre/Meltdown-class attacks for a few percent of speed.
 cat > /etc/default/grub <<'EOF'
 GRUB_DEFAULT=0
-GRUB_TIMEOUT_STYLE=menu
-GRUB_TIMEOUT=5
+GRUB_TIMEOUT_STYLE=hidden
+GRUB_TIMEOUT=0
+GRUB_RECORDFAIL_TIMEOUT=10
 GRUB_DISTRIBUTOR="PRIMERS OS"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash threadirqs"
 GRUB_CMDLINE_LINUX=""
@@ -57,4 +62,24 @@ EOF
 chmod 0755 /usr/lib/primers/unmetered-network
 
 systemctl enable primers-perf.service
+
+# Services a lab PC doesn't use, started at every boot and competing for the
+# disk (docs/benchmarks.md). The packages stay; blueman's and Avahi's start
+# on demand over D-Bus if something asks for them.
+#   winbind              Samba domain logins (installed for Wine's ntlm_auth only)
+#   networkd-dispatcher  hooks for systemd-networkd; PRIMERS OS uses NetworkManager
+#   avahi-daemon         mDNS/DNS-SD announcements on the LAN
+#   blueman-mechanism    Bluetooth manager's helper (D-Bus activated when used)
+#   ubuntu-advantage, ua-reboot-cmds   Ubuntu Pro attachment
+#   apport               crash reports (also off for privacy)
+for unit in winbind networkd-dispatcher avahi-daemon blueman-mechanism ubuntu-advantage ua-reboot-cmds; do
+  systemctl disable "$unit.service" 2>/dev/null || true
+done
+systemctl disable apport.service 2>/dev/null || true
+[ -f /etc/default/apport ] && sed -i 's/^enabled=.*/enabled=0/' /etc/default/apport
+for unit in winbind networkd-dispatcher avahi-daemon blueman-mechanism ubuntu-advantage ua-reboot-cmds; do
+  if systemctl is-enabled "$unit.service" 2>/dev/null | grep -qx enabled; then
+    echo "E: $unit.service is still enabled at boot" >&2; exit 1
+  fi
+done
 systemctl enable zramswap.service 2>/dev/null || true

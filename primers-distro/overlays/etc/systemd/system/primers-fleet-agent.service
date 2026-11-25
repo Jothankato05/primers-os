@@ -1,8 +1,9 @@
 [Unit]
 Description=PRIMERS fleet agent (the paired invigilator PC can run exams on this PC)
 Documentation=file:///usr/share/doc/primers/pilot-guide.md
-After=network-online.target
-Wants=network-online.target
+# It listens on every address, so it needn't wait for the network to be up
+# (waiting would start NetworkManager-wait-online on every PC at boot)
+After=network.target
 # Only on a lab PC paired with an invigilator PC ('primers-fleet join')
 ConditionDirectoryNotEmpty=/etc/primers/fleet/controllers
 

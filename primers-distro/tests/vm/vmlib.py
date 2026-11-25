@@ -119,11 +119,22 @@ class Result:
         return f"Result(rc={self.rc}, out={self.out[:200]!r}, err={self.err[:200]!r})"
 
 
+# Disk profiles for performance tests: (rotation rate the guest sees, QEMU
+# I/O limits). HDD: a 7200 rpm desktop disk, ~120 random I/Os a second and
+# ~110 MB/s sequential. SSD: a SATA SSD, ~20000 I/Os a second, ~500 MB/s.
+DISK_PROFILES = {
+    "hdd": (7200, {"iops-total": 120, "bps-total": 110 * 1024 * 1024}),
+    "ssd": (1, {"iops-total": 20000, "bps-total": 500 * 1024 * 1024}),
+}
+
+
 class VM:
     def __init__(self, workdir: str, iso: Optional[str] = None, disk: Optional[str] = None,
                  firmware: str = "bios", memory: int = 4096, cpus: int = 2, name: str = "vm",
-                 extra: Sequence[str] = (), log: Callable[[str], None] = print):
+                 extra: Sequence[str] = (), log: Callable[[str], None] = print,
+                 disk_profile: Optional[str] = None):
         self.workdir, self.iso, self.disk = workdir, iso, disk
+        self.disk_profile = disk_profile     # None (virtio, as fast as the host), "hdd" or "ssd"
         self.firmware, self.memory, self.cpus, self.name = firmware, memory, cpus, name
         self.extra = list(extra)
         self.guestfwd: List[tuple] = []     # (guest address, port, host command) per extra address
@@ -163,7 +174,15 @@ class VM:
                      "-drive", f"if=pflash,format=raw,file={self.vars_path}"]
             if self.firmware == "sb":
                 args += ["-machine", "q35,smm=on", "-global", "driver=cfi.pflash01,property=secure,value=on"]
-        if self.disk:
+        if self.disk and self.disk_profile in DISK_PROFILES:
+            # A SATA-like disk the guest sees as rotating (HDD) or not (SSD), limited
+            # to what such a disk does (docs/benchmarks.md)
+            rotation, limits = DISK_PROFILES[self.disk_profile]
+            args += ["-device", "virtio-scsi-pci,id=scsi0",
+                     "-drive", f"file={self.disk},if=none,id=disk0,format=qcow2" +
+                     "".join(f",throttling.{k}={v}" for k, v in limits.items()),
+                     "-device", f"scsi-hd,drive=disk0,bus=scsi0.0,rotation_rate={rotation}"]
+        elif self.disk:
             args += ["-drive", f"file={self.disk},if=virtio,format=qcow2"]
         if self.iso:
             args += ["-drive", f"file={self.iso},media=cdrom,if=none,id=cd0,readonly=on",

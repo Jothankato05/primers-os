@@ -26,7 +26,7 @@ import tempfile
 import threading
 import time
 import traceback
-from typing import List
+from typing import List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from vmlib import VM, VMError  # noqa: E402
@@ -324,8 +324,10 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     root = vm.sh("findmnt -n -o SOURCE /").out.strip()
     c("the installed system boots from its own disk", root == "/dev/vda1" and
       "boot=casper" not in vm.sh("cat /proc/cmdline").out, root)
-    # Test-only: GRUB also on the serial port, so the test can read the menu
-    r = vm.sh("printf 'GRUB_TERMINAL=\"console serial\"\\nGRUB_SERIAL_COMMAND=\"serial --unit=0 --speed=115200\"\\n'"
+    # Test-only: GRUB also on the serial port, and its menu shown (installed
+    # systems hide it), so the test can read the menu and press keys at it
+    r = vm.sh("printf 'GRUB_TERMINAL=\"console serial\"\\nGRUB_SERIAL_COMMAND=\"serial --unit=0 --speed=115200\"\\n"
+              "GRUB_TIMEOUT_STYLE=menu\\nGRUB_TIMEOUT=5\\n'"
               " > /etc/default/grub.d/99-vm-test-serial.cfg && update-grub", timeout=300)
     c("setup: boot menu on the serial port (test only)", r.rc == 0, r.err)
     r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
@@ -1344,10 +1346,169 @@ def fleet_scenario(ctrl: VM, suite: Suite) -> None:
             v.stop()
 
 
+# ------------------------------------------------------------------ #
+#  Performance on a 2 GB, 2-CPU PC with a hard disk or an SSD
+#  (docs/benchmarks.md): boot to the login screen, idle memory, and how
+#  long a candidate waits for the exam after signing in
+# ------------------------------------------------------------------ #
+
+PERF_MEMORY_MB, PERF_CPUS = 2048, 2
+PERF_TARGETS = {"boot_hdd_s": 30.0, "boot_ssd_s": 15.0, "idle_ram_mb": 600, "kiosk_s": 3.0}
+
+
+def guest_benchmark(vm: VM) -> dict:
+    """The OS's own benchmark (what 'benchmark' in the Brain reports)."""
+    r = vm.sh("python3 -I -c \"import sys, json; sys.path.insert(0, '/usr/share/primers/brain'); "
+              "from core import benchmark as b; print(json.dumps(b.collect()))\"", timeout=120)
+    try:
+        return json.loads(r.out)
+    except ValueError:
+        return {}
+
+
+def journal_times(vm: VM, pattern: str) -> List[tuple]:
+    """(time, line) for this boot's journal lines matching an extended regex."""
+    out = []
+    for line in vm.sh(f"journalctl -b -o short-unix --no-pager | grep -E {shlex.quote(pattern)}").out.splitlines():
+        with_time = line.split(" ", 1)
+        try:
+            out.append((float(with_time[0]), with_time[1] if len(with_time) > 1 else ""))
+        except ValueError:
+            continue
+    return out
+
+
+def cold_boot(vm: VM) -> Optional[float]:
+    """Shut down cleanly, then switch on: nothing of the last boot in the
+    guest's memory. Returns the seconds from power-on to the login screen
+    as a person sees it (firmware, boot menu, kernel and services), timed
+    from outside the VM."""
+    try:
+        vm.sh("systemctl poweroff", timeout=15)
+    except Exception:
+        pass
+    try:
+        vm.proc.wait(180)
+    except Exception:
+        pass
+    vm.stop()
+    t0 = time.time()
+    vm.start()
+    vm.wait_agent(timeout=900)
+    deadline = time.time() + 600
+    while time.time() < deadline:
+        if vm.sh("pgrep -f lightdm-gtk-greeter").rc == 0:
+            return round(time.time() - t0, 1)
+        time.sleep(0.5)
+    return None
+
+
+KIOSK_STEPS = (("session opened", r"session opened for user lab\b"),
+               ("lab account reset", r"primers-lab.*(reset|session-setup)"),
+               ("exam session started", r"exam session started"),
+               ("exam browser opened", r"exam opened: "),
+               ("exam page answered", r"visited http"),
+               ("exam page shown", r"exam page shown"))
+
+
+def kiosk_open_seconds(vm: VM, suite: Suite, shot: str):
+    """From the candidate's sign-in (the session opens) to the exam page on
+    screen, and when each step in between happened (seconds after the
+    sign-in), to see where the time goes."""
+    before = len(journal_times(vm, "exam page shown"))
+    sign_in_lab(vm, suite, shot)
+    vm.wait_until(lambda: len(journal_times(vm, "exam page shown")) > before, 180, "the exam page")
+    shown = journal_times(vm, "exam page shown")[-1][0]
+    opened = [t for t, line in journal_times(vm, KIOSK_STEPS[0][1]) if t <= shown]
+    if not opened:
+        return None, {}
+    start = opened[-1]
+    steps = {}
+    for name, pattern in KIOSK_STEPS[1:]:
+        times = [t for t, line in journal_times(vm, pattern) if start <= t <= shown]
+        if times:
+            steps[name] = round(times[0] - start, 2)
+    detail = vm.sh(f"journalctl -b -o short-unix --no-pager --since=@{int(start) - 1} --until=@{int(shown) + 1}").out
+    steps["journal"] = detail[-6000:]
+    return round(shown - start, 2), steps
+
+
+def greeter_after_kernel(vm: VM) -> Optional[float]:
+    """When the login screen appeared, in seconds after the kernel started."""
+    r = vm.sh("echo $(cut -d' ' -f1 /proc/uptime) $(ps -o etimes= -C lightdm-gtk-greeter | head -1)")
+    try:
+        uptime, age = (float(x) for x in r.out.split()[:2])
+        return round(uptime - age, 1)
+    except ValueError:
+        return None
+
+
+def performance(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    global INSTALLER
+    INSTALLER = "script"            # measuring the installed system, not the installer's screens
+    if not install_from_live(vm, suite):
+        return
+    r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable")
+    c("setup: Lab Mode on", r.rc == 0, r.err)
+    results = {"vm": {"memory_mb": vm.memory, "cpus": vm.cpus, "kvm": VM.kvm(),
+                      "host_cpu": open("/proc/cpuinfo").read().split("model name", 1)[-1].split("\n", 1)[0]
+                      .strip(" :\t")},
+               "targets": PERF_TARGETS, "disks": {}}
+    for profile in ("hdd", "ssd"):
+        vm.disk_profile = profile
+        power_on = cold_boot(vm)
+        c(f"{profile}: power-on to the login screen measured", power_on is not None)
+        vm.wait_until(lambda: vm.sh("systemd-analyze").rc == 0, 600, f"{profile}: the boot to finish")
+        vm.wait_until(lambda: vm.sh("systemctl is-active display-manager.service").out.strip() == "active",
+                      300, f"{profile}: the login screen")
+        greeter_s = greeter_after_kernel(vm)
+        bench = guest_benchmark(vm)
+        boot = bench.get("boot", {})
+        c(f"{profile}: the system sees a {'rotating' if profile == 'hdd' else 'solid-state'} disk",
+          bench.get("disk", {}).get("rotational") is (profile == "hdd"), json.dumps(bench.get("disk")))
+        c(f"{profile}: boot to the login screen measured", boot.get("to_login") is not None, json.dumps(boot))
+        slowest = vm.sh("systemd-analyze blame --no-pager | head -12").out
+        chain = vm.sh("systemd-analyze critical-chain --no-pager graphical.target | head -25").out
+        time.sleep(120)                                         # idle at the login screen
+        login_ram = guest_benchmark(vm).get("memory", {}).get("used_mb")
+        prefer_lab_at_login(vm)
+        desktop = sign_in_lab(vm, suite, f"perf-{profile}-desktop", signed_in=lab_desktop_pid)
+        c(f"{profile}: the lab account's desktop", bool(desktop))
+        time.sleep(120)                                         # idle at the desktop
+        bench_desk = guest_benchmark(vm)
+        desk_ram = bench_desk.get("memory", {}).get("used_mb")
+        top = vm.sh("ps -eo rss,comm --sort=-rss --no-headers | head -12").out
+        vm.sh("loginctl terminate-user lab")
+        vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
+        r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=600)
+        c(f"{profile}: exam started", r.rc == 0, r.out + r.err)
+        kiosk_s, kiosk_steps = kiosk_open_seconds(vm, suite, f"perf-{profile}-kiosk")
+        c(f"{profile}: time to the exam page measured", kiosk_s is not None)
+        vm.sh("primers-exam stop", timeout=600)
+        vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
+        results["disks"][profile] = {"power_on_to_login_s": power_on, "login_screen_after_kernel_s": greeter_s,
+                                     "kiosk_steps": kiosk_steps, "boot": boot,
+                                     "login_screen_ram_mb": login_ram, "desktop_ram_mb": desk_ram,
+                                     "kiosk_s": kiosk_s, "memory": bench_desk.get("memory", {}),
+                                     "slowest_units": slowest, "critical_chain": chain, "top_rss_kb": top}
+        target = PERF_TARGETS["boot_hdd_s" if profile == "hdd" else "boot_ssd_s"]
+        for what, value, limit, unit in (("power-on to login screen", power_on, target, "s"),
+                                         ("kernel start to login screen", greeter_s, target, "s"),
+                                         ("kernel start to all services up", boot.get("to_login"), target, "s"),
+                                         ("idle RAM at the desktop", desk_ram, PERF_TARGETS["idle_ram_mb"], "MB"),
+                                         ("idle RAM at the login screen", login_ram, PERF_TARGETS["idle_ram_mb"], "MB"),
+                                         ("sign-in to exam page", kiosk_s, PERF_TARGETS["kiosk_s"], "s")):
+            verdict = "n/a" if value is None else ("meets" if value < limit else "MISSES")
+            suite.note(f"{profile}: {what} {value} {unit} (target < {limit} {unit}): {verdict}")
+    with open(os.path.join(suite.out, "performance.json"), "w") as f:
+        json.dump(results, f, indent=2)
+
+
 SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
              "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam,
-             "fleet": fleet_scenario}
-DISK_SCENARIOS = ("exam-power-cut", "installed")
+             "fleet": fleet_scenario, "performance": performance}
+DISK_SCENARIOS = ("exam-power-cut", "installed", "performance")
 
 
 def main() -> int:
@@ -1378,7 +1539,9 @@ def main() -> int:
     fleet_test = args.scenario == "fleet"           # four VMs at once: smaller ones
     vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware,
             name="invigilator" if fleet_test else args.scenario,
-            memory=2048 if fleet_test else 4096, extra=lan_nic(0) if fleet_test else (),
+            memory=2048 if fleet_test else PERF_MEMORY_MB if args.scenario == "performance" else 4096,
+            cpus=PERF_CPUS if args.scenario == "performance" else 2,
+            extra=lan_nic(0) if fleet_test else (),
             disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario in DISK_SCENARIOS else None)
     relay = os.path.join(HERE, "relay.py")
     vm.guestfwd = [(CDN_OLD, CDN_PORT, f"{sys.executable} {relay} {CDN_PORT}"),
