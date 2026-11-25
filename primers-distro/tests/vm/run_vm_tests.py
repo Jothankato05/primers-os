@@ -483,6 +483,16 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     c = suite.check
     slow = 1 if VM.kvm() else 4
     vm.as_user("primers", "xset s off -dpms; xset s reset")      # screenshots, not a blank screen
+    # Test-only, live session only: record every sfdisk call the installer
+    # makes (its partition library reports failures without sfdisk's words).
+    # Passes everything through to the real sfdisk unchanged.
+    vm.sh("cat > /usr/local/sbin/sfdisk <<'EOF'\n#!/bin/bash\n"
+          "in=$(mktemp); [ -t 0 ] || timeout 3 cat > \"$in\"\n"
+          "out=$(/usr/sbin/sfdisk \"$@\" < \"$in\" 2> >(tee -a /tmp/sfdisk-trace.err >&2)); rc=$?\n"
+          "{ echo \"== $(date +%T.%N) sfdisk $* (rc=$rc)\"; echo '-- in:'; cat \"$in\"; echo '-- out:'; "
+          "printf '%s\\n' \"$out\"; echo '-- holders:'; lsblk -no NAME,MOUNTPOINTS /dev/vda; "
+          "fuser -v /dev/vda* 2>&1; } >> /tmp/sfdisk-trace.log\n"
+          "rm -f \"$in\"; printf '%s\\n' \"$out\"; exit $rc\nEOF\nchmod 0755 /usr/local/sbin/sfdisk")
     vm.as_user("primers", "nohup sudo -E calamares -d > /tmp/calamares.out 2>&1 &")
     vm.wait_until(lambda: INSTALLER_TITLE in vm.as_user("primers", "xwininfo -root -tree").out, 600, "the installer")
     time.sleep(10 * slow)
@@ -528,10 +538,12 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     try:
         return _installer_runs(vm, suite, slow)
     finally:
-        # The installer's own debug log, whatever happened
-        log = vm.sh("cat /home/primers/.cache/calamares/session.log").out
-        with open(os.path.join(suite.out, "installer-session.log"), "w", encoding="utf-8") as f:
-            f.write(log)
+        # The installer's own debug log and the sfdisk trace, whatever happened
+        for name, path in (("installer-session.log", "/home/primers/.cache/calamares/session.log"),
+                           ("installer-sfdisk.log", "/tmp/sfdisk-trace.log"),
+                           ("installer-sfdisk.err", "/tmp/sfdisk-trace.err")):
+            with open(os.path.join(suite.out, name), "w", encoding="utf-8") as f:
+                f.write(vm.sh(f"cat {path}").out)
 
 
 def installer_failed(vm: VM) -> bool:
