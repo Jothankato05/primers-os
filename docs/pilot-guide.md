@@ -9,7 +9,9 @@ the proof points the plan asks for.
 On each PC:
 
 1. Write the ISO to a USB stick (balenaEtcher, Rufus in DD mode, or `dd`).
-2. Boot from it (Secure Boot can stay on) and double-click **Install PRIMERS OS**.
+2. Boot from it (Secure Boot can stay on; legacy BIOS PCs work too) and
+   double-click **Install PRIMERS OS**. On the Partitions page choose
+   **Erase disk**.
 3. Create the **staff (administrator) account** in the installer, with a
    login name such as `labadmin` (the installer refuses names the system
    already uses, such as `staff` or `lab`). Students never get this

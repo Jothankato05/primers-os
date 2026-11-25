@@ -3,6 +3,15 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Installer fixes, found by driving the real installer in a VM**: UEFI
+  "Erase disk" installs failed (Calamares 3.2.61 asked for the GPT backup
+  table's sectors for the root partition); a live-session-only sfdisk
+  correction trims the request to the last usable sector. The installer
+  refuses login names the system already uses (`staff` failed at the end
+  of the install). The VM tests now install through the installer's own
+  screens on legacy BIOS and UEFI with Secure Boot, and run Lab Mode
+  (across restarts) and the whole exam escape suite on each installed
+  system.
 - **Exam Mode survives power cuts and reboots** (ADR 0004). Lock files are
   written durably (fsync'd, renamed, directory fsync'd), `exam.conf` is
   written before the locks and removed after them, so a cut during `start`

@@ -333,9 +333,9 @@ Boot time and RAM use on real lab hardware, number of revived PCs, licence savin
 
 Current build status (updated with each release candidate; tested in virtual machines unless it says otherwise):
 - Release: PRIMERS OS 1.0 Genesis release candidate 1 (v1.0.0-rc1) is a pre-release for testing. No real-hardware results yet.
-- Lab Mode: In build. Shared lab account wiped at every sign-in, sign-out and boot; tested in virtual machines.
+- Lab Mode: In build. Shared lab account wiped at every sign-in, sign-out and boot; tested in virtual machines, live and installed (legacy BIOS, and UEFI with Secure Boot), across restarts.
 - Study Mode: In build. Focus timer; Lite Bee pauses distracting sites; tested in virtual machines.
-- Exam Mode: In build. Full-screen exam kiosk, per-account firewall, USB block and exam log, with the escape routes closed (text consoles, Magic SysRq, browser shortcuts and developer tools, screenshots, clipboard, clock, DNS tunnelling, sudo/su/pkexec/shell), each checked by an automated test (in rc1). Since rc1 an exam also survives a power cut: the PC comes back locked, the exam log keeps every event up to the cut, and the boot menu is locked during exams; checked by cutting a virtual machine's power mid-exam. Arrives in the next release candidate. Not yet run on real lab hardware or with a real CBT platform.
+- Exam Mode: In build. Full-screen exam kiosk, per-account firewall, USB block and a durable exam log; the escape routes are closed (text consoles, Magic SysRq, browser shortcuts and developer tools, screenshots, clipboard, clock, DNS tunnelling, sudo/su/pkexec/shell) and an exam survives a power cut (the PC comes back locked, the log keeps every event up to the cut, the boot menu is locked during exams). Each is checked by an automated test in virtual machines, live and on systems installed with the real installer (legacy BIOS, and UEFI with Secure Boot). Not yet run on real lab hardware or with a real CBT platform.
 - Benchmark: In build. Measures boot time, RAM and disk against the design targets; no figures from real lab hardware yet.
 - Primers ID: Concept. Not built yet.
 
