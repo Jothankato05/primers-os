@@ -37,6 +37,7 @@ CDN_HOST, CDN_PORT, CDN_OLD, CDN_NEW = "cdn.primers.test", 8770, "10.0.2.100", "
 V6_HOST, V6_PORT, V6_OTHER_PORT = "cbt6.primers.test", 8771, 8772
 MOODLE_HOST, MOODLE_PORT = "moodle.primers.test", 8780     # tests/cbt/moodle/setup.sh, on this machine
 MOODLE_BLUE = (15, 108, 191)                                 # Moodle 4.5 (Boost) primary buttons
+MOODLE_QUESTION = (230, 242, 245)                            # the box around each question
 TCEXAM_HOST, TCEXAM_PORT = "tcexam.primers.test", 8781       # tests/cbt/tcexam/setup.sh, on this machine
 TCEXAM_BLUE = (0, 51, 153)            # TCExam 17's title bar: page positions are measured from its top
 TCEXAM_GO = (170, 255, 170)           # the green 'execute' button on its test list
@@ -751,9 +752,9 @@ def exam_network(vm: VM, suite: Suite) -> None:
 #  A real CBT platform: Moodle 4.5, a quiz taken in the exam kiosk
 # ------------------------------------------------------------------ #
 
-def colour_patch(path: str, rgb, tol: int = 10, cell: int = 4):
-    """Centre and size (in cells) of the largest solid patch of `rgb` in a
-    screenshot: a filled button, not the thin text of a link."""
+def colour_boxes(path: str, rgb, tol: int = 10, cell: int = 4):
+    """Every solid patch of `rgb` in a screenshot, as (x0, y0, x1, y1, size
+    in cells), top to bottom; and the screen size."""
     from PIL import Image
     with Image.open(path) as img:
         img = img.convert("RGB")
@@ -763,7 +764,7 @@ def colour_patch(path: str, rgb, tol: int = 10, cell: int = 4):
     hit = [[sum(1 for dy in (0, cell // 2) for dx in (0, cell // 2)
                 if all(abs(c - want) <= tol for c, want in zip(px[gx * cell + dx, gy * cell + dy], rgb))) >= 3
             for gx in range(gw)] for gy in range(gh)]
-    best, seen = [], set()
+    boxes, seen = [], set()
     for y in range(gh):
         for x in range(gw):
             if hit[y][x] and (x, y) not in seen:
@@ -776,13 +777,19 @@ def colour_patch(path: str, rgb, tol: int = 10, cell: int = 4):
                         if 0 <= nx < gw and 0 <= ny < gh and hit[ny][nx] and (nx, ny) not in seen:
                             seen.add((nx, ny))
                             stack.append((nx, ny))
-                if len(comp) > len(best):
-                    best = comp
-    if not best:
+                xs, ys = [c[0] for c in comp], [c[1] for c in comp]
+                boxes.append((min(xs) * cell, min(ys) * cell, (max(xs) + 1) * cell, (max(ys) + 1) * cell, len(comp)))
+    return sorted(boxes, key=lambda b: (b[1], b[0])), (w, h)
+
+
+def colour_patch(path: str, rgb, tol: int = 10, cell: int = 4):
+    """Centre and size (in cells) of the largest solid patch of `rgb` in a
+    screenshot: a filled button, not the thin text of a link."""
+    boxes, (w, h) = colour_boxes(path, rgb, tol, cell)
+    if not boxes:
         return None, 0, (w, h)
-    xs, ys = [c[0] for c in best], [c[1] for c in best]
-    centre = ((min(xs) + max(xs) + 1) * cell // 2, (min(ys) + max(ys) + 1) * cell // 2)
-    return centre, len(best), (w, h)
+    x0, y0, x1, y1, size = max(boxes, key=lambda b: b[4])
+    return ((x0 + x1) // 2, (y0 + y1) // 2), size, (w, h)
 
 
 KIOSK_BAR = 30          # the kiosk's own bar along the top: its clock changes every second
@@ -855,6 +862,31 @@ def moodle_attempts(state: str) -> str:
     return r.stdout.strip() or r.stderr.strip()
 
 
+def moodle_answers() -> dict:
+    """The answers saved in student1's latest finished attempt, and its marks."""
+    latest = ("(SELECT a.id FROM mdl_quiz_attempts a JOIN mdl_user u ON u.id = a.userid "
+              "WHERE u.username = 'student1' AND a.state = 'finished' ORDER BY a.id DESC LIMIT 1)")
+    sql = ("SELECT d.value FROM mdl_question_attempt_step_data d "
+           "JOIN mdl_question_attempt_steps s ON s.id = d.attemptstepid "
+           "JOIN mdl_question_attempts qa ON qa.id = s.questionattemptid "
+           f"JOIN mdl_quiz_attempts a ON a.uniqueid = qa.questionusageid WHERE a.id = {latest} "
+           "AND d.name = 'answer' ORDER BY qa.slot")
+    run = lambda q: subprocess.run(["sudo", "-u", "postgres", "psql", "-qtA", "-d", "moodle", "-c", q],  # noqa: E731
+                                   capture_output=True, text=True).stdout
+    grade = run(f"SELECT sumgrades FROM mdl_quiz_attempts WHERE id = {latest}").strip()
+    try:
+        marks = float(grade)
+    except ValueError:
+        marks = 0.0
+    return {"answers": run(sql).splitlines(), "grade": marks}
+
+
+def image_size(path: str):
+    from PIL import Image
+    with Image.open(path) as img:
+        return img.size
+
+
 def exam_moodle(vm: VM, suite: Suite) -> None:
     c = suite.check
     cmid = os.environ.get("MOODLE_CMID", "")
@@ -862,7 +894,7 @@ def exam_moodle(vm: VM, suite: Suite) -> None:
         c("setup: a Moodle quiz to take (tests/cbt/moodle/setup.sh, MOODLE_CMID)", False, repr(cmid))
         return
     quiz = f"http://{MOODLE_HOST}:{MOODLE_PORT}/mod/quiz/view.php?id={cmid}"
-    before = moodle_attempts("finished")
+    finished_before = moodle_attempts("finished")
     vm.start()
     vm.wait_agent(timeout=1200)
     vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
@@ -918,8 +950,20 @@ def exam_moodle(vm: VM, suite: Suite) -> None:
     pressed, before = press_primary(vm, "moodle-02-quiz")
     c("'Attempt quiz' pressed", pressed)
     vm.wait_until(lambda: visited(vm, "/mod/quiz/attempt.php"), 120, "the attempt")
-    settled(vm, "moodle-03-attempt", before)
+    path = settled(vm, "moodle-03-attempt", before)
     c("the questions are shown", moodle_attempts("inprogress") not in ("", "0"))
+    # Answer both: 'True' in the first question's box, the second's text field
+    boxes = [b for b in colour_boxes(path, MOODLE_QUESTION, tol=4)[0] if b[4] > 500]
+    c("both questions are on screen", len(boxes) >= 2, repr(boxes))
+    if len(boxes) < 2:
+        return
+    w, h = image_size(path)
+    vm.click(boxes[0][0] + 30, boxes[0][1] + 69, w, h)
+    time.sleep(1)
+    vm.click(boxes[1][0] + 150, boxes[1][1] + 72, w, h)
+    time.sleep(1)
+    vm.type_then_settle("Random Access Memory")
+    vm.pointer_away(w, h)
     pressed, before = press_primary(vm, "moodle-03-attempt", scroll_end=True)
     c("'Finish attempt' pressed", pressed)
     vm.wait_until(lambda: visited(vm, "/mod/quiz/summary.php"), 120, "the summary")
@@ -932,8 +976,12 @@ def exam_moodle(vm: VM, suite: Suite) -> None:
     vm.wait_until(lambda: visited(vm, "/mod/quiz/review.php"), 120, "the review page")
     settled(vm, "moodle-06-review", before)
     after = moodle_attempts("finished")
-    c("Moodle recorded the candidate's submitted attempt", after.isdigit() and before.isdigit()
-      and int(after) == int(before) + 1, f"finished attempts before {before}, after {after}")
+    c("Moodle recorded the candidate's submitted attempt", after.isdigit() and finished_before.isdigit()
+      and int(after) == int(finished_before) + 1, f"finished attempts before {finished_before}, after {after}")
+    answers = moodle_answers()
+    c("Moodle saved both answers and marked them", "1" in answers["answers"] and
+      any(a.strip() and a != "1" for a in answers["answers"]) and answers["grade"] >= 1,
+      json.dumps(answers))
     blocked = [line for line in vm.sh("cat /var/log/primers/exam.jsonl").out.splitlines() if "blocked" in line]
     c("nothing Moodle needed was blocked", not blocked, "\n".join(blocked[:5]))
     r = vm.sh("primers-exam stop", timeout=300)
@@ -1017,7 +1065,15 @@ def exam_tcexam(vm: VM, suite: Suite) -> None:
     kiosk = sign_in_lab(vm, suite, "tcexam-01-login")
     c("the kiosk opens TCExam's sign-in page", bool(kiosk))
     vm.wait_until(lambda: visited(vm, "/public/code/index.php", site), 120, "TCExam's sign-in page")
-    path = settled(vm, "tcexam-01-login")
+    def tcexam_page(shot: str, before=None) -> str:
+        """A TCExam page, drawn (its blue title bar on screen)."""
+        deadline = time.time() + 240
+        while True:
+            path = settled(vm, shot, before)
+            if page_top(path, TCEXAM_BLUE)[0] is not None or time.time() > deadline:
+                return path
+            time.sleep(3)
+    path = tcexam_page("tcexam-01-login")
     c("TCExam's sign-in page is on screen", page_top(path, TCEXAM_BLUE)[0] is not None)
 
     def test_list() -> bool:
@@ -1028,7 +1084,8 @@ def exam_tcexam(vm: VM, suite: Suite) -> None:
         tcexam_click(vm, path, 475, 139)                    # username
         vm.key("ctrl-a")
         vm.type_then_settle("student1")
-        tcexam_click(vm, path, 475, 162)                    # password
+        vm.key("tab")                                       # password
+        time.sleep(1)
         vm.key("ctrl-a")
         vm.type_then_settle("Student-Test-1")
         before = page_image(vm.screenshot("tcexam-01-login"))
@@ -1038,35 +1095,54 @@ def exam_tcexam(vm: VM, suite: Suite) -> None:
             signed_in = True
             break
         except VMError:                 # the sign-in page again, with a message above it
-            path = settled(vm, f"tcexam-01-sign-in-retry-{attempt_no + 1}", before)
+            path = tcexam_page(f"tcexam-01-sign-in-retry-{attempt_no + 1}", before)
     c("the candidate signs in to TCExam in the kiosk", signed_in)
     if not signed_in:
         return
-    path = settled(vm, "tcexam-02-tests")
+    path = tcexam_page("tcexam-02-tests")
     before = page_image(path)
     centre, _, (w, h) = colour_patch(path, TCEXAM_GO)
     vm.click(centre[0], centre[1], w, h)                        # 'execute' on the test list
     vm.pointer_away(w, h)
     vm.wait_until(lambda: visited(vm, f"/public/code/tce_test_start.php?testid={testid}", site), 120,
                   "the test's information page")
-    path = settled(vm, "tcexam-03-info", before)
+    path = tcexam_page("tcexam-03-info", before)
     before = page_image(path)
     c("'execute' pressed on the test's information page", tcexam_click(vm, path, 606, 424))
     vm.pointer_away(w, h)
     vm.wait_until(lambda: visited(vm, f"/public/code/tce_test_execute.php?testid={testid}", site), 120,
                   "the first question")
-    path = settled(vm, "tcexam-04-question", before)
+    path = tcexam_page("tcexam-04-question", before)
     c("the test started", tcexam_sql(f"SELECT testuser_status {attempt}") == "1",
       tcexam_sql(f"SELECT testuser_status {attempt}"))
-    # Answer the question on screen (the first option), then end the test
-    tcexam_click(vm, path, 60, 209)
-    before = page_image(vm.screenshot("tcexam-04-question"))
-    c("'terminate the exam' pressed", tcexam_click(vm, path, 75, 579))
-    vm.pointer_away(w, h)
-    path = settled(vm, "tcexam-05-confirm", before)
-    _, size, _ = colour_patch(path, TCEXAM_WARN)
-    c("TCExam asks to confirm the end of the test", size >= 200, f"confirmation box: {size} cells")
-    c("'terminate' confirmed", tcexam_click(vm, path, 594, 178))
+
+    # Answer the question on screen (its first option), then 'terminate the
+    # exam': five Tabs from the answer (confirm, next, the question list,
+    # the comment box), the page's own order whatever the fonts
+    def confirm_box(path: str):
+        boxes = [b for b in colour_boxes(path, TCEXAM_WARN)[0] if b[4] >= 200]
+        return max(boxes, key=lambda b: b[4]) if boxes else None
+    box = None
+    for attempt_no in range(3):         # a lost Tab leaves the focus short of the button: again
+        tcexam_click(vm, path, 60, 209)
+        for _ in range(5):
+            vm.key("tab")
+            time.sleep(0.5)
+        vm.key("ret")
+        try:
+            vm.wait_until(lambda: confirm_box(vm.screenshot("tcexam-05-confirm")), 90,
+                          "the request to confirm", interval=5)
+        except VMError:
+            path = tcexam_page(f"tcexam-04-question-retry-{attempt_no + 1}")
+            continue
+        path = tcexam_page("tcexam-05-confirm")
+        box = confirm_box(path)
+        break
+    c("TCExam asks to confirm the end of the test", box is not None)
+    if not box:
+        return
+    # Its 'terminate' button is just left of the box's centre, at its bottom
+    vm.click((box[0] + box[2]) // 2 - 40, box[3] - 14, w, h)
     vm.pointer_away(w, h)
     vm.wait_until(lambda: tcexam_sql(f"SELECT testuser_status {attempt}") == "4", 120, "the test to end")
     settled(vm, "tcexam-06-done")
