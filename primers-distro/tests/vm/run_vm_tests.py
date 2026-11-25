@@ -1575,10 +1575,24 @@ def splash_cursor(path: str):
 def brand(vm: VM, suite: Suite) -> None:
     c = suite.check
     vm.start()
-    t0, seen, last, box, checked, flips = time.time(), {}, None, None, time.time(), 0
-    agent_up = False
+    t0, seen, last, box, flips = time.time(), {}, None, None, 0
     samples = []                        # (time, state) from fast samples of the cursor only
-    while time.time() - t0 < 1200:
+    # Whether the desktop is up is asked in the background: the guest agent can
+    # take seconds to answer, and the screen must be sampled without pauses
+    desktop = threading.Event()
+
+    def watch_desktop() -> None:
+        while not desktop.is_set() and time.time() - t0 < 1200:
+            try:
+                vm.wait_agent(timeout=10)
+                if vm.sh("pgrep -x openbox").rc == 0:
+                    desktop.set()
+                    return
+            except VMError:
+                pass
+            time.sleep(2)
+    threading.Thread(target=watch_desktop, daemon=True).start()
+    while not desktop.is_set() and time.time() - t0 < 1200:
         state = None
         if box:                         # the cursor found: sample just it, fast
             ppm = vm.screendump_now("_blink")
@@ -1604,16 +1618,6 @@ def brand(vm: VM, suite: Suite) -> None:
             if last and state != last:
                 flips += 1              # any change seen, however slow the sampling
             last = state
-        if time.time() - checked > 3:
-            checked = time.time()
-            if not agent_up:
-                try:
-                    vm.wait_agent(timeout=0.5)
-                    agent_up = True
-                except VMError:
-                    pass
-            if agent_up and vm.sh("pgrep -x openbox").rc == 0:
-                break
     # Changes between fast samples taken close together (a slow sample can hide a blink)
     changes = [b[0] for a, b in zip(samples, samples[1:]) if a[1] != b[1] and b[0] - a[0] < 0.2]
     c("boot splash: the white P on Night Ink, with its green cursor", "on" in seen, repr(seen))
