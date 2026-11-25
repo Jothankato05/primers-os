@@ -44,6 +44,7 @@ TCEXAM_HOST, TCEXAM_PORT = "tcexam.primers.test", 8781       # tests/cbt/tcexam/
 TCEXAM_BLUE = (0, 51, 153)            # TCExam 17's title bar: page positions are measured from its top
 TCEXAM_GO = (170, 255, 170)           # the green 'execute' button on its test list
 TCEXAM_WARN = (153, 255, 153)         # the box asking to confirm the end of the test
+TCEXAM_BUTTON = (211, 211, 211)       # its grey 'execute' / 'cancel' buttons
 GUEST_HOST6 = "fec0::2"              # the host, as the VM sees it over IPv6 (QEMU user networking)
 HOST_IPV6 = True                     # can this machine serve over IPv6 (::1)?
 STAFF_PASSWORD = "vm-test-staff"      # a throwaway VM's account, not a secret
@@ -1023,6 +1024,18 @@ def tcexam_click(vm: VM, path: str, x: int, y: int) -> bool:
     return True
 
 
+def tcexam_fields(path: str) -> List[tuple]:
+    """TCExam's sign-in fields (username, password): the white boxes inside
+    its grey sign-in panel, top to bottom, wherever the screen width puts them."""
+    panels = [b for b in colour_boxes(path, (244, 244, 244), tol=2)[0] if b[4] >= 200]
+    if not panels:
+        return []
+    px0, py0, px1, py1, _ = max(panels, key=lambda b: b[4])
+    whites = [b for b in colour_boxes(path, (255, 255, 255), tol=2)[0]
+              if b[4] >= 20 and px0 < b[0] and b[2] < px1 and py0 < b[1] and b[3] < py1]
+    return sorted(whites, key=lambda b: b[1])[:2]
+
+
 def tcexam_sql(sql: str) -> str:
     r = subprocess.run(["sudo", "-u", "postgres", "psql", "-qtA", "-d", "tcexam", "-c", sql],
                        capture_output=True, text=True)
@@ -1086,7 +1099,12 @@ def exam_tcexam(vm: VM, suite: Suite) -> None:
         return size >= 20
     signed_in = False
     for attempt_no in range(3):         # typed keys can be lost under emulation: type again
-        tcexam_click(vm, path, 475, 139)                    # username
+        fields = tcexam_fields(path)                        # username, then password
+        if fields:
+            x0, y0, x1, y1, _ = fields[0]
+            sw, sh = image_size(path)
+            vm.click((x0 + x1) // 2, (y0 + y1) // 2, sw, sh)
+            time.sleep(0.5)
         vm.key("ctrl-a")
         vm.type_then_settle("student1")
         vm.key("tab")                                       # password
@@ -1113,7 +1131,11 @@ def exam_tcexam(vm: VM, suite: Suite) -> None:
                   "the test's information page")
     path = tcexam_page("tcexam-03-info", before)
     before = page_image(path)
-    c("'execute' pressed on the test's information page", tcexam_click(vm, path, 606, 424))
+    # 'execute' and 'cancel', grey, centred under the test's details (where depends on the screen width)
+    buttons = sorted((b for b in colour_boxes(path, TCEXAM_BUTTON, tol=4)[0] if b[4] >= 20), key=lambda b: b[0])
+    if buttons:
+        vm.click((buttons[0][0] + buttons[0][2]) // 2, (buttons[0][1] + buttons[0][3]) // 2, w, h)
+    c("'execute' pressed on the test's information page", bool(buttons), repr(buttons))
     vm.pointer_away(w, h)
     vm.wait_until(lambda: visited(vm, f"/public/code/tce_test_execute.php?testid={testid}", site), 120,
                   "the first question")
