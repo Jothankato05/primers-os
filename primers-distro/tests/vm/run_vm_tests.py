@@ -17,6 +17,7 @@ import functools
 import http.server
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -34,7 +35,14 @@ EXAM_HOST = "cbt.primers.test"
 EXAM_URL = f"http://{EXAM_HOST}:{EXAM_PORT}/exam.html"
 CDN_HOST, CDN_PORT, CDN_OLD, CDN_NEW = "cdn.primers.test", 8770, "10.0.2.100", "10.0.2.101"
 V6_HOST, V6_PORT, V6_OTHER_PORT = "cbt6.primers.test", 8771, 8772
+MOODLE_HOST, MOODLE_PORT = "moodle.primers.test", 8780     # tests/cbt/moodle/setup.sh, on this machine
+MOODLE_BLUE = (15, 108, 191)                                 # Moodle 4.5 (Boost) primary buttons
+TCEXAM_HOST, TCEXAM_PORT = "tcexam.primers.test", 8781       # tests/cbt/tcexam/setup.sh, on this machine
+TCEXAM_BLUE = (0, 51, 153)            # TCExam 17's title bar: page positions are measured from its top
+TCEXAM_GO = (170, 255, 170)           # the green 'execute' button on its test list
+TCEXAM_WARN = (153, 255, 153)         # the box asking to confirm the end of the test
 GUEST_HOST6 = "fec0::2"              # the host, as the VM sees it over IPv6 (QEMU user networking)
+HOST_IPV6 = True                     # can this machine serve over IPv6 (::1)?
 STAFF_PASSWORD = "vm-test-staff"      # a throwaway VM's account, not a secret
 INSTALLER = "calamares"               # how the 'installed' scenario installs (--installer)
 
@@ -691,12 +699,30 @@ def exam_network(vm: VM, suite: Suite) -> None:
       lab_get(vm, f"http://{CDN_OLD}:{CDN_PORT}/logo.svg") == "200")
     c("the exam log records the move", "moved: now also " + CDN_NEW in vm.sh("cat /var/log/primers/exam.jsonl").out)
     kiosk = sign_in_lab(vm, suite, "net-01-kiosk-cdn")
-    c("the kiosk shows the exam with its CDN logo", bool(kiosk))
+    log = lambda: vm.sh("cat /var/log/primers/exam.jsonl").out  # noqa: E731
+    vm.wait_until(lambda: f"visited {cdn_url}" in log(), 180, "the kiosk to open the exam page")
+    # The CDN's logo is a 48x48 green square: on screen means it came through
+    def logo_shown() -> bool:
+        _, size, _ = colour_patch(vm.screenshot("net-01-kiosk-cdn"), (30, 158, 98), tol=12)
+        return size >= 100
+    try:
+        vm.wait_until(logo_shown, 120, "the CDN logo on the exam page", interval=5)
+        shown = True
+    except VMError:
+        shown = False
+    c("the kiosk shows the exam page with the logo from the CDN", bool(kiosk) and shown and
+      "blocked" not in log(), "logo not on screen" if not shown else "something was blocked")
     r = vm.sh("primers-exam stop", timeout=300)
     c("exam stops", r.rc == 0, r.out + r.err)
     vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
 
     # 3. An exam server reachable only over IPv6
+    if not HOST_IPV6:
+        if os.environ.get("PRIMERS_VM_REQUIRE_IPV6"):
+            c("the test machine can serve over IPv6", False, "no IPv6 on this machine")
+        else:
+            suite.note("IPv6 part skipped: this machine has no IPv6 (the release workflow requires it)")
+        return
     vm.wait_until(lambda: vm.sh("ip -6 addr show scope global | grep -q 'inet6 fec0:'").rc == 0, 120,
                   "an IPv6 address")
     v6_url = f"http://{V6_HOST}:{V6_PORT}/exam.html"
@@ -721,8 +747,342 @@ def exam_network(vm: VM, suite: Suite) -> None:
     c("exam stops", r.rc == 0, r.out + r.err)
 
 
+# ------------------------------------------------------------------ #
+#  A real CBT platform: Moodle 4.5, a quiz taken in the exam kiosk
+# ------------------------------------------------------------------ #
+
+def colour_patch(path: str, rgb, tol: int = 10, cell: int = 4):
+    """Centre and size (in cells) of the largest solid patch of `rgb` in a
+    screenshot: a filled button, not the thin text of a link."""
+    from PIL import Image
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        w, h = img.size
+        px = img.load()
+    gw, gh = w // cell, h // cell
+    hit = [[sum(1 for dy in (0, cell // 2) for dx in (0, cell // 2)
+                if all(abs(c - want) <= tol for c, want in zip(px[gx * cell + dx, gy * cell + dy], rgb))) >= 3
+            for gx in range(gw)] for gy in range(gh)]
+    best, seen = [], set()
+    for y in range(gh):
+        for x in range(gw):
+            if hit[y][x] and (x, y) not in seen:
+                stack, comp = [(x, y)], []
+                seen.add((x, y))
+                while stack:
+                    cx, cy = stack.pop()
+                    comp.append((cx, cy))
+                    for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+                        if 0 <= nx < gw and 0 <= ny < gh and hit[ny][nx] and (nx, ny) not in seen:
+                            seen.add((nx, ny))
+                            stack.append((nx, ny))
+                if len(comp) > len(best):
+                    best = comp
+    if not best:
+        return None, 0, (w, h)
+    xs, ys = [c[0] for c in best], [c[1] for c in best]
+    centre = ((min(xs) + max(xs) + 1) * cell // 2, (min(ys) + max(ys) + 1) * cell // 2)
+    return centre, len(best), (w, h)
+
+
+KIOSK_BAR = 30          # the kiosk's own bar along the top: its clock changes every second
+
+
+def page_image(path: str):
+    """The page part of a kiosk screenshot (below the kiosk's bar)."""
+    from PIL import Image
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        return img.crop((0, KIOSK_BAR, img.width, img.height))
+
+
+def same_page(a, b, cells: int = 24) -> bool:
+    """Two looks at the page show the same thing: at most `cells` 16x16
+    squares differ (a blinking caret, a clock on the page ticking)."""
+    from PIL import Image, ImageChops
+    if a is None or b is None or a.size != b.size:
+        return False
+    diff = ImageChops.difference(a, b).convert("L").point(lambda v: 255 if v > 24 else 0)
+    grid = diff.resize((max(1, a.width // 16), max(1, a.height // 16)), Image.BOX)
+    return sum(1 for v in grid.getdata() if v) <= cells
+
+
+def settled(vm: VM, shot: str, before=None, timeout: float = 180) -> str:
+    """Wait until the page is drawn: no longer `before` (the page as it was
+    before the click or key that changed it) and the same on two looks in a
+    row. The kiosk logs a visit when the server answers, and under emulation
+    the previous page can stay on screen a good while after that."""
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        path = vm.screenshot(shot)
+        img = page_image(path)
+        if before is not None and same_page(img, before):
+            last = None
+        elif same_page(img, last):
+            return path
+        else:
+            last = img
+        time.sleep(3)
+    raise VMError(f"timed out waiting for the page to be drawn ({shot})")
+
+
+def press_primary(vm: VM, shot: str, scroll_end: bool = False):
+    """Click the page's main (blue) button, as a candidate would. Returns
+    whether it was found, and the page as it was (for settled())."""
+    if scroll_end:
+        vm.key("end")
+        time.sleep(2)
+    path = settled(vm, shot)
+    before = page_image(path)
+    centre, size, (w, h) = colour_patch(path, MOODLE_BLUE)
+    if not centre or size < 20:
+        return False, before
+    vm.click(centre[0], centre[1], w, h)
+    vm.pointer_away(w, h)
+    return True, before
+
+
+def visited(vm: VM, part: str, site: str = f"http://{MOODLE_HOST}:{MOODLE_PORT}") -> bool:
+    return f"visited {site}{part}" in vm.sh("cat /var/log/primers/exam.jsonl").out
+
+
+def moodle_attempts(state: str) -> str:
+    sql = ("SELECT count(*) FROM mdl_quiz_attempts a JOIN mdl_user u ON u.id = a.userid "
+           f"WHERE u.username = 'student1' AND a.state = '{state}'")
+    r = subprocess.run(["sudo", "-u", "postgres", "psql", "-qtA", "-d", "moodle", "-c", sql],
+                       capture_output=True, text=True)
+    return r.stdout.strip() or r.stderr.strip()
+
+
+def exam_moodle(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    cmid = os.environ.get("MOODLE_CMID", "")
+    if not cmid.isdigit():
+        c("setup: a Moodle quiz to take (tests/cbt/moodle/setup.sh, MOODLE_CMID)", False, repr(cmid))
+        return
+    quiz = f"http://{MOODLE_HOST}:{MOODLE_PORT}/mod/quiz/view.php?id={cmid}"
+    before = moodle_attempts("finished")
+    vm.start()
+    vm.wait_agent(timeout=1200)
+    vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
+    vm.sh(f"echo '10.0.2.2 {MOODLE_HOST}' >> /etc/hosts")
+
+    # The probe, as staff would run it: Moodle 4.5 loads MathJax from a CDN
+    # on every page (its default maths filter), so that server must be allowed
+    r = vm.as_user("primers", f"primers-exam probe '{quiz}' --seconds 25 --json", timeout=120)
+    try:
+        probe = json.loads(r.out)
+    except ValueError:
+        probe = {}
+    hosts = [s.get("host") for s in probe.get("servers", [])]
+    c("probe: finds Moodle and the CDN it loads MathJax from", hosts[:1] == [MOODLE_HOST] and
+      "cdn.jsdelivr.net" in probe.get("allow", []) and set(probe.get("allow", [])) <= {"cdn.jsdelivr.net"},
+      r.out[-1500:] + r.err[-500:])
+    command = probe.get("command", f"sudo primers-exam start {quiz}")
+
+    r = vm.sh("primers-lab enable && systemctl start primers-lab-reset.service")
+    c("setup: Lab Mode enabled", r.rc == 0, r.err)
+    vm.sh("loginctl terminate-user primers")
+    vm.wait_until(lambda: vm.sh("pgrep -u primers -x openbox").rc != 0, 60, "sign-out")
+    argv = shlex.split(command)
+    r = vm.run(argv[1:] if argv[0] == "sudo" else argv, timeout=300)     # the probe's command, as root
+    c("setup: Exam Mode on for the Moodle quiz, with the probe's command", r.rc == 0, command + "\n" + r.out + r.err)
+
+    # The candidate signs in to the kiosk, then to Moodle, and takes the quiz
+    kiosk = sign_in_lab(vm, suite, "moodle-01-login")
+    c("the kiosk opens Moodle's sign-in page", bool(kiosk))
+    vm.wait_until(lambda: visited(vm, "/login/index.php"), 120, "Moodle's sign-in page")
+    time.sleep(5)
+    settled(vm, "moodle-01-login")
+    signed_in = False
+    for attempt in range(3):            # typed keys can be lost under emulation: type again
+        vm.key("ctrl-a")
+        vm.type_then_settle("student1")
+        vm.key("tab")
+        time.sleep(1)
+        vm.key("ctrl-a")
+        vm.type_then_settle("Student-Test-1")
+        before = page_image(vm.screenshot("moodle-01-login"))
+        vm.key("ret")
+        try:
+            vm.wait_until(lambda: visited(vm, f"/mod/quiz/view.php?id={cmid}"), 90, "the quiz page")
+            signed_in = True
+            break
+        except VMError:                 # the username field has focus again
+            settled(vm, f"moodle-01-sign-in-retry-{attempt + 1}", before)
+    c("the candidate signs in to Moodle in the kiosk", signed_in)
+    if not signed_in:
+        return
+    settled(vm, "moodle-02-quiz", before)
+    pressed, before = press_primary(vm, "moodle-02-quiz")
+    c("'Attempt quiz' pressed", pressed)
+    vm.wait_until(lambda: visited(vm, "/mod/quiz/attempt.php"), 120, "the attempt")
+    settled(vm, "moodle-03-attempt", before)
+    c("the questions are shown", moodle_attempts("inprogress") not in ("", "0"))
+    pressed, before = press_primary(vm, "moodle-03-attempt", scroll_end=True)
+    c("'Finish attempt' pressed", pressed)
+    vm.wait_until(lambda: visited(vm, "/mod/quiz/summary.php"), 120, "the summary")
+    settled(vm, "moodle-04-summary", before)
+    pressed, before = press_primary(vm, "moodle-04-summary", scroll_end=True)
+    c("'Submit all and finish' pressed", pressed)
+    settled(vm, "moodle-05-confirm", before)             # a confirmation box over the page
+    pressed, before = press_primary(vm, "moodle-05-confirm")
+    c("the confirmation's 'Submit all and finish' pressed", pressed)
+    vm.wait_until(lambda: visited(vm, "/mod/quiz/review.php"), 120, "the review page")
+    settled(vm, "moodle-06-review", before)
+    after = moodle_attempts("finished")
+    c("Moodle recorded the candidate's submitted attempt", after.isdigit() and before.isdigit()
+      and int(after) == int(before) + 1, f"finished attempts before {before}, after {after}")
+    blocked = [line for line in vm.sh("cat /var/log/primers/exam.jsonl").out.splitlines() if "blocked" in line]
+    c("nothing Moodle needed was blocked", not blocked, "\n".join(blocked[:5]))
+    r = vm.sh("primers-exam stop", timeout=300)
+    c("exam stops", r.rc == 0, r.out + r.err)
+
+
+# ------------------------------------------------------------------ #
+#  A real CBT platform: TCExam 17, a test taken in the exam kiosk
+# ------------------------------------------------------------------ #
+
+def page_top(path: str, rgb, tol: int = 6):
+    """The screen row where a page starts: its first row mostly of `rgb`
+    (the page's title bar; the kiosk's own bar is above it)."""
+    from PIL import Image
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        w, h = img.size
+        px = img.load()
+    for y in range(h):
+        if sum(1 for x in range(0, w, 8) if all(abs(c - t) <= tol for c, t in zip(px[x, y], rgb))) >= w // 8 * 0.6:
+            return y, (w, h)
+    return None, (w, h)
+
+
+def tcexam_click(vm: VM, path: str, x: int, y: int) -> bool:
+    """Click a point of the TCExam page in screenshot `path`: x and y as
+    measured on its pages at 1280 wide in the kiosk's engine, y from the top
+    of its title bar."""
+    top, (w, h) = page_top(path, TCEXAM_BLUE)
+    if top is None:
+        return False
+    vm.click(x, top + y, w, h)
+    time.sleep(0.5)
+    return True
+
+
+def tcexam_sql(sql: str) -> str:
+    r = subprocess.run(["sudo", "-u", "postgres", "psql", "-qtA", "-d", "tcexam", "-c", sql],
+                       capture_output=True, text=True)
+    return r.stdout.strip() or r.stderr.strip()
+
+
+def exam_tcexam(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    testid = os.environ.get("TCEXAM_TESTID", "")
+    if not testid.isdigit():
+        c("setup: a TCExam test to take (tests/cbt/tcexam/setup.sh, TCEXAM_TESTID)", False, repr(testid))
+        return
+    site = f"http://{TCEXAM_HOST}:{TCEXAM_PORT}"
+    start = f"{site}/public/code/index.php"
+    attempt = ("FROM tce_tests_users t JOIN tce_users u ON u.user_id = t.testuser_user_id "
+               f"WHERE u.user_name = 'student1' AND t.testuser_test_id = {testid}")
+    c("setup: the test hasn't been taken yet", tcexam_sql(f"SELECT count(*) {attempt}") == "0",
+      tcexam_sql(f"SELECT testuser_status {attempt}"))
+    vm.start()
+    vm.wait_agent(timeout=1200)
+    vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
+    vm.sh(f"echo '10.0.2.2 {TCEXAM_HOST}' >> /etc/hosts")
+
+    # The probe, as staff would run it: TCExam serves everything itself
+    r = vm.as_user("primers", f"primers-exam probe '{start}' --seconds 20 --json", timeout=120)
+    try:
+        probe = json.loads(r.out)
+    except ValueError:
+        probe = {}
+    hosts = [s.get("host") for s in probe.get("servers", [])]
+    c("probe: TCExam needs only its own server", hosts == [TCEXAM_HOST] and probe.get("allow") == [],
+      r.out[-1500:] + r.err[-500:])
+    command = probe.get("command", f"sudo primers-exam start {start}")
+
+    r = vm.sh("primers-lab enable && systemctl start primers-lab-reset.service")
+    c("setup: Lab Mode enabled", r.rc == 0, r.err)
+    vm.sh("loginctl terminate-user primers")
+    vm.wait_until(lambda: vm.sh("pgrep -u primers -x openbox").rc != 0, 60, "sign-out")
+    argv = shlex.split(command)
+    r = vm.run(argv[1:] if argv[0] == "sudo" else argv, timeout=300)     # the probe's command, as root
+    c("setup: Exam Mode on for the TCExam test, with the probe's command", r.rc == 0,
+      command + "\n" + r.out + r.err)
+
+    # The candidate signs in to the kiosk, then to TCExam, and takes the test
+    kiosk = sign_in_lab(vm, suite, "tcexam-01-login")
+    c("the kiosk opens TCExam's sign-in page", bool(kiosk))
+    vm.wait_until(lambda: visited(vm, "/public/code/index.php", site), 120, "TCExam's sign-in page")
+    path = settled(vm, "tcexam-01-login")
+    c("TCExam's sign-in page is on screen", page_top(path, TCEXAM_BLUE)[0] is not None)
+
+    def test_list() -> bool:
+        _, size, _ = colour_patch(vm.screenshot("tcexam-02-tests"), TCEXAM_GO)
+        return size >= 20
+    signed_in = False
+    for attempt_no in range(3):         # typed keys can be lost under emulation: type again
+        tcexam_click(vm, path, 475, 139)                    # username
+        vm.key("ctrl-a")
+        vm.type_then_settle("student1")
+        tcexam_click(vm, path, 475, 162)                    # password
+        vm.key("ctrl-a")
+        vm.type_then_settle("Student-Test-1")
+        before = page_image(vm.screenshot("tcexam-01-login"))
+        vm.key("ret")
+        try:
+            vm.wait_until(test_list, 90, "the test list", interval=5)
+            signed_in = True
+            break
+        except VMError:                 # the sign-in page again, with a message above it
+            path = settled(vm, f"tcexam-01-sign-in-retry-{attempt_no + 1}", before)
+    c("the candidate signs in to TCExam in the kiosk", signed_in)
+    if not signed_in:
+        return
+    path = settled(vm, "tcexam-02-tests")
+    before = page_image(path)
+    centre, _, (w, h) = colour_patch(path, TCEXAM_GO)
+    vm.click(centre[0], centre[1], w, h)                        # 'execute' on the test list
+    vm.pointer_away(w, h)
+    vm.wait_until(lambda: visited(vm, f"/public/code/tce_test_start.php?testid={testid}", site), 120,
+                  "the test's information page")
+    path = settled(vm, "tcexam-03-info", before)
+    before = page_image(path)
+    c("'execute' pressed on the test's information page", tcexam_click(vm, path, 606, 424))
+    vm.pointer_away(w, h)
+    vm.wait_until(lambda: visited(vm, f"/public/code/tce_test_execute.php?testid={testid}", site), 120,
+                  "the first question")
+    path = settled(vm, "tcexam-04-question", before)
+    c("the test started", tcexam_sql(f"SELECT testuser_status {attempt}") == "1",
+      tcexam_sql(f"SELECT testuser_status {attempt}"))
+    # Answer the question on screen (the first option), then end the test
+    tcexam_click(vm, path, 60, 209)
+    before = page_image(vm.screenshot("tcexam-04-question"))
+    c("'terminate the exam' pressed", tcexam_click(vm, path, 75, 579))
+    vm.pointer_away(w, h)
+    path = settled(vm, "tcexam-05-confirm", before)
+    _, size, _ = colour_patch(path, TCEXAM_WARN)
+    c("TCExam asks to confirm the end of the test", size >= 200, f"confirmation box: {size} cells")
+    c("'terminate' confirmed", tcexam_click(vm, path, 594, 178))
+    vm.pointer_away(w, h)
+    vm.wait_until(lambda: tcexam_sql(f"SELECT testuser_status {attempt}") == "4", 120, "the test to end")
+    settled(vm, "tcexam-06-done")
+    answered = tcexam_sql("SELECT count(*) FROM tce_tests_logs_answers a JOIN tce_tests_logs l "
+                          "ON l.testlog_id = a.logansw_testlog_id WHERE a.logansw_selected = 1 "
+                          f"AND l.testlog_testuser_id IN (SELECT t.testuser_id {attempt})")
+    c("TCExam recorded the candidate's answer and the end of the test", answered == "1",
+      f"answered questions: {answered}")
+    blocked = [line for line in vm.sh("cat /var/log/primers/exam.jsonl").out.splitlines() if "blocked" in line]
+    c("nothing TCExam needed was blocked", not blocked, "\n".join(blocked[:5]))
+    r = vm.sh("primers-exam stop", timeout=300)
+    c("exam stops", r.rc == 0, r.out + r.err)
+
+
 SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
-             "exam-network": exam_network}
+             "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam}
 DISK_SCENARIOS = ("exam-power-cut", "installed")
 
 
@@ -742,8 +1102,13 @@ def main() -> int:
     os.makedirs(args.out, exist_ok=True)
     serve(os.path.join(HERE, "www"), EXAM_PORT)
     serve(os.path.join(HERE, "www"), CDN_PORT)                      # the "CDN" (two guest addresses)
-    serve(os.path.join(HERE, "www"), V6_PORT, "::1")                # an IPv6-only exam server
-    serve(os.path.join(HERE, "www"), V6_OTHER_PORT, "::1")          # another IPv6 server, not allowed
+    global HOST_IPV6
+    try:
+        serve(os.path.join(HERE, "www"), V6_PORT, "::1")            # an IPv6-only exam server
+        serve(os.path.join(HERE, "www"), V6_OTHER_PORT, "::1")      # another IPv6 server, not allowed
+    except OSError as e:
+        HOST_IPV6 = False
+        print(f"(this machine has no IPv6: {e})", flush=True)
     disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
     os.makedirs(disk_dir, exist_ok=True)
     vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario,

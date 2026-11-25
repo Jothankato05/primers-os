@@ -82,8 +82,28 @@ jobs:
           sudo apt-get install -y qemu-system-x86 ovmf python3-pil
           ls -l /dev/kvm
 
+      - name: PHP for the CBT test servers (TCExam 17 needs PHP 8.2+, Ubuntu 22.04 has 8.1)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, pdo_pgsql, intl, zip, gd, mbstring, xml, curl, soap, sodium, bcmath, exif
+          tools: composer
+          coverage: none
+
+      - name: CBT test servers (a real Moodle and TCExam on this machine, for the VM tests)
+        timeout-minutes: 30
+        run: |
+          sudo systemctl start postgresql.service
+          sudo mkdir -p /mnt/cbt
+          out=$(sudo bash primers-distro/tests/cbt/moodle/setup.sh /mnt/cbt)
+          echo "$out"
+          echo "MOODLE_CMID=$(sed -n 's/^CMID=//p' <<<"$out")" >> "$GITHUB_ENV"
+          out=$(sudo bash primers-distro/tests/cbt/tcexam/setup.sh /mnt/cbt)
+          echo "$out"
+          echo "TCEXAM_TESTID=$(sed -n 's/^TESTID=//p' <<<"$out")" >> "$GITHUB_ENV"
+
       - name: VM tests (the image itself, booted; a failure stops the release)
-        timeout-minutes: 120
+        timeout-minutes: 150
         run: |
           iso=$(ls primers-distro/*.iso | head -n1)
           rc=0
@@ -91,7 +111,11 @@ jobs:
           # Installs on a VM disk, cuts its power mid-exam, checks it comes back locked (ADR 0004)
           python3 primers-distro/tests/vm/run_vm_tests.py exam-power-cut --iso "$iso" --out vm-results/exam-power-cut || rc=1
           # Real exam sites: the probe, a CDN that moves during the exam, an IPv6-only exam server
-          python3 primers-distro/tests/vm/run_vm_tests.py exam-network --iso "$iso" --out vm-results/exam-network || rc=1
+          PRIMERS_VM_REQUIRE_IPV6=1 python3 primers-distro/tests/vm/run_vm_tests.py exam-network --iso "$iso" --out vm-results/exam-network || rc=1
+          # Real CBT platforms, self-hosted here: a Moodle quiz and a TCExam test, each found with
+          # the probe, started with its command and taken in the kiosk from sign-in to submission
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-moodle --iso "$iso" --out vm-results/exam-moodle || rc=1
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-tcexam --iso "$iso" --out vm-results/exam-tcexam || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

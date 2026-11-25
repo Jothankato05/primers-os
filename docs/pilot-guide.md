@@ -66,14 +66,35 @@ primers-lab status
 
 ## 3. Run an exam (Exam Mode)
 
-Exam Mode needs Lab Mode. Before the exam, on each PC, as staff:
+Exam Mode needs Lab Mode.
+
+**First, find every server the exam site uses** (once per exam site, on any
+PRIMERS PC, signed in as staff, not with sudo):
 
 ```bash
-sudo primers-exam start https://cbt.example.edu.ng
+primers-exam probe https://cbt.example.edu.ng
 ```
 
-If the exam site loads anything from another server (a CDN, a login
-server), add each with `--allow host.name`. Start the exam with nobody
+A window opens on the exam site. Sign in with a test account and go through
+a practice exam (sign-in, instructions, questions, review, submit), then
+press **Done**. The probe lists every server the site loaded from, checks
+each one answers from this PC (IPv4 and IPv6) and prints the exact command
+to start the exam, for example:
+
+```bash
+sudo primers-exam start https://cbt.example.edu.ng/login/index.php --allow cdn.jsdelivr.net
+```
+
+Moodle, for one, loads its maths display (MathJax) from `cdn.jsdelivr.net`
+on every quiz page; without that `--allow` the quiz still opens but the
+maths doesn't. A server on a port other than 80/443 is given as
+`--allow host.name:8443`. If the probe says a server can't be found or
+didn't answer, fix that before the exam: it won't work for candidates
+either.
+
+Then, before the exam, on each PC, as staff, run the probe's command.
+Servers whose addresses change during the exam (CDNs) are followed every
+five minutes; you don't need to do anything. Start the exam with nobody
 signed in to the PC's desktop (or sign out afterwards): the login screen
 then restarts with the consoles locked. While an exam runs, candidates can't
 switch to text consoles, use Magic SysRq keys, open a terminal, run sudo,
@@ -127,6 +148,8 @@ licence cost saved per seat, and a short student satisfaction survey.
 |---|---|
 | The lab account isn't on the login screen | Restart the PC once after `primers-lab enable`. |
 | Clicking the lab account returns to the login screen | Lab Mode refused to start a session it couldn't wipe. See why: `journalctl -t primers-lab`. |
+| Part of the exam page is missing or broken (maths, images, fonts) | The site uses a server that isn't allowed. `sudo primers-exam log` lists what was blocked; run `primers-exam probe` again, going through every kind of exam page, and restart the exam with its command. |
+| TCExam's sign-in keeps returning to the login page | TCExam marks its cookies Secure by default, which browsers drop on plain `http`. Serve TCExam over `https`, or set `K_COOKIE_SECURE` to `false` in TCExam's `shared/config/tce_config.php`. |
 | A student lost work | Expected in Lab Mode. Remind students to save to USB or online; the sign-in notice says so. |
 | The exam page doesn't load | `primers-exam status` (firewall active?). If the site needs other servers, stop and start again with `--allow` for each. `sudo primers-exam log` shows blocked pages. |
 | The power went off during an exam | Switch the PC back on and let the candidate sign in again. `sudo primers-exam status` should say Exam Mode: ON with every line locked or active. |

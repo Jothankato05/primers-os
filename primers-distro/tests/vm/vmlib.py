@@ -318,7 +318,7 @@ class VM:
         """Type, then wait for the keys to reach the guest: they queue in the
         emulated keyboard and arrive slower than they are sent, while a
         mouse click arrives at once (and would move focus too early)."""
-        self.type(text, gap=0.12)
+        self.type(text, gap=0.25)
         time.sleep(1.5 + 0.1 * len(text))
 
     def click(self, x: int, y: int, width: int, height: int) -> None:
@@ -330,6 +330,12 @@ class VM:
         for down in (True, False):
             self.qmp.call("input-send-event", events=[{"type": "btn", "data": {"down": down, "button": "left"}}])
             time.sleep(0.1)
+
+    def pointer_away(self, width: int, height: int) -> None:
+        """Park the pointer in a corner (hover colours change what's on screen)."""
+        self.qmp.call("input-send-event", events=[
+            {"type": "abs", "data": {"axis": "x", "value": 0}},
+            {"type": "abs", "data": {"axis": "y", "value": 32767}}])
 
     def screenshot(self, name: str) -> str:
         ppm = os.path.join(self.workdir, f"{name}.ppm")

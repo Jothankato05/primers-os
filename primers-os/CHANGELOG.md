@@ -3,6 +3,19 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Real CBT platforms** (ADR 0005): `primers-exam probe URL` opens the
+  exam site in a probe window (the kiosk's engine, a throw-away profile),
+  records every server and port it uses while staff go through a practice
+  exam, checks each answers (IPv4 and IPv6) and prints the exact
+  `primers-exam start ... --allow ...` command (`--json` too);
+  `--allow host:port` for servers on other ports. During an exam the
+  allowed servers are re-resolved every 5 minutes, so a CDN that moves
+  keeps working (earlier addresses stay allowed for an hour, at most 16 per
+  server; each move is logged). VM tests: self-hosted Moodle 4.5 (a quiz
+  taken from sign-in to submission; the probe finds the MathJax CDN it
+  loads) and TCExam 17 (sign-in to the end of the test), a CDN moving
+  mid-exam, and an IPv6-only exam server; the release workflow runs them
+  all.
 - **Installer fixes, found by driving the real installer in a VM**: UEFI
   "Erase disk" installs failed (Calamares 3.2.61 asked for the GPT backup
   table's sectors for the root partition); a live-session-only sfdisk
