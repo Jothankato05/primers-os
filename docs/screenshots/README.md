@@ -14,5 +14,6 @@ results. Every logo in them is the official artwork from
 | `desktop.png` | The desktop with the PRIMERS Brain open: the app icon on its window and in the taskbar, window frames in the brand colours |
 | `desktop-wallpaper.png` | The wallpaper |
 | `exam-kiosk.png` | Exam Mode: the kiosk with a demo exam |
+| `privacy-notice.png` | The privacy notice at an account's first sign-in on an installed PC: OK stays off until "I have read this privacy notice" is ticked (VM test `privacy`) |
 
 Screen size 1280×800 (a VM's display; real PCs use their own resolution).
