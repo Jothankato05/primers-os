@@ -161,6 +161,18 @@ Any student can type `study 25` in the PRIMERS Brain (or right-click the
 desktop › Study Mode). Primers Lite Bee then pauses social media, video,
 games and betting sites for 25 minutes and the panel counts down.
 
+### Less movement on screen
+
+For anyone who finds movement on screen distracting or uncomfortable:
+
+```bash
+sudo primers-reduce-motion on      # or: off, status
+```
+
+The boot splash's blinking cursor stays still (from the next boot), and
+windows and web pages stop animating (pages see the browser's "reduce
+motion" setting).
+
 ## 5. Collect proof points
 
 The plan asks for boot time and RAM use on real lab hardware. On each PC:

@@ -1,0 +1,4 @@
+#!/bin/sh
+# PRIMERS OS: less movement on screen (boot splash cursor still, no GTK animations).
+#   sudo primers-reduce-motion on | off      primers-reduce-motion status
+exec python3 -I /usr/share/primers/brain/primers_motion.py "$@"

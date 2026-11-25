@@ -123,6 +123,9 @@ jobs:
           # the login screen, idle memory, sign-in to the exam page (docs/benchmarks.md; measured,
           # compared with the targets in the results, not a pass/fail gate)
           python3 primers-distro/tests/vm/run_vm_tests.py performance --installer script --iso "$iso" --out vm-results/performance || rc=1
+          # Brand: the boot splash (white P on Night Ink, green cursor blinking in 1.06 s steps),
+          # reduced motion, login screen, desktop and exam kiosk; screenshots in the results
+          python3 primers-distro/tests/vm/run_vm_tests.py brand --iso "$iso" --out vm-results/brand || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

@@ -1516,9 +1516,128 @@ def performance(vm: VM, suite: Suite) -> None:
         json.dump(results, f, indent=2)
 
 
+# ------------------------------------------------------------------ #
+#  Brand: the boot splash (white P on Night Ink, its green cursor
+#  blinking in 1.06 s steps), login screen, desktop, exam kiosk; and the
+#  reduced-motion switch. Screenshots for docs/screenshots/.
+# ------------------------------------------------------------------ #
+
+NIGHT_INK, CHALK, READY_GREEN = (18, 22, 28), (245, 242, 234), (30, 158, 98)
+
+
+def splash_state(path: str) -> Optional[str]:
+    """'on' or 'off' when the screen is the boot splash (Night Ink with the
+    Chalk P in the middle, its green cursor shown or not), else None."""
+    from PIL import Image
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        w, h = img.size
+        small = img.resize((64, 40))
+    ink = sum(1 for p in small.getdata() if all(abs(a - b) <= 6 for a, b in zip(p, NIGHT_INK)))
+    if ink < 64 * 40 * 0.85:
+        return None
+    chalk = [b for b in colour_boxes(path, CHALK, tol=12)[0] if b[4] >= 20]
+    middle = [b for b in chalk if abs((b[0] + b[2]) / 2 - w / 2) < w * 0.12 and abs((b[1] + b[3]) / 2 - h / 2) < h * 0.2]
+    if not middle:
+        return None
+    px0, py0, px1, py1, _ = max(middle, key=lambda b: b[4])
+    green = [b for b in colour_boxes(path, READY_GREEN, tol=14)[0]
+             if b[4] >= 6 and px0 - 10 <= b[0] and b[2] <= px1 + 60 and py0 <= b[1] and b[3] <= py1 + 30]
+    return "on" if green else "off"
+
+
+def brand(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    vm.start()
+    t0, seen, changes, last, i = time.time(), {}, [], None, 0
+    agent_up = False
+    while time.time() - t0 < 1200:
+        path = vm.screenshot("_boot")
+        state = splash_state(path)
+        if state:
+            if state not in seen:
+                seen[state] = os.path.join(vm.workdir, f"brand-01-splash-cursor-{state}.png")
+                shutil.copy(path, seen[state])
+            if last and state != last:
+                changes.append(time.time())
+            last = state
+        i += 1
+        if i % 25 == 0:
+            if not agent_up:
+                try:
+                    vm.wait_agent(timeout=1)
+                    agent_up = True
+                except VMError:
+                    pass
+            if agent_up and vm.sh("pgrep -x openbox").rc == 0:
+                break
+        time.sleep(0.05)
+    c("boot splash: the white P on Night Ink, with its green cursor", "on" in seen, repr(seen))
+    c("boot splash: the cursor blinks (frames without it too)", "off" in seen and len(changes) >= 2,
+      f"{len(changes)} changes")
+    gaps = [b - a for a, b in zip(changes, changes[1:])]
+    if gaps and VM.kvm():
+        half = sorted(gaps)[len(gaps) // 2]
+        c("boot splash: the cursor changes every ~0.53 s (a 1.06 s blink, in steps)", 0.35 <= half <= 0.8,
+          f"median {half:.2f} s over {len(gaps)} changes")
+    else:
+        suite.note(f"blink timing not checked (emulated CPU): {len(changes)} changes seen")
+    vm.wait_agent(timeout=1200)
+    vm.wait_until(lambda: screen_drawn(vm), 300, "the desktop to be drawn")
+    vm.wait_until(lambda: vm.sh("pgrep -u primers -x xterm").rc == 0, 300, "the PRIMERS Brain window")
+    time.sleep(15)
+    vm.pointer_away(*image_size(vm.screenshot("brand-02-desktop")))
+    time.sleep(2)
+    vm.screenshot("brand-02-desktop")                       # the Brain window: app icon, window frame
+    c("the Brain window shows the Primers app icon",
+      "primers_48x48.xpm" in vm.sh("tr '\\0' ' ' < /proc/$(pgrep -u primers -x xterm | head -1)/cmdline").out)
+    vm.sh("pkill -u primers -x xterm")
+    time.sleep(5)
+    vm.screenshot("brand-02-desktop-wallpaper")
+    c("the theme files: blinking and still splashes from the official app icon",
+      vm.sh("test -f /usr/share/plymouth/themes/primers-still/throbber-0032.png && "
+            "cmp -s /usr/share/plymouth/themes/primers/throbber-0001.png /usr/share/plymouth/themes/primers-still/throbber-0032.png && "
+            "! cmp -s /usr/share/plymouth/themes/primers/throbber-0001.png /usr/share/plymouth/themes/primers/throbber-0032.png").rc == 0)
+
+    # Reduced motion on a running system: the still splash and no GTK animations
+    r = vm.sh("primers-reduce-motion on && primers-reduce-motion status && "
+              "update-alternatives --query default.plymouth | sed -n 's/^Value: //p' && cat /etc/gtk-3.0/settings.ini",
+              timeout=300)
+    c("reduced motion: the splash's cursor stays still, GTK stops animating",
+      r.rc == 0 and "Reduced motion: on" in r.out and "primers-still.plymouth" in r.out
+      and "gtk-enable-animations=false" in r.out, r.out + r.err)
+    r = vm.sh("primers-reduce-motion off && update-alternatives --query default.plymouth | sed -n 's/^Value: //p'",
+              timeout=300)
+    c("reduced motion off: the blinking splash again", r.rc == 0 and "primers/primers.plymouth" in r.out, r.out + r.err)
+
+    # The login screen and the exam kiosk
+    r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
+              "systemctl start primers-lab-reset.service")
+    c("setup: Lab Mode on", r.rc == 0, r.err)
+    vm.sh("loginctl terminate-user primers")
+    vm.wait_until(lambda: vm.sh("pgrep -u lightdm -f lightdm-gtk-greeter").rc == 0, 300, "the login screen")
+    vm.wait_until(lambda: screen_drawn(vm), 300, "the login screen to be drawn")
+    time.sleep(5)
+    vm.screenshot("brand-03-login-screen")
+    r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=300)
+    c("setup: exam started", r.rc == 0, r.out + r.err)
+    kiosk = sign_in_lab(vm, suite, "brand-04-exam-kiosk")
+    c("the exam kiosk", bool(kiosk))
+    vm.wait_until(lambda: journal_times(vm, "exam page shown"), 300, "the exam page")
+
+    def page_text() -> bool:              # the exam's dark text painted on its white page
+        from PIL import Image
+        with Image.open(vm.screenshot("brand-04-exam-kiosk")) as img:
+            page = img.convert("L").crop((0, KIOSK_BAR + 10, img.width, img.height)).resize((160, 100))
+        return sum(1 for v in page.getdata() if v < 110) >= 40
+    vm.wait_until(page_text, 300, "the exam page's text on screen", interval=5)
+    settled(vm, "brand-04-exam-kiosk")
+    vm.sh("primers-exam stop", timeout=300)
+
+
 SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
              "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam,
-             "fleet": fleet_scenario, "performance": performance}
+             "fleet": fleet_scenario, "performance": performance, "brand": brand}
 DISK_SCENARIOS = ("exam-power-cut", "installed", "performance")
 
 

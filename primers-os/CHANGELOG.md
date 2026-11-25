@@ -3,6 +3,19 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Brand** (docs/screenshots/): the boot splash, login screen, wallpaper,
+  GRUB menu and installer now use the official artwork for dark
+  backgrounds as it is (the app icon: Chalk P and green cursor on Night
+  Ink; the dark horizontal lockup), never recoloured or redrawn. The
+  splash's cursor blinks in steps (16 frames on, 16 off: 1.06 s at
+  Plymouth's 30 fps). `sudo primers-reduce-motion on` keeps it still (a
+  second Plymouth theme; from the next boot) and turns GTK animations off,
+  so web pages see prefers-reduced-motion. The login screen has the lockup
+  above the sign-in box. The PRIMERS Brain window shows the app icon (an
+  XPM copy, pixel for pixel), and window frames use the brand colours. VM
+  test 'brand' (release workflow): catches the real boot splash with and
+  without its cursor and, under KVM, checks the blink's timing; reduced
+  motion on and off; screenshots.
 - **Performance** (docs/benchmarks.md): measured on a 2 GB, 2-CPU VM with a
   hard disk and with an SSD by a new release-workflow VM test. Idle memory
   ~330 MB (login screen) / ~440 MB (desktop). SSD: power-on to login
