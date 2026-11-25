@@ -520,26 +520,42 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     time.sleep(5 * slow)
     vm.screenshot("installer-08-confirm")
     vm.key("ret")                       # Install now
-    # Installing: the target is mounted while it runs and unmounted at the end
+    # Installing. Done when the new system has its boot loader and the
+    # administrator, and no install step is still running. (The installer
+    # can leave its target mounted after "All done"; the restart unmounts it.)
     vm.wait_until(lambda: vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc == 0, 600,
                   "the installer to start")
     vm.screenshot("installer-09-installing")
+    busy = "pgrep -x 'unsquashfs|grub-install|grub-mkconfig|update-grub|update-initramfs|mkinitramfs|apt-get|dpkg'"
+    installed = ("t=$(findmnt -rn -o TARGET | grep calamares-root | head -n1); [ -z \"$t\" ] || "
+                 "{ test -s \"$t/boot/grub/grub.cfg\" && grep -q '^labadmin:' \"$t/etc/passwd\" && ! " + busy + "; }")
     deadline = time.time() + 3600 * slow
-    failed = ""
-    while time.time() < deadline:
+    failed, settled = "", 0
+    while time.time() < deadline and settled < 3:
         windows = vm.as_user("primers", "xwininfo -root -tree").out
         if "Installation Failed" in windows or '"Error"' in windows:
             failed = windows
             break
-        if vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc != 0:
-            break
+        settled = settled + 1 if vm.sh(installed).rc == 0 else 0
         time.sleep(10)
+    vm.sh("sync")
     time.sleep(5)
+    vm.as_user("primers", "xset s reset")
     vm.screenshot("installer-10-finished")
-    log = vm.sh("tail -n 40 /home/primers/.cache/calamares/session.log").out
-    return c("install with the installer: finished without errors", not failed and
-             vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc != 0 and
+    log = vm.sh("cat /home/primers/.cache/calamares/session.log").out
+    with open(os.path.join(suite.out, "installer-session.log"), "w", encoding="utf-8") as f:
+        f.write(log)
+    return c("install with the installer: finished without errors", not failed and settled >= 3 and
              vm.sh("pgrep -x calamares").rc == 0, failed or log[-2000:])
+
+
+def restart_to_login(vm: VM) -> None:
+    """Restart, then wait for the login screen: the guest agent is back early
+    in the boot, before the Lab Mode boot service (ordered before the login
+    screen) has finished."""
+    vm.reboot()
+    vm.wait_until(lambda: vm.sh("systemctl is-active display-manager.service").out.strip() == "active",
+                  600, "the login screen after the restart")
 
 
 SECURE_BOOT_VAR = "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
@@ -567,7 +583,7 @@ def installed_system(vm: VM, suite: Suite) -> None:
     r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable")
     c("Lab Mode turned on", r.rc == 0, r.out + r.err)
     prefer_lab_at_login(vm)
-    vm.reboot()
+    restart_to_login(vm)
     st = vm.sh("primers-lab status")
     c("after a restart Lab Mode is on and the lab account can sign in",
       st.rc == 0 and "after the next restart" not in st.out and "lab" in st.out, st.out)
@@ -577,7 +593,7 @@ def installed_system(vm: VM, suite: Suite) -> None:
     c("the lab account signs in to a desktop", bool(desktop))
     r = vm.as_user("lab", "echo 'my notes' > ~/notes.txt && mkdir -p ~/Downloads && touch ~/Downloads/x.pdf && ls ~")
     c("setup: the student saves files", r.rc == 0 and "notes.txt" in r.out, repr(r))
-    vm.reboot()                         # left signed in: the plug is pulled on them
+    restart_to_login(vm)                # left signed in: restarted under them
     left = vm.sh("ls -A /home/lab").out
     c("after a restart the student's files are gone", "notes.txt" not in left and "x.pdf" not in
       vm.sh("ls -A /home/lab/Downloads 2>/dev/null").out, left)
