@@ -3,6 +3,22 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Privacy** (docs/privacy.md, ADR 0008; Nigeria Data Protection Act
+  2023): a privacy notice (the institution responsible, what is recorded
+  and why, lawful basis, retention, who sees it, rights, the NDPC) opens at
+  the first desktop sign-in of each account on an installed PC until 'I
+  have read' is ticked, and again when it changes; System › Privacy
+  notice and `privacy` in the Brain show it any time; the lab account's
+  shared-computer notice carries a short version; the exam kiosk's bar
+  says the exam is logged. `primers-privacy`: `controller`, `retention`
+  (exam and lab control logs 90 days by default, 1-3650), `status`,
+  `export DIR` (JSON lines + CSV + SHA256SUMS); `primers-exam log
+  --export DIR`. A daily timer removes older records (never from the exam
+  log during an exam); the logs' writers and the pruning share a lock and
+  the log is replaced atomically; the journal is limited to the same days.
+  Firefox telemetry and studies off; motd news, Ubuntu Pro and apport
+  report timers off (checked by the build). 36 unit tests; VM test
+  'privacy' (release workflow).
 - **Primers ID** (docs/primers-id.md, ADR 0007): `primers-id login` signs
   the person at the desktop in with OpenID Connect: the device flow (a code
   to approve on the PC or a phone) or, when the provider lacks it, the

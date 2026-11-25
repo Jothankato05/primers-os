@@ -32,6 +32,16 @@ NOTICE = ("This is a shared lab computer.\n\n"
           "Save your work to a USB stick or online before you leave.")
 
 
+def _privacy_layer() -> str:
+    """The privacy notice's short layer: the lab account sees it at every sign-in."""
+    from core import privacy
+    try:
+        conf = privacy.PrivacyConfig.load()
+    except privacy.PrivacyError:
+        conf = privacy.PrivacyConfig()
+    return privacy.short_notice(conf)
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="primers-lab",
@@ -101,11 +111,12 @@ def main(argv=None) -> int:
     if args.command == "notice":
         if not lab.is_lab_session():
             return 0
+        text = NOTICE + "\n\n" + _privacy_layer()
         if os.environ.get("DISPLAY") and shutil.which("zenity"):
-            subprocess.run(["zenity", "--warning", "--title=Shared lab computer", "--no-wrap",
-                            "--text=" + NOTICE], check=False)
+            subprocess.run(["zenity", "--warning", "--title=Shared lab computer", "--width=520",
+                            "--text=" + text], check=False)
         else:
-            print(NOTICE)
+            print(text)
         return 0
 
     _need_root()

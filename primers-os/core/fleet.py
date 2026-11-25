@@ -35,6 +35,8 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence
 
+from core import logfiles
+
 FLEET_DIR = "/etc/primers/fleet"
 LOG_PATH = "/var/log/primers/fleet.jsonl"
 AGENT_PORT = 7480
@@ -103,12 +105,13 @@ def log_event(paths: FleetPaths, event: str, **fields) -> None:
     record = {"time": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
               "event": event, **fields}
     os.makedirs(os.path.dirname(paths.log), exist_ok=True)
-    fd = os.open(paths.log, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o640)
-    try:
-        os.write(fd, (json.dumps(record, sort_keys=True) + "\n").encode())
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    with logfiles.locked(paths.log):            # the retention pass may be rewriting the log
+        fd = os.open(paths.log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
+        try:
+            os.write(fd, (json.dumps(record, sort_keys=True) + "\n").encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def fingerprint(cert_pem: str) -> str:

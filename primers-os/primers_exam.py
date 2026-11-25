@@ -46,6 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     when = lg.add_mutually_exclusive_group()
     when.add_argument("--since", help="from this time (UTC), e.g. 2026-11-24 or '2026-11-24 09:00'")
     when.add_argument("--all", action="store_true", help="every exam on this PC")
+    lg.add_argument("--export", metavar="DIR", help="copy it (JSON lines and CSV, with SHA256SUMS) into a new folder")
     # Run by the primers-exam-log service and the primers-exam-refresh timer, not by people
     sub.add_parser("log-writer", help=argparse.SUPPRESS)
     sub.add_parser("refresh", help=argparse.SUPPRESS)
@@ -110,6 +111,8 @@ def main(argv=None) -> int:
             for w in exam.stop():
                 print("warning: " + w, file=sys.stderr)
             print("Exam Mode is off. The lab account is back to normal.")
+        elif args.command == "log" and args.export:
+            return _export_log(exam, args)
         elif args.command == "log":
             sys.stdout.write(exam.journal(args.since, args.all) or "No exam activity logged.\n")
         elif args.command == "refresh":
@@ -121,6 +124,30 @@ def main(argv=None) -> int:
     except exam_mode.ExamError as e:
         print(f"primers-exam: {e}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _export_log(exam, args) -> int:
+    """primers-exam log --export DIR: the same records as the log shows (the
+    last exam, --since or --all), copied for an appeal, an auditor or an
+    access request (core.privacy)."""
+    from core import privacy
+    if args.all:
+        since = None
+    elif args.since:
+        since = exam_log.parse_time(args.since)
+        if since is None:
+            raise exam_mode.ExamError(f"can't read the time {args.since!r} (e.g. 2026-11-24 09:00)")
+    else:
+        since = exam.examlog.last_exam_start()
+    try:
+        conf = privacy.PrivacyConfig.load()
+        owner = (int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"])) if "SUDO_UID" in os.environ else None
+        files = privacy.export(args.export, conf, since, ("exam",), exam_log_path=exam.examlog.path, owner=owner)
+    except (privacy.PrivacyError, OSError, ValueError) as e:
+        raise exam_mode.ExamError(str(e))
+    print(f"Exported to {args.export}: " + ", ".join(os.path.basename(f) for f in files))
+    print(f"Check them with: (cd {args.export} && sha256sum -c SHA256SUMS)")
     return 0
 
 

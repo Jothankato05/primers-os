@@ -1,0 +1,10 @@
+[Unit]
+Description=PRIMERS OS: remove log records older than the retention time (privacy)
+Documentation=file:/usr/share/doc/primers/privacy.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/primers-privacy prune
+Nice=10
+IOSchedulingClass=idle

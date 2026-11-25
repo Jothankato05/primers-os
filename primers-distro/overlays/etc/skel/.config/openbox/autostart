@@ -11,4 +11,6 @@ lxpolkit &
 numlockx on &
 (sleep 2 && primers-terminal) &
 # Lab Mode: remind students that the shared lab account is wiped at sign-out
-[ -f /etc/primers/lab.conf ] && (sleep 3 && primers-lab notice) &
+# (with the privacy notice's short version); then, on other accounts, the
+# privacy notice the first time (and when it changes)
+(sleep 3; [ -f /etc/primers/lab.conf ] && primers-lab notice; primers-privacy notice --first-run) &

@@ -1,0 +1,43 @@
+#!/bin/bash
+# PRIMERS OS — privacy (docs/privacy.md, ADR 0008)
+#
+# The privacy notice and the logs' retention: the exam log and the lab
+# control log keep records for 90 days by default (/etc/primers/privacy.conf),
+# the system journal no longer (a journald drop-in), applied by a daily
+# timer. Nothing phones home: Firefox's telemetry and studies are off,
+# Ubuntu's message-of-the-day news and Ubuntu Pro's timer don't run.
+set -euo pipefail
+
+chmod 0755 /usr/bin/primers-privacy
+chmod 0644 /etc/primers/privacy.conf /etc/systemd/journald.conf.d/90-primers-retention.conf \
+           /etc/firefox/policies/policies.json
+systemctl enable primers-privacy-retention.timer
+
+# Ubuntu's motd news fetches motd.ubuntu.com with details of the PC in its
+# request; Ubuntu Pro's timer and apport's report timer aren't needed
+printf 'ENABLED=0\n' > /etc/default/motd-news
+for timer in motd-news ua-timer apport-autoreport; do
+  systemctl disable "$timer.timer" 2>/dev/null || true
+done
+
+# Checks: what the privacy notice promises must be true of the image
+for timer in motd-news ua-timer apport-autoreport; do
+  if systemctl is-enabled "$timer.timer" 2>/dev/null | grep -qx enabled; then
+    echo "E: $timer.timer is still enabled" >&2; exit 1
+  fi
+done
+systemctl is-enabled primers-privacy-retention.timer | grep -qx enabled \
+  || { echo "E: the retention timer isn't enabled" >&2; exit 1; }
+python3 - <<'PY'
+import json
+p = json.load(open("/etc/firefox/policies/policies.json"))["policies"]
+assert p.get("DisableTelemetry") is True and p.get("DisableFirefoxStudies") is True, "Firefox telemetry"
+PY
+grep -qx 'MaxRetentionSec=90day' /etc/systemd/journald.conf.d/90-primers-retention.conf \
+  || { echo "E: the journal's retention isn't set" >&2; exit 1; }
+! command -v whoopsie >/dev/null || { echo "E: whoopsie (crash uploads) is installed" >&2; exit 1; }
+! command -v popularity-contest >/dev/null || { echo "E: popularity-contest is installed" >&2; exit 1; }
+grep -q 'primers-privacy notice' /etc/skel/.config/openbox/menu.xml \
+  || { echo "E: the desktop menu has no privacy notice" >&2; exit 1; }
+grep -q 'primers-privacy notice --first-run' /etc/skel/.config/openbox/autostart \
+  || { echo "E: the privacy notice isn't shown at the first sign-in" >&2; exit 1; }

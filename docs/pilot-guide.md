@@ -34,6 +34,34 @@ something else. On every lab PC, in the BIOS/UEFI setup:
 
 Do this after installing PRIMERS OS (installing needs USB boot).
 
+### Privacy: name who is responsible (required)
+
+PRIMERS OS keeps an exam log and, on paired PCs, a lab control log. Under
+the Nigeria Data Protection Act 2023 the institution is responsible for
+them, and the privacy notice people see must say who to contact. On every
+lab PC:
+
+```bash
+sudo primers-privacy controller --name "Veritas University" --contact "dpo@veritas.example" --dpo "Name of the DPO"
+primers-privacy status
+```
+
+The logs keep records for **90 days**, then a daily job deletes older
+ones (never during an exam). If the institution's exam appeals take longer,
+agree a time with its data protection officer and set it:
+`sudo primers-privacy retention --days 180`. Everyone sees the notice the
+first time they sign in to the desktop (lab students see a short version
+at every sign-in, and candidates see a line in the exam's bar); it is
+always under right-click › System › Privacy notice. Details:
+[privacy.md](privacy.md).
+
+For an exam appeal or someone asking for their data:
+`sudo primers-exam log --export /media/usb/appeal-42` (the last exam; add
+`--all` or `--since 2026-11-24`) or `sudo primers-privacy export DIR` (both
+logs). Each export has checksums (`sha256sum -c SHA256SUMS`). Exports and
+the invigilator's collected logs are personal data: keep them safe and
+delete them when they are no longer needed.
+
 ## 2. Turn on Lab Mode
 
 Sign in with the staff account, open a terminal and run:

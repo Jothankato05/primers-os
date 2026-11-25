@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+from core import logfiles
+
 LOG_PATH = "/var/log/primers/exam.jsonl"
 LOG_TAG = "primers-exam"
 BOOT_ID = "/proc/sys/kernel/random/boot_id"
@@ -101,23 +103,24 @@ class ExamLog:
         if not os.path.isdir(directory):
             os.makedirs(directory, mode=0o750, exist_ok=True)
             _fsync_dir(os.path.dirname(directory) or "/")
-        created = not os.path.exists(self.path)
-        fd = os.open(self.path, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
-                     0o640)
-        try:
-            data = (record.to_json() + "\n").encode("utf-8")
-            size = os.fstat(fd).st_size
-            if size:
-                # A power cut may have torn the last line: start a new one
-                last = os.pread(fd, 1, size - 1)
-                if last != b"\n":
-                    data = b"\n" + data
-            os.write(fd, data)
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        if created:
-            _fsync_dir(directory)
+        with logfiles.locked(self.path):          # the retention pass may be rewriting the log
+            created = not os.path.exists(self.path)
+            fd = os.open(self.path, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         0o640)
+            try:
+                data = (record.to_json() + "\n").encode("utf-8")
+                size = os.fstat(fd).st_size
+                if size:
+                    # A power cut may have torn the last line: start a new one
+                    last = os.pread(fd, 1, size - 1)
+                    if last != b"\n":
+                        data = b"\n" + data
+                os.write(fd, data)
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            if created:
+                _fsync_dir(directory)
 
     def log(self, message: str, uid: Optional[int] = None, user: Optional[str] = None) -> Record:
         uid = os.getuid() if uid is None else uid

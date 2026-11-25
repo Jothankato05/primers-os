@@ -29,7 +29,7 @@ from utils.logger import PrimersLogger
 VOICE_SAFE_ACTIONS = {
     "list_processes", "system_status", "security_status", "list_threats",
     "list_alerts", "list_connections", "find_process", "math", "help",
-    "version", "advise", "kernel", "ask", "datasaver", "lab", "benchmark", "exam",
+    "version", "advise", "kernel", "ask", "datasaver", "lab", "benchmark", "exam", "privacy",
 }
 
 
@@ -580,6 +580,20 @@ class PrimersShell:
                 checks = [("firewall active", st["firewall"]), ("USB drives blocked", st["usb_blocked"])]
                 print("  " + "   ".join((C.ok("✓ ") if ok else C.err("✗ ")) + name for name, ok in checks))
         print(f"\n{divider()}\n")
+
+    def _cmd_privacy(self, cmd: ParsedCommand):
+        from core import privacy
+        try:
+            conf = privacy.PrivacyConfig.load()
+        except privacy.PrivacyError as e:
+            print(C.err(f"  ✗ {e}"))
+            conf = privacy.PrivacyConfig()
+        print(f"\n{divider()}")
+        print(f"  {C.hi('PRIVACY')}")
+        print(divider())
+        for line in privacy.notice(conf).splitlines():
+            print(f"  {line}" if line else "")
+        print(C.dim("\n  In a window: right-click the desktop › System › Privacy notice"))
 
     def _cmd_benchmark(self, cmd: ParsedCommand):
         from core import benchmark

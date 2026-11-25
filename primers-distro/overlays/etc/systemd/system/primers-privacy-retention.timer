@@ -1,0 +1,12 @@
+[Unit]
+Description=PRIMERS OS: apply the logs' retention time every day (privacy)
+Documentation=file:/usr/share/doc/primers/privacy.md
+
+[Timer]
+OnBootSec=15min
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

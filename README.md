@@ -89,6 +89,9 @@ primers-distro/        ISO build system
 branding/              official Primers OS logo pack (SVG + PNG) — source of all OS artwork
 docs/decisions/        architecture decision records
 docs/pilot-guide.md    running a one-lab pilot: install, Lab Mode, benchmarks
+docs/benchmarks.md     measured boot time and memory on a 2 GB PC, and the misses
+docs/primers-id.md     signing in with Primers ID (OpenID Connect), online and offline
+docs/privacy.md        the privacy notice (NDPA 2023), log retention and export
 .github/workflows/     CI (tests + lint) and ISO build/release
 ```
 

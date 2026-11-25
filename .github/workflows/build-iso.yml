@@ -129,6 +129,9 @@ jobs:
           # Primers ID: sign in with OpenID Connect against a test provider on this runner (device flow,
           # token checks), then offline with the PIN while the provider is unreachable, and sign out
           python3 primers-distro/tests/vm/run_vm_tests.py primers-id --iso "$iso" --out vm-results/primers-id || rc=1
+          # Privacy (NDPA 2023): the notice at the first sign-in of an installed PC and in the menu,
+          # the logs kept 90 days (the daily run, an exam in progress, a new time, the journal), export
+          python3 primers-distro/tests/vm/run_vm_tests.py privacy --iso "$iso" --out vm-results/privacy || rc=1
           # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
           # across restarts and the whole escape suite on each
           python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1

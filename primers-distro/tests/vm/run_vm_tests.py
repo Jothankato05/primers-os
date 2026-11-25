@@ -1701,11 +1701,113 @@ def primers_id_scenario(vm: VM, suite: Suite) -> None:
         provider.close()
 
 
+PRIVACY_TITLE = "PRIMERS OS privacy notice"
+
+
+def privacy_scenario(vm: VM, suite: Suite) -> None:
+    """The privacy notice at the first sign-in of an installed PC and in the
+    menu, the logs' retention (the daily run, an exam in progress, a new
+    retention time, the journal) and exporting them."""
+    c = suite.check
+    global INSTALLER
+    INSTALLER = "script"
+    if not install_from_live(vm, suite):
+        return
+    r = vm.sh("systemctl is-enabled primers-privacy-retention.timer; "
+              "for t in motd-news ua-timer apport-autoreport; do systemctl is-enabled $t.timer; done; "
+              "python3 -c 'import json; print(json.load(open(\"/etc/firefox/policies/policies.json\"))[\"policies\"])'; "
+              "systemd-analyze cat-config systemd/journald.conf | grep -E '^Max(Retention|File)Sec='")
+    out = r.out.split("\n")
+    c("the image: the retention timer on; motd news, Ubuntu Pro and crash-report timers off; "
+      "Firefox telemetry off; the journal kept 90 days",
+      out[0] == "enabled" and all(x != "enabled" for x in out[1:4])
+      and "'DisableTelemetry': True" in r.out and "MaxRetentionSec=90day" in r.out, r.out + r.err)
+
+    # The first sign-in of an account shows the notice until it is confirmed
+    def notice_open() -> bool:
+        return vm.as_user("labadmin", f"xwininfo -name '{PRIVACY_TITLE}'").rc == 0
+    vm.sh("mkdir -p /etc/lightdm/lightdm.conf.d && "
+          "printf '[Seat:*]\\nautologin-user=labadmin\\n' > /etc/lightdm/lightdm.conf.d/99-vm-test.conf && "
+          "systemctl restart display-manager.service", timeout=180)
+    vm.wait_until(lambda: vm.sh("pgrep -u labadmin -x openbox").rc == 0, 300, "the staff desktop")
+    try:
+        vm.wait_until(notice_open, 120, "the privacy notice")
+    except VMError:
+        pass
+    time.sleep(3)
+    vm.screenshot("privacy-01-first-sign-in")
+    c("the first sign-in shows the privacy notice", notice_open())
+    vm.key("ret")                       # OK does nothing until "I have read" is ticked
+    time.sleep(2)
+    c("it can't be dismissed with OK before 'I have read this privacy notice' is ticked", notice_open())
+    for k in ("tab", "spc", "ret"):     # tick it, then OK
+        vm.key(k)
+        time.sleep(1)
+    vm.wait_until(lambda: not notice_open(), 30, "the notice to close")
+    ack = vm.sh("cat /home/labadmin/.local/state/primers/privacy-notice").out.strip()
+    c("ticked and OK: it closes and is remembered for this account", not notice_open() and ack.count("-") == 2, ack)
+    vm.sh("loginctl terminate-user labadmin; sleep 3; systemctl restart display-manager.service", timeout=180)
+    vm.wait_until(lambda: vm.sh("pgrep -u labadmin -x openbox").rc == 0, 300, "the staff desktop again")
+    time.sleep(20)
+    c("the next sign-in doesn't show it again", not notice_open())
+    vm.as_user("labadmin", "setsid -f primers-privacy notice > /dev/null 2>&1 < /dev/null")
+    try:
+        vm.wait_until(notice_open, 60, "the notice from the menu")
+    except VMError:
+        pass
+    time.sleep(2)
+    vm.screenshot("privacy-02-from-the-menu")
+    menu = vm.sh("grep -c 'primers-privacy notice</command>' /home/labadmin/.config/openbox/menu.xml").out.strip()
+    c("System › Privacy notice opens it any time", notice_open() and menu == "1", menu)
+    vm.sh("pkill -u labadmin -x zenity; rm -f /etc/lightdm/lightdm.conf.d/99-vm-test.conf")
+    r = vm.sh("primers-privacy notice --text; primers-lab notice; primers-privacy notice --short")
+    c("the notice names the NDPA, the retention time and the rights; the lab account's short version",
+      "Nigeria Data Protection Act 2023" in r.out and "Kept for 90 days" in r.out
+      and "ndpc.gov.ng" in r.out and "System › Privacy notice" in r.out, r.out[-800:])
+
+    # Retention: records older than 90 days go at the daily run, the rest stay
+    def line(days_ago: int, message: str) -> str:
+        return ("python3 -c 'import json,datetime,sys; t=datetime.datetime.now(datetime.timezone.utc)"
+                f"-datetime.timedelta(days={days_ago}); print(json.dumps({{\"time\": t.strftime(\"%Y-%m-%dT%H:%M:%S.%fZ\"), "
+                f"\"message\": \"{message}\", \"uid\": 0, \"user\": \"root\", \"pid\": 1, \"boot\": \"\"}}))'")
+    setup = " && ".join([
+        "install -d -m 2750 -o root -g adm /var/log/primers",
+        f"{{ {line(120, 'exam started: https://old.example')}; {line(95, 'visited https://old.example/q1')}; "
+        f"{line(40, 'exam started: https://cbt.example')}; {line(1, 'visited https://cbt.example/q9')}; }}"
+        " > /var/log/primers/exam.jsonl",
+        "chown root:adm /var/log/primers/exam.jsonl && chmod 640 /var/log/primers/exam.jsonl",
+        "cp /var/log/primers/exam.jsonl /var/log/primers/fleet.jsonl"])
+    c("setup: an exam log with records 120, 95, 40 and 1 days old", vm.sh(setup).rc == 0)
+    vm.sh("mkdir -p /etc/primers && printf 'URL=https://cbt.example\\n' > /etc/primers/exam.conf && "
+          "systemctl start primers-privacy-retention.service")
+    kept = vm.sh("grep -c . /var/log/primers/exam.jsonl; grep -c . /var/log/primers/fleet.jsonl").out.split()
+    c("while an exam is running, the exam log is kept whole (the lab control log is pruned)",
+      kept == ["4", "2"], repr(kept))
+    vm.sh("rm -f /etc/primers/exam.conf; systemctl start primers-privacy-retention.service")
+    r = vm.sh("cat /var/log/primers/exam.jsonl; stat -c '%a %U:%G' /var/log/primers/exam.jsonl")
+    c("the daily run removes the exam records older than 90 days and keeps the rest (owner and mode too)",
+      "old.example" not in r.out and r.out.count("cbt.example") == 2 and "640 root:adm" in r.out, r.out)
+    r = vm.sh("primers-privacy retention --days 30 && systemctl is-active systemd-journald && "
+              "systemd-analyze cat-config systemd/journald.conf | grep '^MaxRetentionSec=' && "
+              "grep -c . /var/log/primers/exam.jsonl && journalctl -n1 -q --no-pager > /dev/null && echo journal-ok")
+    c("a new retention time (30 days): set, applied at once, and the journal follows",
+      "MaxRetentionSec=30day" in r.out and r.out.strip().split("\n")[-2:] == ["1", "journal-ok"]
+      and "active" in r.out, r.out + r.err)
+    r = vm.sh("rm -rf /root/export && primers-privacy export /root/export && cd /root/export && "
+              "sha256sum -c SHA256SUMS && head -n1 exam.csv && stat -c '%a' /root/export")
+    c("export: JSON lines and CSV of both logs, with checksums that check, readable by root only",
+      r.rc == 0 and "exam.jsonl: OK" in r.out and "fleet.csv: OK" in r.out
+      and "time,user,uid,pid,boot,message" in r.out and r.out.strip().endswith("700"), r.out + r.err)
+    r = vm.sh("rm -rf /root/exam-export && primers-exam log --all --export /root/exam-export && "
+              "cd /root/exam-export && sha256sum -c SHA256SUMS")
+    c("primers-exam log --export makes the same files for the exam log", r.rc == 0, r.out + r.err)
+
+
 SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut, "installed": installed_system,
              "exam-network": exam_network, "exam-moodle": exam_moodle, "exam-tcexam": exam_tcexam,
              "fleet": fleet_scenario, "performance": performance, "brand": brand,
-             "primers-id": primers_id_scenario}
-DISK_SCENARIOS = ("exam-power-cut", "installed", "performance")
+             "primers-id": primers_id_scenario, "privacy": privacy_scenario}
+DISK_SCENARIOS = ("exam-power-cut", "installed", "performance", "privacy")
 
 
 def main() -> int:

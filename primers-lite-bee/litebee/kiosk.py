@@ -21,6 +21,9 @@ from gi.repository import Gdk, GLib, GObject, Gtk, WebKit2  # noqa: E402
 
 from litebee import exam, pages  # noqa: E402
 
+# The privacy notice's line for candidates, in the bar while nothing else is shown
+EXAM_LOGGED = "This exam is logged: exam pages opened, pages blocked, sign-in and finish times."
+
 # Browser shortcuts that do nothing in the exam (typing, copy and paste
 # inside the exam page still work). Keys are (ctrl, shift, keyval name).
 BLOCKED_KEYS = frozenset(
@@ -71,7 +74,8 @@ class KioskWindow(Gtk.ApplicationWindow):
         host = Gtk.Label(label=policy.main_host)
         host.get_style_context().add_class("bee-data")
         self.notice = Gtk.Label()
-        self.notice.get_style_context().add_class("bee-exam-notice")
+        self.notice.set_ellipsize(3)                     # Pango.EllipsizeMode.END on narrow screens
+        self._idle_notice()
         self.clock = Gtk.Label()
         self.clock.get_style_context().add_class("bee-exam-clock")
         self.clock.set_tooltip_text("Time since this exam session started")
@@ -159,12 +163,24 @@ class KioskWindow(Gtk.ApplicationWindow):
             "clipboard_js_off": not s.get_property("javascript-can-access-clipboard"),
             "keys_filtered": has(self, "key-press-event"),
             "undecorated_fullscreen": not self.get_decorated(),
+            "candidate_told_exam_is_logged": getattr(self, "told_logged", False),
             "toplevel_windows": sum(1 for w in Gtk.Window.list_toplevels() if w.get_visible()),
         }
 
+    def _idle_notice(self):
+        """What the bar says between messages: that the exam is logged (privacy notice)."""
+        ctx = self.notice.get_style_context()
+        ctx.remove_class("bee-exam-notice")
+        ctx.add_class("bee-data")
+        self.notice.set_text(EXAM_LOGGED)
+        self.told_logged = True
+
     def _say(self, text: str):
+        ctx = self.notice.get_style_context()
+        ctx.remove_class("bee-data")
+        ctx.add_class("bee-exam-notice")
         self.notice.set_text(text)
-        GLib.timeout_add_seconds(6, lambda: (self.notice.get_text() == text and self.notice.set_text(""), False)[1])
+        GLib.timeout_add_seconds(6, lambda: (self.notice.get_text() == text and self._idle_notice(), False)[1])
 
     def _blocked(self, uri: str):
         self.blocked += 1

@@ -1,0 +1,4 @@
+#!/bin/sh
+# PRIMERS OS: the privacy notice, how long logs are kept, and exporting them.
+#   primers-privacy notice | status | retention | controller | export DIR | prune
+exec python3 -I /usr/share/primers/brain/primers_privacy.py "$@"
