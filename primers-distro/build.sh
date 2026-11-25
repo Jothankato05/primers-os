@@ -49,6 +49,21 @@ log()  { printf '\033[96m[BUILD]\033[0m %s\n' "$*"; }
 warn() { printf '\033[93m[WARN]\033[0m  %s\n' "$*" >&2; }
 die()  { printf '\033[91m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Copy a source tree from the checkout into the image. Everything lands owned
+# by root, whoever owns the checkout: on a CI runner that is uid 1001, and
+# keeping it would hand /etc and /usr/bin to whichever account gets uid 1001
+# on the installed PC (such as the Lab Mode account). Directories that
+# already exist in the image keep their owner and mode; group and other
+# write bits from the checkout are dropped.
+#   install_tree SRC DEST [extra tar options, e.g. --exclude=...]
+install_tree() {
+  local src=$1 dest=$2
+  shift 2
+  install -d -m 0755 "$dest"
+  tar -C "$src" --owner=0 --group=0 --numeric-owner --mode=go-w "$@" -cf - . \
+    | tar -C "$dest" --no-overwrite-dir --same-owner --same-permissions -xf -
+}
+
 in_chroot() {
   chroot "$CHROOT" /usr/bin/env -i \
     HOME=/root \
@@ -278,15 +293,14 @@ stage_customize() {
   mount_chroot
 
   log "Applying filesystem overlays"
-  cp -a "$HERE/overlays/." "$CHROOT/"
+  install_tree "$HERE/overlays" "$CHROOT"
 
   log "Installing PRIMERS brain -> /usr/share/primers/brain"
   rm -rf "$CHROOT/usr/share/primers/brain"
   install -d -m 0755 "$CHROOT/usr/share/primers/brain"
-  tar -C "$REPO_ROOT/primers-os" \
+  install_tree "$REPO_ROOT/primers-os" "$CHROOT/usr/share/primers/brain" \
       --exclude='./logs' --exclude='__pycache__' --exclude='*.pyc' \
-      --exclude='./tests' --exclude='./.pytest_cache' --exclude='./CHANGELOG.md' \
-      -cf - . | tar -C "$CHROOT/usr/share/primers/brain" -xf -
+      --exclude='./tests' --exclude='./.pytest_cache' --exclude='./CHANGELOG.md'
   chown -R root:root "$CHROOT/usr/share/primers"
   find "$CHROOT/usr/share/primers/brain" -type d -exec chmod 0755 {} +
   find "$CHROOT/usr/share/primers/brain" -type f -exec chmod 0644 {} +
@@ -302,8 +316,8 @@ stage_customize() {
   log "Installing Primers Lite Bee -> /usr/share/primers/lite-bee"
   rm -rf "$CHROOT/usr/share/primers/lite-bee"
   install -d -m 0755 "$CHROOT/usr/share/primers/lite-bee"
-  tar -C "$REPO_ROOT/primers-lite-bee" --exclude='__pycache__' --exclude='*.pyc' -cf - litebee \
-    | tar -C "$CHROOT/usr/share/primers/lite-bee" -xf -
+  install_tree "$REPO_ROOT/primers-lite-bee/litebee" "$CHROOT/usr/share/primers/lite-bee/litebee" \
+      --exclude='__pycache__' --exclude='*.pyc'
   install -m 0755 "$REPO_ROOT/primers-lite-bee/lite-bee" "$CHROOT/usr/bin/lite-bee"
   find "$CHROOT/usr/share/primers/lite-bee" -type d -exec chmod 0755 {} +
   find "$CHROOT/usr/share/primers/lite-bee" -type f -exec chmod 0644 {} +
@@ -311,7 +325,7 @@ stage_customize() {
   log "Installing Calamares configuration -> /etc/calamares"
   rm -rf "$CHROOT/etc/calamares"
   install -d -m 0755 "$CHROOT/etc/calamares"
-  cp -a "$HERE/installer/calamares/." "$CHROOT/etc/calamares/"
+  install_tree "$HERE/installer/calamares" "$CHROOT/etc/calamares"
 
   log "Configuring live session (casper)"
   cat > "$CHROOT/etc/casper.conf" <<EOF
@@ -373,6 +387,9 @@ stage_finalize() {
      grep -qF "$(sed -n '2p' "$BUILD_CA_FILE")" "$CHROOT/etc/ssl/certs/ca-certificates.crt" 2>/dev/null; then
     die "Build CA still present in the system trust store — refusing to continue"
   fi
+  # Hard security gate: only root and system accounts own the image's files
+  "$HERE/tools/check-image-perms.sh" "$CHROOT" \
+    || die "Image files with a regular account's owner or writable by everyone — refusing to continue"
 }
 
 # ──────────────────────────────────────────────────────────────

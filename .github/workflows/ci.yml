@@ -129,7 +129,10 @@ jobs:
             overlays/usr/bin/primers-study overlays/usr/lib/primers/study-panel \
             overlays/usr/bin/primers-exam overlays/usr/lib/primers/exam-session \
             overlays/etc/X11/Xsession.d/98primers-exam overlays/usr/lib/primers/exam-shell \
-            tools/release-notes.sh
+            tools/release-notes.sh tools/check-image-perms.sh tools/check-iso-perms.sh \
+            tests/test-image-perms.sh
+      - name: Image permission gate (owners and modes of what goes into the image)
+        run: sudo primers-distro/tests/test-image-perms.sh
       - name: VM test harness compiles
         run: python3 -m py_compile primers-distro/tests/vm/*.py
       - name: Validate JSON, YAML, XML and QML

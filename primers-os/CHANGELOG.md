@@ -3,6 +3,17 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Security: image files are root's whoever owns the checkout.** The build
+  copied overlays, the installer configuration and Lite Bee with their
+  owners kept, so images built on GitHub's runners gave uid 1001 (the
+  runner's user, and on an installed PC usually the second account, such as
+  the Lab Mode account) ownership of `/`, `/etc`, `/usr`, `/usr/bin` and
+  more. `install_tree` now installs them as root without touching existing
+  directories; `tools/check-image-perms.sh` refuses a build tree, and
+  `tools/check-iso-perms.sh` a finished ISO, with files owned by a regular
+  account or writable by everyone. The release workflow runs the ISO check
+  before publishing, also on ISOs it reuses from earlier runs. No image with
+  this fault was published.
 - **New ISO builder** (`primers-distro/build.sh`): debootstrap → chroot →
   squashfs → hybrid BIOS/UEFI ISO, in resumable stages. Replaces live-build,
   whose Ubuntu 22.04 version (3.0) could not build jammy images — the cause

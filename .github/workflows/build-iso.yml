@@ -71,6 +71,9 @@ jobs:
       - name: Build ISO
         run: sudo PRIMERS_WORK_DIR=/mnt/primers-work ./primers-distro/build.sh
 
+      - name: Image owners and permissions (the finished ISO; a failure stops the release)
+        run: primers-distro/tools/check-iso-perms.sh "$(ls primers-distro/*.iso | head -n1)"
+
       - name: Enable KVM for the VM tests
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -293,6 +296,14 @@ jobs:
           # Strict: every file in SHA256SUMS must be present and match
           sha256sum -c SHA256SUMS
           echo "iso=$ISO" >> "$GITHUB_OUTPUT"
+
+      - name: Image owners and permissions (an ISO built before this gate existed is checked too)
+        env:
+          ISO: ${{ steps.files.outputs.iso }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools xorriso
+          primers-distro/tools/check-iso-perms.sh "release/$ISO"
 
       - name: Release notes
         env:
