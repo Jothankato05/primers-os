@@ -22,7 +22,7 @@ jobs:
   build:
     if: ${{ !github.event.inputs.reuse_run_id }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 150
+    timeout-minutes: 240
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     permissions:
@@ -83,10 +83,14 @@ jobs:
           ls -l /dev/kvm
 
       - name: VM tests (the image itself, booted; a failure stops the release)
-        timeout-minutes: 60
+        timeout-minutes: 120
         run: |
           iso=$(ls primers-distro/*.iso | head -n1)
-          python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape
+          rc=0
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape || rc=1
+          # Installs on a VM disk, cuts its power mid-exam, checks it comes back locked (ADR 0004)
+          python3 primers-distro/tests/vm/run_vm_tests.py exam-power-cut --iso "$iso" --out vm-results/exam-power-cut || rc=1
+          exit $rc
 
       - name: Upload VM test results
         if: always()

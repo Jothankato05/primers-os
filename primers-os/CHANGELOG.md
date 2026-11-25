@@ -3,6 +3,18 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Exam Mode survives power cuts and reboots** (ADR 0004). Lock files are
+  written durably (fsync'd, renamed, directory fsync'd), `exam.conf` is
+  written before the locks and removed after them, so a cut during `start`
+  or `stop` comes back locked. The exam log is now
+  `/var/log/primers/exam.jsonl`, fsync'd entry by entry; the
+  `primers-exam-log` service copies the candidate's events from the
+  journal as they arrive. While an exam runs on an installed PC the boot
+  menu is locked: a GRUB superuser with a random, discarded password, only
+  the normal entry bootable without it, recovery mode and other systems
+  off. New VM test (`exam-power-cut`): installs on a VM disk, cuts the
+  power mid-exam, and checks the PC comes back in Exam Mode with the last
+  event in the log and the boot menu refusing to be edited.
 - **Security: image files are root's whoever owns the checkout.** The build
   copied overlays, the installer configuration and Lite Bee with their
   owners kept, so images built on GitHub's runners gave uid 1001 (the

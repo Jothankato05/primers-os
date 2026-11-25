@@ -131,19 +131,35 @@ def read_config(path: str) -> Optional[LabConfig]:
     return conf
 
 
+def sync_dir(path: str) -> None:
+    """fsync a directory, so a rename or unlink in it survives a power cut."""
+    with contextlib.suppress(OSError):
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
 def _atomic_write(path: str, text: str, mode: int = 0o644) -> None:
+    """Replace a file so that after a power cut it holds either the old or
+    the new text, never a mix or nothing: written, fsync'd, renamed over the
+    old one, directory fsync'd."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = f"{path}.tmp{os.getpid()}"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, mode)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
         os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
+    sync_dir(os.path.dirname(path))
 
 
 def write_config(path: str, conf: LabConfig) -> None:

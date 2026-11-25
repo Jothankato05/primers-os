@@ -13,8 +13,8 @@ an exam is on (``sudo primers-exam start https://cbt.example.edu.ng``):
   web ports, whatever program tries to connect (nftables table
   ``inet primers_exam``, separate from ufw so a ufw reload can't drop it);
 * USB drives can't be mounted in that account (polkit);
-* sessions, pages visited and blocked attempts are logged to the journal
-  under ``primers-exam`` (``primers-exam log``).
+* sessions, pages visited and blocked attempts are logged, durably, to
+  /var/log/primers/exam.jsonl (``primers-exam log``; core.exam_log).
 
 The escape routes around the kiosk are closed too (ADR 0003): no text
 consoles (Ctrl+Alt+F1..F12, getty), no Ctrl+Alt+Backspace, no Magic SysRq,
@@ -22,21 +22,30 @@ no shell, sudo, su or pkexec for the lab account (every polkit action is
 denied to it), no DNS of its own (exam servers are pinned in /etc/hosts, so
 DNS can't be used as a tunnel), and the clock can't be changed by it.
 
+A power cut or reboot doesn't end an exam (ADR 0004): every lock is a
+file on disk, exam.conf is written before the locks and removed after them,
+so a PC that loses power while an exam starts or stops comes back locked;
+the boot service and every exam sign-in put the firewall back; the boot
+menu is locked while an exam runs (no editing, no recovery mode, no other
+system); and the exam log is fsync'd entry by entry.
+
 Lab Mode still wipes the account before and after every session, so
 nothing carries over from one candidate to the next.
 """
 
 import contextlib
+import hashlib
 import ipaddress
 import os
 import re
+import secrets
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 from urllib.parse import urlsplit
 
-from core import lab_mode
+from core import exam_log, lab_mode
 
 CONF = "/etc/primers/exam.conf"
 PKLA = "/etc/polkit-1/localauthority/90-mandatory.d/60-primers-exam.pkla"
@@ -68,7 +77,24 @@ class ExamPaths:
     state: str = "/var/lib/primers/exam"
     exam_shell: str = EXAM_SHELL
     lightdm: str = "/etc/lightdm"
-LOG_TAG = "primers-exam"
+    log: str = exam_log.LOG_PATH
+    boot_id: str = exam_log.BOOT_ID
+    grub_script: str = "/etc/grub.d/09_primers_exam"
+    grub_default: str = "/etc/default/grub.d/90-primers-exam.cfg"
+    grub_cfg: str = "/boot/grub/grub.cfg"
+    cmdline: str = "/proc/cmdline"
+
+
+LOG_TAG = exam_log.LOG_TAG
+LOG_SERVICE = "primers-exam-log.service"
+GRUB_USER = "primers-exam"
+GRUB_DEFAULT_TEXT = """# Written by primers-exam while an exam runs. Removed when the exam stops.
+# No recovery mode or other systems in the boot menu, and the first entry
+# (the normal PRIMERS OS one) is the default.
+GRUB_DISABLE_RECOVERY=true
+GRUB_DISABLE_OS_PROBER=true
+GRUB_DEFAULT=0
+"""
 WEB_PORTS = (80, 443)
 
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
@@ -282,6 +308,48 @@ def hosts_text(original: str, pins: Dict[str, Addresses]) -> str:
 #  Exam Mode
 # ------------------------------------------------------------------ #
 
+def grub_password_hash(secret: bytes, salt: bytes, rounds: int = 10000) -> str:
+    """The grub-mkpasswd-pbkdf2 form of a password."""
+    digest = hashlib.pbkdf2_hmac("sha512", secret, salt, rounds, 64)
+    return f"grub.pbkdf2.sha512.{rounds}.{salt.hex().upper()}.{digest.hex().upper()}"
+
+
+GRUB_SCRIPT = r"""#!/bin/sh
+# Written by primers-exam while an exam runs. Removed when the exam stops.
+# Locks the boot menu: no editing entries (init=/bin/sh), no GRUB command
+# line, no recovery mode or other systems. The password below is random and
+# was thrown away; stop the exam to unlock the menu.
+set -e
+cat <<'END_OF_LOCK'
+set superusers="@USER@"
+password_pbkdf2 @USER@ @HASH@
+END_OF_LOCK
+# 10_linux's set-up and its first (normal) entry, bootable without the password
+entry=$("$(dirname "$0")/10_linux" | awk '
+  !started && /^menuentry / { started = 1; if (!sub(/ --class /, " --unrestricted --class ")) exit 3 }
+  { print }
+  started { depth += gsub(/{/, "{"); depth -= gsub(/}/, "}"); if (depth == 0) exit }
+  END { if (!started) exit 4 }')
+if [ -z "$entry" ]; then
+  echo "09_primers_exam: no boot entry from 10_linux" >&2
+  exit 1
+fi
+printf '%s\n' "$entry"
+"""
+
+
+def grub_script_text(password_hash: str) -> str:
+    """/etc/grub.d/09_primers_exam. With a superuser set, GRUB asks for a
+    password before editing an entry, opening its command line or booting
+    any entry not marked --unrestricted; the password is random and thrown
+    away, so nobody can. The normal entry from 10_linux is repeated first
+    with --unrestricted, so the PC still boots on its own; everything after
+    it (other kernels, firmware settings) needs the password."""
+    if not re.fullmatch(r"grub\.pbkdf2\.sha512\.\d+\.[0-9A-F]+\.[0-9A-F]+", password_hash):
+        raise ExamError("bad boot menu password hash")
+    return GRUB_SCRIPT.replace("@USER@", GRUB_USER).replace("@HASH@", password_hash)
+
+
 def _default_run(argv: Sequence[str]) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(list(argv), capture_output=True, text=True, timeout=30)
@@ -289,7 +357,7 @@ def _default_run(argv: Sequence[str]) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(list(argv), 1, "", str(e))
 
 
-def _default_log(message: str) -> None:
+def _syslog(message: str) -> None:
     import syslog
     syslog.openlog(LOG_TAG, syslog.LOG_PID, syslog.LOG_AUTH)
     syslog.syslog(syslog.LOG_NOTICE, message)
@@ -298,12 +366,25 @@ def _default_log(message: str) -> None:
 class ExamMode:
     def __init__(self, lab: Optional[lab_mode.LabMode] = None, paths: Optional[ExamPaths] = None,
                  run: Callable[[Sequence[str]], subprocess.CompletedProcess] = _default_run,
-                 log: Callable[[str], None] = _default_log,
-                 is_root: Callable[[], bool] = lambda: os.geteuid() == 0):
+                 log: Optional[Callable[[str], None]] = None,
+                 is_root: Callable[[], bool] = lambda: os.geteuid() == 0,
+                 syslog: Callable[[str], None] = _syslog):
         self.lab = lab or lab_mode.LabMode()
         self.paths = paths or ExamPaths()
         self.is_root = is_root
-        self.run, self.log = run, log
+        self.run = run
+        self.examlog = exam_log.ExamLog(self.paths.log, self.paths.boot_id)
+        self.syslog = syslog
+        self.log = log or self._log
+
+    def _log(self, message: str) -> None:
+        """Durable exam log (fsync'd), and the journal."""
+        if self.is_root():
+            try:
+                self.examlog.log(message)
+            except OSError as e:
+                self.syslog(f"could not write the exam log {self.paths.log}: {e}")
+        self.syslog(message)
 
     # ---------------- read-only ----------------
 
@@ -327,7 +408,33 @@ class ExamMode:
                 "started": conf.started, "firewall": self.firewall_active() if root else None,
                 "usb_blocked": os.path.exists(self.paths.pkla) if root else None,
                 "consoles_locked": (os.path.exists(self.paths.xorg) and os.path.exists(self.paths.sysctl))
-                if root else None}
+                if root else None,
+                "boot_menu": self.boot_menu_state() if root else None}
+
+    def live_session(self) -> bool:
+        try:
+            with open(self.paths.cmdline, encoding="utf-8") as f:
+                return "boot=casper" in f.read().split()
+        except OSError:
+            return False
+
+    def boot_menu_lockable(self) -> bool:
+        """Only an installed system's boot menu can be locked (the live USB's
+        is on the USB stick)."""
+        return os.path.exists(self.paths.grub_cfg) and not self.live_session()
+
+    def boot_menu_state(self) -> str:
+        """"locked", "unlocked", or "live" (a live session: can't be locked)."""
+        if not self.boot_menu_lockable():
+            return "live"
+        try:
+            with open(self.paths.grub_cfg, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            return "unlocked"
+        locked = (f'set superusers="{GRUB_USER}"' in text and "--unrestricted" in text
+                  and os.path.exists(self.paths.grub_script))
+        return "locked" if locked else "unlocked"
 
     # ---------------- helpers ----------------
 
@@ -453,6 +560,46 @@ class ExamMode:
                 lab_mode._atomic_write(saved, (self._shell(acct.name) or "/bin/bash") + "\n", 0o600)
             self._checked(["usermod", "--shell", self.paths.exam_shell, acct.name],
                           "take the shell away from the exam account")
+        self._lock_boot_menu()
+        # The candidate's events (kiosk, session) go to the durable log too
+        self._checked(["systemctl", "start", LOG_SERVICE], "start the exam log writer")
+
+    def _lock_boot_menu(self) -> None:
+        if not self.boot_menu_lockable():
+            return
+        changed = False
+        script = None
+        with contextlib.suppress(OSError):
+            with open(self.paths.grub_script, encoding="utf-8") as f:
+                script = f.read()
+        if not script or f"password_pbkdf2 {GRUB_USER} grub.pbkdf2." not in script:
+            password = grub_password_hash(secrets.token_bytes(32), secrets.token_bytes(64))
+            lab_mode._atomic_write(self.paths.grub_script, grub_script_text(password), 0o755)
+            changed = True
+        try:
+            with open(self.paths.grub_default, encoding="utf-8") as f:
+                current = f.read()
+        except OSError:
+            current = None
+        if current != GRUB_DEFAULT_TEXT:
+            lab_mode._atomic_write(self.paths.grub_default, GRUB_DEFAULT_TEXT)
+            changed = True
+        if changed or self.boot_menu_state() != "locked":
+            self._checked(["update-grub"], "lock the boot menu")
+            if self.boot_menu_state() != "locked":
+                raise ExamError("the boot menu did not lock (update-grub ran, but "
+                                f"{self.paths.grub_cfg} has no password)")
+
+    def _unlock_boot_menu(self) -> List[str]:
+        removed = False
+        for path in (self.paths.grub_script, self.paths.grub_default):
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(path)
+                removed = True
+        if removed and os.path.exists(self.paths.grub_cfg) and not self.live_session():
+            if self.run(["update-grub"]).returncode != 0:
+                return ["could not unlock the boot menu: run sudo update-grub"]
+        return []
 
     def _lightdm_files(self) -> List[str]:
         files = [os.path.join(self.paths.lightdm, "lightdm.conf")]
@@ -474,10 +621,13 @@ class ExamMode:
         return line.split(":")[6] if line.count(":") >= 6 else None
 
     def _unlock(self, user: Optional[str]) -> List[str]:
+        """Undo every lock. exam.conf goes last, so a stop cut short by a
+        power cut leaves an exam that is still on (and can be stopped again)."""
         warnings = []
-        for path in (self.paths.conf, self.paths.pkla, self.paths.xorg, self.paths.sysctl):
+        for path in (self.paths.pkla, self.paths.xorg, self.paths.sysctl):
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(path)
+        warnings += self._unlock_boot_menu()
         self._remove_firewall()
         self._pin_hosts({})
         self._rewrite_lightdm(restore_autologin)
@@ -496,6 +646,9 @@ class ExamMode:
                 warnings.append(f"could not give the shell back to '{user}'")
         with contextlib.suppress(FileNotFoundError):
             os.unlink(saved)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(self.paths.conf)
+        lab_mode.sync_dir(os.path.dirname(self.paths.conf))
         return warnings
 
     def _stop_idle_consoles(self) -> None:
@@ -569,13 +722,17 @@ class ExamMode:
         ports = sorted(set(WEB_PORTS) | {port})
         started = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         conf = ExamConfig(url.strip(), hosts, ports, started)
+        self._check_log()
         try:
+            # exam.conf first: from here on, a power cut brings the PC back
+            # with the exam on, and the boot service puts every lock in place
+            lab_mode._atomic_write(self.paths.conf, config_text(conf))
             self._lock(acct, conf, addrs)
             self._pin_hosts(pins)
-            lab_mode._atomic_write(self.paths.conf, config_text(conf))
         except (ExamError, OSError):
             self._unlock(acct.name)
             raise
+        os.sync()
         self._stop_idle_consoles()
         warnings = self._end_lab_sessions("exam-start")
         warnings += self._restart_login_screen()
@@ -597,9 +754,19 @@ class ExamMode:
             labconf = self.lab.config()
             user = labconf.user if labconf else None
         warnings = self._unlock(user)
+        os.sync()
         warnings += self._end_lab_sessions("exam-stop")
         self.log(f"exam stopped: {conf.url}")
         return warnings
+
+    def _check_log(self) -> None:
+        """The exam log must be writable before an exam starts."""
+        try:
+            os.makedirs(os.path.dirname(self.paths.log), mode=0o750, exist_ok=True)
+            fd = os.open(self.paths.log, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o640)
+            os.close(fd)
+        except OSError as e:
+            raise ExamError(f"can't write the exam log {self.paths.log}: {e}")
 
     def refresh(self) -> bool:
         """Re-apply every lock with fresh addresses (boot, every exam sign-in).
@@ -621,13 +788,25 @@ class ExamMode:
         self._stop_idle_consoles()
         return True
 
-    def journal(self, since: Optional[str] = None) -> str:
-        """The exam log (needs root or the adm group). Defaults to the
-        current exam, or today when none is running."""
-        conf = None
-        with contextlib.suppress(ExamError):
-            conf = self.config()
-        since = since or (conf.started if conf and conf.started else "today")
-        result = self.run(["journalctl", "-t", LOG_TAG, "-o", "short-iso", "--no-pager",
-                           "--since", since])
-        return result.stdout if result.returncode == 0 else (result.stderr or "")
+    def journal(self, since: Optional[str] = None, everything: bool = False) -> str:
+        """The exam log (root, or the adm group). By default the current
+        exam, or the last one when none is running."""
+        if not os.path.exists(self.paths.log):
+            return ""
+        if everything:
+            when = None
+        elif since:
+            when = exam_log.parse_time(since)
+            if when is None:
+                raise ExamError(f"can't read the time {since!r}: use e.g. 2026-11-25 or '2026-11-25 09:00'")
+        else:
+            conf = None
+            with contextlib.suppress(ExamError):
+                conf = self.config()
+            when = (exam_log.parse_time(conf.started) if conf and conf.started else None) \
+                or self.examlog.last_exam_start()
+        records, damaged = self.examlog.since(when)
+        out = "".join(exam_log.format_record(r) + "\n" for r in records)
+        if damaged:
+            out += f"({damaged} damaged line(s) skipped: written when the power went off)\n"
+        return out

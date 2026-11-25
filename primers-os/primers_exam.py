@@ -4,12 +4,15 @@ primers-exam — Exam Mode for computer-based tests (installed as /usr/bin/prime
   sudo primers-exam start URL [--allow HOST]...   start an exam on this PC
   sudo primers-exam stop                          end it
        primers-exam status                        is an exam running?
-  sudo primers-exam log [--since TIME]            what happened during the exam
+  sudo primers-exam log [--since TIME | --all]    what happened during the exam
 
 Needs Lab Mode. While an exam runs, signing in to the shared lab account
 opens only the exam site, full screen, and that account can reach only the
 exam server(s). USB drives are blocked and activity is logged. Use --allow
 for any other server the exam site loads from (e.g. a CDN or login server).
+
+An exam survives a power cut or a restart: the PC comes back with the exam
+on, and the log (/var/log/primers/exam.jsonl) keeps everything up to the cut.
 """
 
 import argparse
@@ -18,7 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core import exam_mode  # noqa: E402
+from core import exam_log, exam_mode  # noqa: E402
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -32,7 +35,11 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("stop", help="end the exam")
     sub.add_parser("status", help="show whether an exam is running")
     lg = sub.add_parser("log", help="show the exam log")
-    lg.add_argument("--since", help="e.g. today, '2026-11-24 09:00' or --since=-2h")
+    when = lg.add_mutually_exclusive_group()
+    when.add_argument("--since", help="from this time (UTC), e.g. 2026-11-24 or '2026-11-24 09:00'")
+    when.add_argument("--all", action="store_true", help="every exam on this PC")
+    # Run by the primers-exam-log service, not by people
+    sub.add_parser("log-writer", help=argparse.SUPPRESS)
     return p
 
 
@@ -54,7 +61,12 @@ def print_status(exam: exam_mode.ExamMode) -> int:
     print(f"  Firewall:   {'active' if st['firewall'] else 'NOT ACTIVE'}")
     print(f"  USB drives: {'blocked' if st['usb_blocked'] else 'NOT BLOCKED'}")
     print(f"  Consoles:   {'locked (no Ctrl+Alt+F1..F12, no SysRq)' if st['consoles_locked'] else 'NOT LOCKED'}")
-    return 0 if st["firewall"] and st["usb_blocked"] and st["consoles_locked"] else 1
+    menu = {"locked": "locked (no editing, recovery mode or other systems)",
+            "live": "not lockable in a live session (install PRIMERS OS on exam PCs)",
+            "unlocked": "NOT LOCKED"}[st["boot_menu"]]
+    print(f"  Boot menu:  {menu}")
+    return 0 if st["firewall"] and st["usb_blocked"] and st["consoles_locked"] \
+        and st["boot_menu"] != "unlocked" else 1
 
 
 def main(argv=None) -> int:
@@ -77,7 +89,11 @@ def main(argv=None) -> int:
                 print("warning: " + w, file=sys.stderr)
             print("Exam Mode is off. The lab account is back to normal.")
         elif args.command == "log":
-            sys.stdout.write(exam.journal(args.since) or "No exam activity logged.\n")
+            sys.stdout.write(exam.journal(args.since, args.all) or "No exam activity logged.\n")
+        elif args.command == "log-writer":
+            conf = exam.config()
+            started = exam_log.parse_time(conf.started) if conf and conf.started else None
+            return exam_log.run_writer(exam.examlog, started)
     except exam_mode.ExamError as e:
         print(f"primers-exam: {e}", file=sys.stderr)
         return 1

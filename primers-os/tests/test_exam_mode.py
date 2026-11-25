@@ -23,10 +23,33 @@ class Net:
         self.shells = {"lab": "/bin/bash"}
         self.sessions = {}            # id -> {"Class": ..., "Type": ..., "TTY": ...}
         self.gettys = ["getty@tty1.service", "getty@tty2.service"]
+        self.grub_dir = None          # set by the fixture: like /etc/grub.d
+        self.grub_cfg = None
+        self.grub_fails = False
+
+    def update_grub(self, argv):
+        """grub-mkconfig, simplified: every executable script in grub.d, in
+        order, its output into grub.cfg (the real 09_primers_exam runs)."""
+        self.fake.calls.append(argv)
+        if self.grub_fails:
+            return subprocess.CompletedProcess(argv, 1, "", "grub-mkconfig failed")
+        out = "# grub.cfg header\n"
+        for name in sorted(os.listdir(self.grub_dir)):
+            path = os.path.join(self.grub_dir, name)
+            if os.access(path, os.X_OK):
+                r = subprocess.run(["sh", path], capture_output=True, text=True)
+                if r.returncode != 0:
+                    return subprocess.CompletedProcess(argv, 1, "", f"{name}: {r.stderr}")
+                out += r.stdout
+        with open(self.grub_cfg, "w") as f:
+            f.write(out)
+        return subprocess.CompletedProcess(argv, 0, "", "")
 
     def run(self, argv):
         argv = list(argv)
         ok = lambda out="": subprocess.CompletedProcess(argv, 0, out, "")  # noqa: E731
+        if argv[0] == "update-grub":
+            return self.update_grub(argv)
         if argv[0] == "resolvectl":
             ips = self.hosts.get(argv[-1], [])
             out = "".join(f"{argv[-1]}: {ip:<30} -- link: ens3\n" if i == 0 else f"{' ' * 16}{ip:<30} -- link: ens3\n"
@@ -78,7 +101,14 @@ def exam(lab):  # noqa: F811
                          rules=str(r / "run/primers-exam.nft"), xorg=str(r / "xorg.conf.d/90-primers-exam.conf"),
                          sysctl=str(r / "sysctl.d/90-primers-exam.conf"), hosts=str(r / "etc/hosts"),
                          state=str(r / "var/lib/primers/exam"), exam_shell="/usr/lib/primers/exam-shell",
-                         lightdm=str(r / "lightdm"))
+                         lightdm=str(r / "lightdm"), log=str(r / "var/log/primers/exam.jsonl"),
+                         boot_id=str(r / "boot_id"), grub_script=str(r / "grub.d/09_primers_exam"),
+                         grub_default=str(r / "default/grub.d/90-primers-exam.cfg"),
+                         grub_cfg=str(r / "boot/grub/grub.cfg"), cmdline=str(r / "cmdline"))
+    (r / "boot_id").write_text("b0a7-1d\n")
+    (r / "cmdline").write_text("BOOT_IMAGE=/boot/vmlinuz root=UUID=1234 ro quiet splash\n")
+    (r / "grub.d").mkdir()
+    net.grub_dir, net.grub_cfg = str(r / "grub.d"), paths.grub_cfg
     (r / "lightdm/lightdm.conf.d").mkdir(parents=True)
     (r / "lightdm/lightdm.conf").write_text("[Seat:*]\nautologin-user=staff\nautologin-user-timeout=0\n")
     (r / "lightdm/lightdm.conf.d/50-primers.conf").write_text("[Seat:*]\ngreeter-session=lightdm-gtk-greeter\n")

@@ -138,6 +138,8 @@ class VM:
         self.qmp_path = os.path.join(sockdir, f"{name}.qmp")
         self.qga_path = os.path.join(sockdir, f"{name}.qga")
         self.vars_path = os.path.join(workdir, f"{name}-vars.fd")
+        # The guest's first serial port (GRUB can be told to use it too)
+        self.serial_path = os.path.join(workdir, f"{name}-serial.log")
 
     @staticmethod
     def kvm() -> bool:
@@ -149,7 +151,8 @@ class VM:
                 "-qmp", f"unix:{self.qmp_path},server=on,wait=off",
                 "-chardev", f"socket,path={self.qga_path},server=on,wait=off,id=qga0",
                 "-device", "virtio-serial", "-device", "virtserialport,chardev=qga0,name=org.qemu.guest_agent.0",
-                "-nic", "user,model=e1000"]
+                "-nic", "user,model=e1000",
+                "-chardev", f"file,id=ser0,path={self.serial_path},append=on", "-serial", "chardev:ser0"]
         args += ["-accel", "kvm", "-cpu", "host"] if self.kvm() else ["-accel", "tcg,thread=multi"]
         if self.firmware in ("uefi", "sb"):
             code = OVMF_CODE_SB if self.firmware == "sb" else OVMF_CODE
@@ -255,6 +258,21 @@ class VM:
                 pass
             time.sleep(interval)
         raise VMError(f"timed out waiting for {what}")
+
+    def serial_size(self) -> int:
+        try:
+            return os.path.getsize(self.serial_path)
+        except OSError:
+            return 0
+
+    def serial_text(self, since: int = 0) -> str:
+        """What the guest wrote to its serial port, from byte `since` on."""
+        try:
+            with open(self.serial_path, "rb") as f:
+                f.seek(since)
+                return f.read().decode("utf-8", "replace")
+        except OSError:
+            return ""
 
     # ---------------- keyboard and screen ----------------
 

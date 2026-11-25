@@ -1,0 +1,26 @@
+# PRIMERS OS Exam Mode: copy the candidate's exam events (session, pages,
+# blocked attempts, finishes) from the journal into the durable exam log,
+# /var/log/primers/exam.jsonl, fsync'd as each one arrives, so a power cut
+# can't lose them. Runs while an exam is on (started by "primers-exam
+# start", and at boot while exam.conf exists).
+[Unit]
+Description=PRIMERS OS Exam Mode: durable exam log
+ConditionPathExists=/etc/primers/exam.conf
+After=systemd-journald.service
+Before=display-manager.service systemd-user-sessions.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/primers-exam log-writer
+Restart=always
+RestartSec=2
+# Reads the journal and appends to one file; nothing else
+ProtectSystem=strict
+ReadWritePaths=/var/log/primers
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

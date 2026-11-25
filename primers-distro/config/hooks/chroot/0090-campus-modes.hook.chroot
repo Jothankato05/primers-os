@@ -42,8 +42,19 @@ if [ -n "$others" ]; then
   exit 1
 fi
 rm -f /etc/primers/exam.conf /etc/polkit-1/localauthority/90-mandatory.d/60-primers-exam.pkla \
-      /etc/X11/xorg.conf.d/90-primers-exam.conf /etc/sysctl.d/90-primers-exam.conf
-install -d /etc/X11/xorg.conf.d
+      /etc/X11/xorg.conf.d/90-primers-exam.conf /etc/sysctl.d/90-primers-exam.conf \
+      /etc/grub.d/09_primers_exam /etc/default/grub.d/90-primers-exam.cfg
+install -d /etc/X11/xorg.conf.d /etc/default/grub.d
+# Exam Mode across power cuts (ADR 0004): the durable exam log, readable by
+# root and the adm group like the journal, and the service that copies the
+# candidate's events into it while an exam is on
+install -d -m 2750 -o root -g adm /var/log/primers
+systemctl enable primers-exam-log.service
+# The boot menu lock re-emits 10_linux's first entry: it must still look
+# the way the lock expects (an entry with --class options)
+grep -q '^CLASS="--class gnu-linux --class gnu --class os"$' /etc/grub.d/10_linux \
+  || { echo "E: /etc/grub.d/10_linux changed; check the exam boot menu lock" >&2; exit 1; }
+command -v update-grub >/dev/null || { echo "E: update-grub missing (exam boot menu lock)" >&2; exit 1; }
 # The lab account's shell during an exam refuses to run anything; it is a
 # registered shell so the account stays on the login screen's user list
 chmod 0755 /usr/lib/primers/exam-shell

@@ -3,6 +3,7 @@
 End-to-end tests of PRIMERS OS in a virtual machine.
 
   run_vm_tests.py exam-escape --iso primers-os.iso --out results/
+  run_vm_tests.py exam-power-cut --iso primers-os.iso --out results/
 
 Boots the ISO in QEMU (KVM when available), drives the keyboard through
 QMP, checks the guest through qemu-guest-agent, and serves a demo exam site
@@ -15,7 +16,10 @@ import functools
 import http.server
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -27,6 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EXAM_PORT = 8765
 EXAM_HOST = "cbt.primers.test"
 EXAM_URL = f"http://{EXAM_HOST}:{EXAM_PORT}/exam.html"
+STAFF_PASSWORD = "vm-test-staff"      # a throwaway VM's account, not a secret
 
 
 def serve(directory: str, port: int) -> None:
@@ -40,6 +45,11 @@ class Suite:
     def __init__(self, vm: VM, out: str):
         self.vm, self.out = vm, out
         self.results = []
+
+    def note(self, text: str) -> None:
+        """Something worth recording that is not a pass/fail check."""
+        self.results.append({"note": text})
+        print(f"  NOTE  {text}", flush=True)
 
     def check(self, name: str, ok: bool, detail: str = "") -> bool:
         self.results.append({"test": name, "passed": bool(ok), "detail": detail})
@@ -56,8 +66,9 @@ class Suite:
     def save(self) -> bool:
         with open(os.path.join(self.out, "results.json"), "w") as f:
             json.dump(self.results, f, indent=2)
-        failed = [r for r in self.results if not r["passed"]]
-        print(f"\n{len(self.results) - len(failed)} passed, {len(failed)} failed")
+        checks = [r for r in self.results if "test" in r]
+        failed = [r for r in checks if not r["passed"]]
+        print(f"\n{len(checks) - len(failed)} passed, {len(failed)} failed")
         return not failed
 
 
@@ -156,6 +167,8 @@ def exam_escape(vm: VM, suite: Suite) -> None:
     c("no desktop or second kiosk ever appears after the kill", not desktop_seen, "; ".join(desktop_seen))
     c("the log records the stopped kiosk",
       "stopped unexpectedly" in vm.sh("journalctl -t primers-exam --no-pager").out)
+    c("the durable exam log has it too (copied from the journal)",
+      "stopped unexpectedly" in vm.sh("cat /var/log/primers/exam.jsonl").out)
     vm.screenshot("03-after-kill")
 
     kiosk = sign_in_lab(vm, suite, "04-kiosk-again")
@@ -205,7 +218,132 @@ def exam_escape(vm: VM, suite: Suite) -> None:
       lines[:3] == ["/bin/bash", "176", "loaded"] and lines[3:] == ["0", "0"], state.out)
 
 
-SCENARIOS = {"exam-escape": exam_escape}
+# ------------------------------------------------------------------ #
+#  Exam Mode across a power cut (ADR 0004), on an installed system
+# ------------------------------------------------------------------ #
+
+def _monotonic(vm: VM, unit: str, prop: str) -> int:
+    out = vm.sh(f"systemctl show -p {prop} --value {unit}").out.strip()
+    return int(out) if out.isdigit() else 0
+
+
+def exam_power_cut(vm: VM, suite: Suite) -> None:
+    c = suite.check
+    subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", vm.disk, "24G"], check=True)
+
+    # 1. Install from the live session (the installer's steps, scripted)
+    vm.start()
+    vm.wait_agent(timeout=1200)
+    vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
+    with open(os.path.join(HERE, "install.sh"), encoding="utf-8") as f:
+        script = f.read()
+    r = vm.run(["/bin/bash", "-s", "/dev/vda", STAFF_PASSWORD], timeout=2400, input_text=script)
+    if not c("install: PRIMERS OS installed on the VM's disk", r.rc == 0 and "installed on /dev/vda" in r.out,
+             (r.out + r.err)[-3000:]):
+        return
+    vm.stop()
+
+    # 2. The installed system: Lab Mode, an exam, a candidate signed in
+    vm.iso = None
+    vm.start()
+    vm.wait_agent(timeout=900)
+    root = vm.sh("findmnt -n -o SOURCE /").out.strip()
+    c("the installed system boots from its own disk", root == "/dev/vda1" and
+      "boot=casper" not in vm.sh("cat /proc/cmdline").out, root)
+    # Test-only: GRUB also on the serial port, so the test can read the menu
+    r = vm.sh("printf 'GRUB_TERMINAL=\"console serial\"\\nGRUB_SERIAL_COMMAND=\"serial --unit=0 --speed=115200\"\\n'"
+              " > /etc/default/grub.d/99-vm-test-serial.cfg && update-grub", timeout=300)
+    c("setup: boot menu on the serial port (test only)", r.rc == 0, r.err)
+    r = vm.sh(f"echo '10.0.2.2 {EXAM_HOST}' >> /etc/hosts && primers-lab enable && "
+              "systemctl start primers-lab-reset.service")
+    c("setup: Lab Mode enabled", r.rc == 0, r.err)
+    r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=300)
+    c("setup: exam started", r.rc == 0, r.out + r.err)
+    st = vm.sh("primers-exam status")
+    c("the boot menu is locked during the exam", st.rc == 0 and "Boot menu:  locked" in st.out, st.out)
+    cfg = vm.sh("cat /boot/grub/grub.cfg").out
+    entries = [line.strip() for line in cfg.splitlines() if line.strip().startswith(("menuentry ", "submenu "))]
+    c("boot menu: a password is set; only the normal entry boots without it; no recovery mode",
+      'set superusers="primers-exam"' in cfg and bool(entries) and "--unrestricted" in entries[0]
+      and sum("--unrestricted" in e for e in entries) == 1 and "(recovery mode)" not in cfg,
+      "\n".join(entries))
+    r = vm.sh("grub-script-check /boot/grub/grub.cfg")
+    c("the locked grub.cfg is valid GRUB script", r.rc == 0, r.out + r.err)
+
+    kiosk = sign_in_lab(vm, suite, "pc-01-kiosk")
+    c("setup: candidate signs in to the kiosk", bool(kiosk))
+    marker = f"vm-test candidate event {int(time.time())}"
+    vm.as_user("lab", f"logger -t primers-exam '{marker}'")
+    time.sleep(1)
+    before = vm.sh("cat /var/log/primers/exam.jsonl").out
+    vm.screenshot("pc-02-before-power-cut")
+
+    # 3. Pull the plug, one second after the candidate's last event
+    vm.power_cut()
+    mark = vm.serial_size()
+    vm.start()
+    # After an unclean shutdown the boot menu stays up: try to edit the entry
+    vm.wait_until(lambda: "GNU GRUB" in vm.serial_text(mark), 120, "the boot menu", interval=0.5)
+    time.sleep(1)
+    vm.key("e")
+    time.sleep(3)
+    prompt = vm.serial_text(mark)
+    vm.screenshot("pc-03-edit-asks-for-password")
+    c("pressing e in the boot menu asks for a password instead of opening the editor",
+      "Enter username" in prompt, prompt[-600:])
+    vm.type("root\n")
+    time.sleep(1)
+    vm.type("guess\n")
+    time.sleep(3)
+    denied = vm.serial_text(mark)
+    for _ in range(2):
+        vm.key("ret")
+        time.sleep(2)
+    c("a wrong password is refused", "denied" in denied.lower() or "Access" in denied, denied[-600:])
+    vm.wait_agent(timeout=900)
+    c("the PC then boots normally (the normal entry needs no password)", True)
+
+    # 4. Back on: still in Exam Mode, locks in place before anyone signs in
+    st = vm.sh("primers-exam status")
+    c("after the power cut the PC is still in Exam Mode with every lock in place",
+      st.rc == 0 and "Exam Mode: ON" in st.out, st.out)
+    reset_done = _monotonic(vm, "primers-lab-reset.service", "ExecMainExitTimestampMonotonic")
+    dm_start = _monotonic(vm, "lightdm.service", "ExecMainStartTimestampMonotonic")
+    c("the exam firewall was back before the login screen started", 0 < reset_done <= dm_start,
+      f"lab reset done at {reset_done}, login screen started at {dm_start}")
+    c("consoles and SysRq still locked after the reboot",
+      vm.sh("cat /proc/sys/kernel/sysrq").out.strip() == "0"
+      and vm.sh("systemctl show -p LoadState --value getty@tty2.service").out.strip() == "masked"
+      and vm.sh("pgrep -x agetty").rc != 0)
+    log = vm.sh("cat /var/log/primers/exam.jsonl").out
+    c("the candidate's last event, a second before the cut, is in the exam log", marker in log,
+      f"in the log before the cut: {marker in before}")
+    c("the exam log kept the exam start and the session start",
+      "exam started:" in log and "exam session started" in log)
+    shown = vm.sh("primers-exam log").out
+    c("primers-exam log shows the events from before the cut", marker in shown, shown[-800:])
+    suite.note("journald kept the event too" if marker in vm.sh("journalctl -t primers-exam --no-pager").out
+               else "journald lost the event in the power cut; the exam log has it")
+
+    kiosk = sign_in_lab(vm, suite, "pc-04-kiosk-after-power-cut")
+    c("after the reboot, signing in opens the exam kiosk again", bool(kiosk))
+    r = vm.run(["runuser", "-u", "lab", "--", "curl", "-s", "-m", "8", "-o", "/dev/null", "-w", "%{http_code}",
+                "https://1.1.1.1/"])
+    c("after the reboot the lab account still reaches nothing but the exam", r.out in ("000", ""), repr(r))
+    r = vm.run(["runuser", "-u", "lab", "--", "curl", "-s", "-m", "8", "-o", "/dev/null", "-w", "%{http_code}",
+                EXAM_URL])
+    c("after the reboot the exam server is reachable", r.out == "200", repr(r))
+
+    # 5. Stopping the exam unlocks everything, boot menu included
+    r = vm.sh("primers-exam stop", timeout=300)
+    cfg = vm.sh("cat /boot/grub/grub.cfg").out
+    c("stopping the exam unlocks the boot menu", r.rc == 0 and "superusers" not in cfg
+      and "--unrestricted" not in cfg and "(recovery mode)" in cfg, r.out + r.err)
+    st = vm.sh("primers-exam status")
+    c("Exam Mode is off after stop", "Exam Mode: off" in st.out, st.out)
+
+
+SCENARIOS = {"exam-escape": exam_escape, "exam-power-cut": exam_power_cut}
 
 
 def main() -> int:
@@ -214,10 +352,14 @@ def main() -> int:
     ap.add_argument("--iso", required=True)
     ap.add_argument("--out", default="vm-results")
     ap.add_argument("--firmware", default="bios", choices=["bios", "uefi", "sb"])
+    ap.add_argument("--disk-dir", help="where the VM disk goes (default: a temporary directory, "
+                                       "deleted afterwards; never the results directory)")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     serve(os.path.join(HERE, "www"), EXAM_PORT)
-    vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario)
+    disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
+    vm = VM(args.out, iso=os.path.abspath(args.iso), firmware=args.firmware, name=args.scenario,
+            disk=os.path.join(disk_dir, f"{args.scenario}.qcow2") if args.scenario == "exam-power-cut" else None)
     suite = Suite(vm, args.out)
     print(f"== {args.scenario} ==", flush=True)
     try:
@@ -230,6 +372,8 @@ def main() -> int:
             except Exception:
                 pass
         vm.stop()
+        if not args.disk_dir:
+            shutil.rmtree(disk_dir, ignore_errors=True)
     return 0 if suite.save() else 1
 
 

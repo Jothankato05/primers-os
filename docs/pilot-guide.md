@@ -74,7 +74,9 @@ signed in to the PC's desktop (or sign out afterwards): the login screen
 then restarts with the consoles locked. While an exam runs, candidates can't
 switch to text consoles, use Magic SysRq keys, open a terminal, run sudo,
 su or pkexec, change the clock, look up any name but the exam servers', take
-screenshots, use USB drives, or get out of the exam page. Then try it: sign in to the lab
+screenshots, use USB drives, or get out of the exam page. On an installed PC
+the boot menu is locked too: editing it, recovery mode and other systems need
+a password nobody has (stop the exam to unlock it). Then try it: sign in to the lab
 account and check the exam loads. Candidates see only the exam, full
 screen; they press **Finish exam** when done, which signs them out and wipes
 the account. After the exam:
@@ -83,6 +85,13 @@ the account. After the exam:
 sudo primers-exam log      # sessions, pages, blocked attempts, finishes
 sudo primers-exam stop
 ```
+
+**If the power goes off** (or a candidate restarts the PC), the PC comes
+back to the login screen with the exam still on and every lock in place;
+the candidate signs in again and carries on. The exam log keeps everything
+up to the moment of the cut (`sudo primers-exam log` shows the exam that is
+running, or the last one; `--all` shows every exam). This needs an
+installed PC: a live USB forgets everything when it restarts.
 
 ## 4. Study Mode for students
 
@@ -116,4 +125,6 @@ licence cost saved per seat, and a short student satisfaction survey.
 | Clicking the lab account returns to the login screen | Lab Mode refused to start a session it couldn't wipe. See why: `journalctl -t primers-lab`. |
 | A student lost work | Expected in Lab Mode. Remind students to save to USB or online; the sign-in notice says so. |
 | The exam page doesn't load | `primers-exam status` (firewall active?). If the site needs other servers, stop and start again with `--allow` for each. `sudo primers-exam log` shows blocked pages. |
+| The power went off during an exam | Switch the PC back on and let the candidate sign in again. `sudo primers-exam status` should say Exam Mode: ON with every line locked or active. |
+| "Boot menu: NOT LOCKED" in `primers-exam status` | Run `sudo primers-exam stop`, then start the exam again; if it stays unlocked, check `sudo update-grub` works. |
 | Turn Lab Mode off | `sudo primers-lab disable` (deletes the lab account). |
