@@ -84,6 +84,19 @@ jobs:
           python3 -c "import json; d=json.load(open('kiosk.json')); assert d['kiosk'] and d['title'] == 'Exam' and d['blocked'] >= 1 and d['uri'].startswith('http://127.0.0.1:8765/'), d; print('kiosk:', d)"
           rm "$PRIMERS_EXAM_CONF"
           if ./lite-bee --kiosk; then echo "kiosk must refuse to start without an exam"; exit 1; fi
+      - name: Exam site probe (records every server and port an exam site uses)
+        working-directory: primers-lite-bee
+        timeout-minutes: 5
+        env:
+          HOME: ${{ runner.temp }}/probe-home
+        run: |
+          mkdir -p "$HOME"
+          python3 tests/probe/serve.py 120 &
+          Xvfb :92 -screen 0 1280x800x24 &
+          export DISPLAY=:92
+          sleep 2
+          ./lite-bee --probe http://127.0.0.1:8767/probe.html --probe-report "$RUNNER_TEMP/probe.json" --probe-seconds 15
+          python3 tests/probe/check_probe.py "$RUNNER_TEMP/probe.json"
       - name: Exam kiosk escape routes (dev tools, view-source, file, data, windows, print, downloads, keys)
         working-directory: primers-lite-bee
         timeout-minutes: 5

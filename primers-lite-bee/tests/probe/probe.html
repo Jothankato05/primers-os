@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Probe test exam</title>
+<!-- What a real exam site does: its own pages, plus a CDN script, an image
+     from another host, a background request, a frame and a redirect -->
+<link rel="stylesheet" href="/style.css">
+<script src="http://localhost:8768/cdn.js"></script>
+</head><body>
+<h1>Probe test exam</h1>
+<img src="http://127.0.0.2:8767/logo.svg" alt="logo">
+<iframe src="http://127.0.0.3:8767/frame.html" width="200" height="80"></iframe>
+<script>
+  fetch("http://localhost:8768/api.json").catch(function () {});
+  // then on to the next page, which redirects to the other server
+  setTimeout(function () { location.href = "/redirect"; }, 2500);
+</script>
+</body></html>

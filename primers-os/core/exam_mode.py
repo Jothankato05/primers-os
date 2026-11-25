@@ -133,6 +133,30 @@ def valid_host(host: str) -> bool:
     return all(_LABEL.fullmatch(label) for label in host.split("."))
 
 
+def parse_allow(entry: str) -> Tuple[str, Optional[int]]:
+    """An --allow value: host, host:port, an IP address, or [IPv6]:port."""
+    text = entry.strip().lower().rstrip(".")
+    port = None
+    if text.startswith("["):
+        host, _, rest = text[1:].partition("]")
+        if rest:
+            if not rest.startswith(":"):
+                raise ExamError(f"{entry!r} is not a valid server")
+            port = rest[1:]
+    elif text.count(":") == 1:
+        host, port = text.split(":")
+    else:
+        host = text                     # a name, an IPv4 address or a bare IPv6 address
+    host = host.rstrip(".")
+    if not valid_host(host):
+        raise ExamError(f"{entry!r} is not a valid server name")
+    if port is not None:
+        if not port.isdigit() or not 0 < int(port) < 65536:
+            raise ExamError(f"{entry!r}: the port must be a number from 1 to 65535")
+        return host, int(port)
+    return host, None
+
+
 def parse_exam_url(url: str) -> Tuple[str, str, int]:
     """'https://cbt.uni.edu.ng/test' → ('https', 'cbt.uni.edu.ng', 443)."""
     try:
@@ -710,18 +734,19 @@ class ExamMode:
             raise ExamError("an exam is already running. Stop it first: sudo primers-exam stop")
         scheme, host, port = parse_exam_url(url)
         hosts = [host]
+        extra_ports = set()
         for extra in allow:
-            name = extra.strip().lower().rstrip(".")
-            if not valid_host(name):
-                raise ExamError(f"{extra!r} is not a valid server name")
+            name, extra_port = parse_allow(extra)
             if name not in hosts:
                 hosts.append(name)
+            if extra_port:
+                extra_ports.add(extra_port)
         acct = self._lab_account()
         if not self.resolve([host]):
             raise ExamError(f"can't find the exam server {host}: check the address and the network")
         pins = self.pins(hosts)
         addrs = self.addresses(hosts, pins)
-        ports = sorted(set(WEB_PORTS) | {port})
+        ports = sorted(set(WEB_PORTS) | {port} | extra_ports)
         started = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         conf = ExamConfig(url.strip(), hosts, ports, started)
         self._check_log()

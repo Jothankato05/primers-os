@@ -1,7 +1,8 @@
 """
 primers-exam — Exam Mode for computer-based tests (installed as /usr/bin/primers-exam).
 
-  sudo primers-exam start URL [--allow HOST]...   start an exam on this PC
+       primers-exam probe URL                     which servers does the exam site need?
+  sudo primers-exam start URL [--allow HOST[:PORT]]...   start an exam on this PC
   sudo primers-exam stop                          end it
        primers-exam status                        is an exam running?
   sudo primers-exam log [--since TIME | --all]    what happened during the exam
@@ -16,12 +17,13 @@ on, and the log (/var/log/primers/exam.jsonl) keeps everything up to the cut.
 """
 
 import argparse
+import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core import exam_log, exam_mode  # noqa: E402
+from core import exam_log, exam_mode, exam_probe  # noqa: E402
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -30,8 +32,14 @@ def _parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
     st = sub.add_parser("start", help="start an exam")
     st.add_argument("url", help="exam site, e.g. https://cbt.example.edu.ng")
-    st.add_argument("--allow", action="append", default=[], metavar="HOST",
-                    help="another server the exam site needs (repeatable)")
+    st.add_argument("--allow", action="append", default=[], metavar="HOST[:PORT]",
+                    help="another server the exam site needs, with its port if not 80/443 (repeatable); "
+                         "'primers-exam probe URL' finds them")
+    pr = sub.add_parser("probe", help="open the exam site, sign in and go through a practice exam: "
+                                      "lists every server it needs and the start command")
+    pr.add_argument("url", help="exam site, e.g. https://cbt.example.edu.ng")
+    pr.add_argument("--seconds", type=int, default=0, help="close the probe window by itself after this long")
+    pr.add_argument("--json", action="store_true", help="machine-readable output")
     sub.add_parser("stop", help="end the exam")
     sub.add_parser("status", help="show whether an exam is running")
     lg = sub.add_parser("log", help="show the exam log")
@@ -74,6 +82,19 @@ def main(argv=None) -> int:
     exam = exam_mode.ExamMode()
     if args.command == "status":
         return print_status(exam)
+    if args.command == "probe":
+        try:
+            result = exam_probe.probe(args.url, args.seconds)
+        except exam_probe.ProbeError as e:
+            print(f"primers-exam probe: {e}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"url": result.url, "command": result.command(), "allow": result.allow_args(),
+                              "servers": [vars(f) | {"resolved": f.resolved} for f in result.findings],
+                              "failed": result.failed}, indent=2, default=list))
+        else:
+            sys.stdout.write(exam_probe.format_result(result))
+        return 0 if result.findings and all(f.resolved for f in result.findings) else 1
     if os.geteuid() != 0:
         sys.exit("primers-exam: this needs administrator rights. Run it with sudo.")
     try:

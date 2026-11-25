@@ -883,6 +883,10 @@ def main(argv=None) -> int:
                         help="PRIMERS OS Exam Mode: show only the running exam, full screen")
     parser.add_argument("--screenshot", metavar="PNG", help=argparse.SUPPRESS)
     parser.add_argument("--selftest", type=int, metavar="SECONDS", help=argparse.SUPPRESS)
+    # Used by "primers-exam probe": open an exam site, record every server it uses
+    parser.add_argument("--probe", metavar="URL", help=argparse.SUPPRESS)
+    parser.add_argument("--probe-report", metavar="JSON", help=argparse.SUPPRESS)
+    parser.add_argument("--probe-seconds", type=int, default=0, help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {VERSION}")
     args = parser.parse_args(argv)
     GLib.set_prgname("lite-bee")
@@ -891,6 +895,14 @@ def main(argv=None) -> int:
         s = Settings.load()
         s.mode = args.mode
         s.save()
+    if args.probe:
+        if not args.probe_report or not urls.to_url(args.probe, "").startswith(("http://", "https://")):
+            print("lite-bee: --probe needs an http(s) address and --probe-report", file=sys.stderr)
+            return 2
+        from litebee import probe
+        papp = Gtk.Application(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
+        papp.connect("activate", lambda a: probe.window(a, args.probe, args.probe_report, args.probe_seconds))
+        return papp.run([sys.argv[0]])
     if args.kiosk:
         policy = exam.load()
         if policy is None:
