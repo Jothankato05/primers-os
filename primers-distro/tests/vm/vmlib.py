@@ -313,6 +313,16 @@ class VM:
             self.key(KEYS.get(ch, ("shift-" + ch.lower()) if ch.isupper() else ch))
             time.sleep(0.03)
 
+    def click(self, x: int, y: int, width: int, height: int) -> None:
+        """Left click at (x, y) on a width x height screen (usb-tablet: absolute)."""
+        self.qmp.call("input-send-event", events=[
+            {"type": "abs", "data": {"axis": "x", "value": int(x * 32767 / max(1, width - 1))}},
+            {"type": "abs", "data": {"axis": "y", "value": int(y * 32767 / max(1, height - 1))}}])
+        time.sleep(0.2)
+        for down in (True, False):
+            self.qmp.call("input-send-event", events=[{"type": "btn", "data": {"down": down, "button": "left"}}])
+            time.sleep(0.1)
+
     def screenshot(self, name: str) -> str:
         ppm = os.path.join(self.workdir, f"{name}.ppm")
         self.qmp.call("screendump", filename=ppm)

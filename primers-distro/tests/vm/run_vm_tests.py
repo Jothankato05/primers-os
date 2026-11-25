@@ -33,6 +33,7 @@ EXAM_PORT = 8765
 EXAM_HOST = "cbt.primers.test"
 EXAM_URL = f"http://{EXAM_HOST}:{EXAM_PORT}/exam.html"
 STAFF_PASSWORD = "vm-test-staff"      # a throwaway VM's account, not a secret
+INSTALLER = "calamares"               # how the 'installed' scenario installs (--installer)
 
 
 def serve(directory: str, port: int) -> None:
@@ -407,17 +408,137 @@ def install_from_live(vm: VM, suite: Suite) -> bool:
     vm.wait_until(lambda: vm.sh("pgrep -x openbox").rc == 0, 600, "the live desktop")
     with open(os.path.join(HERE, "install.sh"), encoding="utf-8") as f:
         script = f.read()
-    r = vm.run(["/bin/bash", "-s", "/dev/vda", STAFF_PASSWORD], timeout=2400, input_text=script)
-    if not suite.check(f"install ({vm.firmware}): PRIMERS OS installed on the VM's disk",
-                       r.rc == 0 and "installed on /dev/vda" in r.out, (r.out + r.err)[-3000:]):
-        return False
+    if INSTALLER == "calamares":
+        vm.wait_until(lambda: screen_drawn(vm), 300, "the live desktop to be drawn")
+        time.sleep(10)
+        if not install_with_installer(vm, suite):
+            return False
+    else:
+        r = vm.run(["/bin/bash", "-s", "/dev/vda", STAFF_PASSWORD], timeout=2400, input_text=script)
+        if not suite.check(f"install ({vm.firmware}): PRIMERS OS installed on the VM's disk",
+                           r.rc == 0 and "installed on /dev/vda" in r.out, (r.out + r.err)[-3000:]):
+            return False
     vm.stop()
     vm.iso = None
     vm.start()
     vm.wait_agent(timeout=900)
     root = vm.sh("findmnt -n -o SOURCE /").out.strip()
-    return suite.check("the installed system boots from its own disk",
-                       root.startswith("/dev/vda") and "boot=casper" not in vm.sh("cat /proc/cmdline").out, root)
+    ok = suite.check("the installed system boots from its own disk",
+                     root.startswith("/dev/vda") and "boot=casper" not in vm.sh("cat /proc/cmdline").out, root)
+    if INSTALLER == "calamares":
+        who = vm.sh("id -nG labadmin; hostname; dpkg -l casper calamares 2>/dev/null | grep -c '^ii'; "
+                    "test -s /etc/machine-id && echo machine-id").out.split("\n")
+        suite.check("the installer made the administrator (sudo), named the PC, removed the live "
+                    "tools and gave the PC its own machine id",
+                    "sudo" in who[0].split() and who[1] == "labadmin-primers" and who[2] == "0"
+                    and "machine-id" in who, repr(who))
+    return ok
+
+
+# Where things are in the installer's window (Calamares, 1024x640 client
+# area, the same at any screen size), measured from screenshots
+INSTALLER_TITLE = "PRIMERS OS Installer"
+ERASE_DISK = (172, 61)          # partition page: "Erase disk"
+LOGIN_MARK = (374, 101)         # users page: inside the tick (green) or cross (red) by the login name
+PASSWORD = (264, 210)
+PASSWORD_AGAIN = (470, 210)
+
+
+def window_origin(vm: VM, title: str):
+    """Absolute top-left of a window on the live desktop, and the screen size."""
+    info = vm.as_user("primers", f"xwininfo -name '{title}'").out
+    x = y = None
+    for line in info.splitlines():
+        if "Absolute upper-left X:" in line:
+            x = int(line.split(":")[1])
+        elif "Absolute upper-left Y:" in line:
+            y = int(line.split(":")[1])
+    dims = vm.as_user("primers", "xdpyinfo | awk '/dimensions:/ {print $2}'").out.strip()
+    w, h = (int(v) for v in dims.split("x")) if "x" in dims else (1024, 768)
+    if x is None or y is None:
+        raise VMError(f"no window '{title}'")
+    return x, y, w, h
+
+
+def pixel(vm: VM, shot: str, x: int, y: int):
+    from PIL import Image
+    with Image.open(vm.screenshot(shot)) as img:
+        return img.convert("RGB").getpixel((x, y))
+
+
+def reddish(rgb) -> bool:
+    r, g, b = rgb
+    return r > 150 and r > g + 60 and r > b + 60
+
+
+def greenish(rgb) -> bool:
+    r, g, b = rgb
+    return g > 120 and g > r + 40
+
+
+def install_with_installer(vm: VM, suite: Suite) -> bool:
+    """Install the way a person does: the installer (Calamares) from the live
+    desktop, Erase disk, an administrator account, Install now."""
+    c = suite.check
+    slow = 1 if VM.kvm() else 4
+    vm.as_user("primers", "nohup sudo -E calamares -d > /tmp/calamares.out 2>&1 &")
+    vm.wait_until(lambda: INSTALLER_TITLE in vm.as_user("primers", "xwininfo -root -tree").out, 600, "the installer")
+    time.sleep(10 * slow)
+    x0, y0, w, h = window_origin(vm, INSTALLER_TITLE)
+    at = lambda p: (x0 + p[0], y0 + p[1])  # noqa: E731
+    vm.screenshot("installer-01-welcome")
+    for _ in range(3):                  # welcome, location, keyboard
+        vm.key("alt-n")
+        time.sleep(6 * slow)
+    vm.screenshot("installer-02-partitions")
+    vm.click(*at(ERASE_DISK), w, h)
+    time.sleep(6 * slow)
+    vm.screenshot("installer-03-erase-disk")
+    vm.key("alt-n")
+    time.sleep(6 * slow)
+    # The login names the system uses are refused (the field starts focused)
+    vm.type("Lab")
+    time.sleep(3 * slow)
+    mark = pixel(vm, "installer-04-login-lab-refused", *at(LOGIN_MARK))
+    c("the installer refuses 'lab' as the administrator's login name", reddish(mark), f"mark colour {mark}")
+    vm.key("ctrl-a")
+    vm.type("Labadmin")
+    time.sleep(3 * slow)
+    mark = pixel(vm, "installer-05-login-labadmin", *at(LOGIN_MARK))
+    c("the installer accepts 'labadmin'", greenish(mark), f"mark colour {mark}")
+    vm.click(*at(PASSWORD), w, h)
+    vm.type(STAFF_PASSWORD)
+    vm.click(*at(PASSWORD_AGAIN), w, h)
+    vm.type(STAFF_PASSWORD)
+    time.sleep(3 * slow)
+    vm.screenshot("installer-06-users")
+    vm.key("alt-n")
+    time.sleep(6 * slow)
+    vm.screenshot("installer-07-summary")
+    vm.key("alt-i")                     # Install
+    time.sleep(5 * slow)
+    vm.screenshot("installer-08-confirm")
+    vm.key("ret")                       # Install now
+    # Installing: the target is mounted while it runs and unmounted at the end
+    vm.wait_until(lambda: vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc == 0, 600,
+                  "the installer to start")
+    vm.screenshot("installer-09-installing")
+    deadline = time.time() + 3600 * slow
+    failed = ""
+    while time.time() < deadline:
+        windows = vm.as_user("primers", "xwininfo -root -tree").out
+        if "Installation Failed" in windows or '"Error"' in windows:
+            failed = windows
+            break
+        if vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc != 0:
+            break
+        time.sleep(10)
+    time.sleep(5)
+    vm.screenshot("installer-10-finished")
+    log = vm.sh("tail -n 40 /home/primers/.cache/calamares/session.log").out
+    return c("install with the installer: finished without errors", not failed and
+             vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc != 0 and
+             vm.sh("pgrep -x calamares").rc == 0, failed or log[-2000:])
 
 
 SECURE_BOOT_VAR = "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
@@ -475,9 +596,13 @@ def main() -> int:
     ap.add_argument("--iso", required=True)
     ap.add_argument("--out", default="vm-results")
     ap.add_argument("--firmware", default="bios", choices=["bios", "uefi", "sb"])
+    ap.add_argument("--installer", default="calamares", choices=["calamares", "script"],
+                    help="installed scenario: the real installer's screens, or tests/vm/install.sh")
     ap.add_argument("--disk-dir", help="where the VM disk goes (default: a temporary directory, "
                                        "deleted afterwards; never the results directory)")
     args = ap.parse_args()
+    global INSTALLER
+    INSTALLER = args.installer
     os.makedirs(args.out, exist_ok=True)
     serve(os.path.join(HERE, "www"), EXAM_PORT)
     disk_dir = args.disk_dir or tempfile.mkdtemp(prefix="primers-vm-disk-")
