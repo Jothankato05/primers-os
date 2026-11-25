@@ -3,6 +3,18 @@
 ## [1.0.0-genesis] — 2026-11-24
 
 ### Distribution
+- **Performance** (docs/benchmarks.md): measured on a 2 GB, 2-CPU VM with a
+  hard disk and with an SSD by a new release-workflow VM test. Idle memory
+  ~330 MB (login screen) / ~440 MB (desktop). SSD: power-on to login
+  16.9 -> 8.8 s. Hard disk: 126 -> 73 s (still over the 30 s target; plan in
+  the doc). Sign-in to exam page 1.0-1.7 s. Fixes: the initramfs no longer
+  carries AMD/NVIDIA graphics or data-centre network drivers (179 -> 82 MB,
+  ISO 2.09 -> 1.90 GB; checked by the build); no boot menu wait (shown when
+  another system is installed, or with Shift/Esc); winbind,
+  networkd-dispatcher, avahi-daemon, blueman-mechanism, Ubuntu Pro units and
+  apport no longer start at boot; during an exam the exam browser is read
+  into memory before candidates sign in (primers-exam-prewarm). The
+  documentation is installed in /usr/share/doc/primers.
 - **primers-fleet** (ADR 0006): the invigilator's PC runs exams on a whole
   lab. `sudo primers-fleet pair` shows a one-time code; `sudo primers-fleet
   join <invigilator PC> <code>` on each lab PC pairs it (both prove they

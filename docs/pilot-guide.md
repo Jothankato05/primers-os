@@ -176,6 +176,12 @@ SSD or 30 s on a hard disk; under 8 GB installed) and saves a JSON report in
 `~/.local/share/primers/benchmarks/`. Copy those files to a USB stick. They
 contain hardware facts and timings only, no names or files.
 
+Also time a cold boot with a stopwatch, from pressing the power button to
+the login screen, and write it down with the PC's disk type (hard disk or
+SSD): the virtual-machine figures in `docs/benchmarks.md` (also in
+`/usr/share/doc/primers/` on every PC) can't tell how a real hard disk
+does.
+
 Also record, per lab: how many PCs were revived (couldn't run Windows 11),
 licence cost saved per seat, and a short student satisfaction survey.
 

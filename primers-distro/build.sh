@@ -302,6 +302,13 @@ stage_customize() {
       --exclude='./logs' --exclude='__pycache__' --exclude='*.pyc' \
       --exclude='./tests' --exclude='./.pytest_cache' --exclude='./CHANGELOG.md'
   chown -R root:root "$CHROOT/usr/share/primers"
+
+  # The project's documentation, offline on every PC (pilot guide,
+  # benchmarks, decisions); systemd units link to it
+  log "Installing documentation -> /usr/share/doc/primers"
+  install_tree "$REPO_ROOT/docs" "$CHROOT/usr/share/doc/primers"
+  [ -f "$CHROOT/usr/share/doc/primers/pilot-guide.md" ] && [ -f "$CHROOT/usr/share/doc/primers/benchmarks.md" ] \
+    || die "documentation missing from the image"
   find "$CHROOT/usr/share/primers/brain" -type d -exec chmod 0755 {} +
   find "$CHROOT/usr/share/primers/brain" -type f -exec chmod 0644 {} +
 
