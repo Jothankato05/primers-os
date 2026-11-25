@@ -128,7 +128,8 @@ jobs:
             overlays/usr/lib/primers/unmetered-network overlays/usr/bin/primers-lab \
             overlays/usr/bin/primers-study overlays/usr/lib/primers/study-panel \
             overlays/usr/bin/primers-exam overlays/usr/lib/primers/exam-session \
-            overlays/etc/X11/Xsession.d/98primers-exam overlays/usr/lib/primers/exam-shell
+            overlays/etc/X11/Xsession.d/98primers-exam overlays/usr/lib/primers/exam-shell \
+            tools/release-notes.sh
       - name: VM test harness compiles
         run: python3 -m py_compile primers-distro/tests/vm/*.py
       - name: Validate JSON, YAML, XML and QML

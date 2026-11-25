@@ -10,14 +10,21 @@ on:
         description: "Publish a PRE-release with this tag (e.g. v1.0.0-rc2), built from the selected branch. Empty: build and test only."
         required: false
         default: ""
+      reuse_run_id:
+        description: "With a pre-release tag: publish the signed ISO an earlier run of this workflow built (its run ID) instead of building again."
+        required: false
+        default: ""
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
+    if: ${{ !github.event.inputs.reuse_run_id }}
     runs-on: ubuntu-22.04
     timeout-minutes: 150
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     permissions:
       contents: write
       id-token: write     # Sigstore keyless signing of SHA256SUMS (no key stored anywhere)
@@ -135,40 +142,9 @@ jobs:
           SPLIT: ${{ steps.files.outputs.split }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          notes="docs/releases/${TAG}.md"
-          if [ ! -f "$notes" ]; then
-            echo "::error::$notes is missing: every release needs notes saying what is tested and what isn't"
-            exit 1
-          fi
-          {
-            cat "$notes"
-            echo
-            echo "## Download and verify"
-            echo
-            if [ "$SPLIT" = "true" ]; then
-              echo "The ISO is larger than GitHub's 2 GiB asset limit, so it is split into parts. Download every part plus \`SHA256SUMS\`, \`SHA256SUMS.sig\` and \`SHA256SUMS.pem\`, then join them:"
-              echo
-              echo '```bash'
-              echo "cat $ISO.part* > $ISO"
-              echo '```'
-              echo
-            fi
-            echo "Check the checksums file was signed by this repository's release workflow ([cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):"
-            echo
-            echo '```bash'
-            echo "cosign verify-blob SHA256SUMS --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \\"
-            echo "  --certificate-identity https://github.com/${GITHUB_REPOSITORY}/.github/workflows/build-iso.yml@${GITHUB_REF} \\"
-            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
-            echo '```'
-            echo
-            echo "Then check the ISO:"
-            echo
-            echo '```bash'
-            echo "sha256sum -c SHA256SUMS --ignore-missing"
-            echo '```'
-            echo
-            echo "Built from commit \`${GITHUB_SHA}\`."
-          } > release-notes.md
+          primers-distro/tools/release-notes.sh "$TAG" "$ISO" "$SPLIT" \
+            "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/build-iso.yml@${GITHUB_REF}" \
+            "$GITHUB_SHA" > release-notes.md
           cat release-notes.md
 
       - name: Create release
@@ -192,3 +168,192 @@ jobs:
             primers-distro/SHA256SUMS.pem
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Publish what an earlier run of this workflow built and signed, without
+  # building again: the artifact is checked against the signature that run
+  # made (Sigstore, that run's workflow identity) and the checksums inside it
+  # before anything is published, and the release points at the commit that
+  # run built.
+  reuse:
+    if: ${{ github.event.inputs.reuse_run_id }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    permissions:
+      contents: write     # create the release
+      actions: read       # read the earlier run and download its artifact
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ github.event.inputs.reuse_run_id }}
+      TAG: ${{ github.event.inputs.prerelease_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Release tag
+        id: tag
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$'; then
+            echo "::error::reusing a run needs a pre-release tag like v1.0.0-rc2, not '$TAG'; final releases are tagged by hand"
+            exit 1
+          fi
+          if ! printf '%s' "$RUN_ID" | grep -Eq '^[0-9]+$'; then
+            echo "::error::'$RUN_ID' is not a run ID"
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "::error::tag $TAG already exists; a published tag is never moved"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Check the earlier run
+        id: run
+        shell: bash
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")
+          path=$(jq -r .path <<<"$run")
+          repo=$(jq -r .repository.full_name <<<"$run")
+          sha=$(jq -r .head_sha <<<"$run")
+          branch=$(jq -r .head_branch <<<"$run")
+          event=$(jq -r .event <<<"$run")
+          echo "Run $RUN_ID: $repo $path, $event on $branch at $sha"
+          if [ "$repo" != "$GITHUB_REPOSITORY" ] || [ "$path" != ".github/workflows/build-iso.yml" ]; then
+            echo "::error::run $RUN_ID is not a run of this repository's build-iso.yml"
+            exit 1
+          fi
+          case "$event" in
+            workflow_dispatch) ref="refs/heads/$branch" ;;
+            push) ref="refs/tags/$branch" ;;
+            *) echo "::error::run $RUN_ID was started by '$event'"; exit 1 ;;
+          esac
+          # Every step that makes or checks the image must have passed; only
+          # publishing may have failed
+          steps=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" --jq '.jobs[] | select(.name == "build") | .steps[] | "\(.conclusion)\t\(.name)"')
+          printf '%s\n' "$steps"
+          for need in "Build ISO" "Checksums (SHA256SUMS)" "Upload ISO artifact"; do
+            grep -qxF "success"$'\t'"$need" <<<"$steps" || { echo "::error::step '$need' did not pass in run $RUN_ID"; exit 1; }
+          done
+          grep -q $'^success\tSign SHA256SUMS' <<<"$steps" || { echo "::error::SHA256SUMS was not signed in run $RUN_ID"; exit 1; }
+          if grep -P '^(?!success|skipped)[^\t]*\tVM tests' <<<"$steps"; then
+            echo "::error::the VM tests did not pass in run $RUN_ID"; exit 1
+          fi
+          bad=$(grep -P '^failure\t' <<<"$steps" | grep -vxP 'failure\tCreate release' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::run $RUN_ID failed before publishing: $bad"; exit 1
+          fi
+          artifact=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '[.artifacts[] | select(.expired == false and (.name | endswith(".iso")))][0].name // empty')
+          if [ -z "$artifact" ]; then
+            echo "::error::run $RUN_ID has no ISO artifact left (artifacts are kept 14 days)"; exit 1
+          fi
+          {
+            echo "sha=$sha"
+            echo "artifact=$artifact"
+            echo "identity=https://github.com/$GITHUB_REPOSITORY/.github/workflows/build-iso.yml@$ref"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download the earlier run's signed ISO
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.run.outputs.artifact }}
+          path: release
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Check the signature and every checksum
+        id: files
+        shell: bash
+        working-directory: release
+        env:
+          IDENTITY: ${{ steps.run.outputs.identity }}
+        run: |
+          ls -l
+          cosign verify-blob SHA256SUMS --signature SHA256SUMS.sig --certificate SHA256SUMS.pem \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          ISO=$(ls *.iso)
+          [ "$(printf '%s\n' "$ISO" | wc -l)" -eq 1 ] || { echo "::error::expected one ISO"; exit 1; }
+          # Only the ISO and its parts, by plain names
+          if grep -vqE "^[0-9a-f]{64}  ${ISO//./\\.}(\.part[0-9])?$" SHA256SUMS; then
+            echo "::error::unexpected entries in SHA256SUMS"; exit 1
+          fi
+          if grep -q '\.part' SHA256SUMS; then
+            split -b 1900M -d -a 1 "$ISO" "$ISO.part"
+            echo "split=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "split=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Strict: every file in SHA256SUMS must be present and match
+          sha256sum -c SHA256SUMS
+          echo "iso=$ISO" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        env:
+          ISO: ${{ steps.files.outputs.iso }}
+          SPLIT: ${{ steps.files.outputs.split }}
+          SHA: ${{ steps.run.outputs.sha }}
+          IDENTITY: ${{ steps.run.outputs.identity }}
+        run: |
+          # The notes as they were in the commit that was built
+          git show "$SHA:docs/releases/$TAG.md" > "docs/releases/$TAG.md"
+          primers-distro/tools/release-notes.sh "$TAG" "$ISO" "$SPLIT" "$IDENTITY" "$SHA" > release-notes.md
+          cat release-notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ steps.run.outputs.sha }}
+          name: "PRIMERS OS ${{ steps.tag.outputs.tag }}"
+          body_path: release-notes.md
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.files.outputs.split == 'true' && format('release/{0}.part*', steps.files.outputs.iso) || format('release/{0}', steps.files.outputs.iso) }}
+            release/SHA256SUMS
+            release/SHA256SUMS.sig
+            release/SHA256SUMS.pem
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # A fresh machine that has never seen the build downloads the published
+  # pre-release and runs the verification commands exactly as the release
+  # notes give them.
+  verify-release:
+    needs: [build, reuse]
+    if: ${{ always() && ((needs.build.result == 'success' && contains(needs.build.outputs.tag, '-')) || (needs.reuse.result == 'success' && needs.reuse.outputs.tag != '')) }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.build.outputs.tag || needs.reuse.outputs.tag }}
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Download the release and run the commands from its notes
+        shell: bash
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          awk '/^## Download and verify/ {d = 1} d && /^```bash$/ {f = 1; next} f && /^```$/ {f = 0; next} f' notes.md > verify.sh
+          echo "Commands from the release notes:"
+          cat verify.sh
+          grep -q '^cosign verify-blob' verify.sh || { echo "::error::no cosign command in the release notes"; exit 1; }
+          mkdir clean && cd clean
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY"
+          ls -l
+          bash -euo pipefail ../verify.sh 2>&1 | tee ../verify.out
+          grep -qx 'Verified OK' ../verify.out || { echo "::error::signature not verified"; exit 1; }
+          total=$(wc -l < SHA256SUMS)
+          ok=$(grep -c ': OK$' ../verify.out)
+          [ "$ok" -eq "$total" ] || { echo "::error::$ok of $total files checked"; exit 1; }
+          echo "Verified: signature and all $total checksums, on a machine that did not build the image"
