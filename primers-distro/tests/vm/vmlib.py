@@ -356,6 +356,24 @@ class VM:
             {"type": "abs", "data": {"axis": "x", "value": 0}},
             {"type": "abs", "data": {"axis": "y", "value": 32767}}])
 
+    def screendump_now(self, name: str) -> str:
+        """The screen as fast as QEMU writes it (PPM, not converted), for
+        timing what is on screen: returns once the whole file is written."""
+        ppm = os.path.join(self.workdir, f"{name}.ppm")
+        self.qmp.call("screendump", filename=ppm)
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            try:
+                with open(ppm, "rb") as f:
+                    head = f.read(32).split(b"\n")           # P6, "W H", 255, pixels
+                width, height = map(int, head[1].split())
+                if os.path.getsize(ppm) >= len(b"\n".join(head[:3])) + 1 + width * height * 3:
+                    return ppm
+            except (OSError, ValueError, IndexError):
+                pass
+            time.sleep(0.01)
+        return ppm
+
     def screenshot(self, name: str) -> str:
         ppm = os.path.join(self.workdir, f"{name}.ppm")
         self.qmp.call("screendump", filename=ppm)

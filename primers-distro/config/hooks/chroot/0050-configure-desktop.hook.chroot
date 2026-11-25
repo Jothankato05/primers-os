@@ -185,12 +185,16 @@ if os.path.isdir(gdir):
         colour = INK + (255,) if part == "c" else (38, 44, 53, 255)
         Image.new("RGBA", (6, 6), colour).save(f"{gdir}/terminal_box_{part}.png")
 
-# Plymouth: the white P on Night Ink, its green cursor blinking in steps:
-# 32 frames = 1.06 s at Plymouth's 30 frames a second, 16 with the cursor
-# and 16 without. The 'still' theme (reduced motion) keeps the cursor on.
+# Plymouth: the white P on Night Ink, its green cursor blinking in steps.
+# The two-step plugin spreads a throbber's frames over a fixed 2 s
+# (ply-throbber.c, THROBBER_DURATION), however many there are: 32 frames of
+# 62.5 ms, the cursor on for 8 and off for 8, twice, is a 1.0 s blink in
+# 0.5 s steps. The brand's 1.06 s doesn't divide Plymouth's 2 s evenly;
+# 1.0 s is the nearest even blink. The 'still' theme (reduced motion) keeps
+# the cursor on.
 on = fit(icon, 128)
 off = fit(without_cursor(icon), 128)
-for theme, frames in (("primers", [on] * 16 + [off] * 16), ("primers-still", [on] * 32)):
+for theme, frames in (("primers", ([on] * 8 + [off] * 8) * 2), ("primers-still", [on] * 32)):
     pdir = f"/usr/share/plymouth/themes/{theme}"
     if not os.path.isdir(pdir):
         continue

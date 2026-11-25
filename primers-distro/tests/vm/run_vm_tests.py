@@ -1518,7 +1518,7 @@ def performance(vm: VM, suite: Suite) -> None:
 
 # ------------------------------------------------------------------ #
 #  Brand: the boot splash (white P on Night Ink, its green cursor
-#  blinking in 1.06 s steps), login screen, desktop, exam kiosk; and the
+#  blinking in 0.5 s steps), login screen, desktop, exam kiosk; and the
 #  reduced-motion switch. Screenshots for docs/screenshots/.
 # ------------------------------------------------------------------ #
 
@@ -1528,6 +1528,30 @@ NIGHT_INK, CHALK, READY_GREEN = (18, 22, 28), (245, 242, 234), (30, 158, 98)
 def splash_state(path: str) -> Optional[str]:
     """'on' or 'off' when the screen is the boot splash (Night Ink with the
     Chalk P in the middle, its green cursor shown or not), else None."""
+    return splash_cursor(path)[0]
+
+
+def near(p, rgb, tol: int) -> bool:
+    return all(abs(a - b) <= tol for a, b in zip(p, rgb))
+
+
+def cursor_state(ppm: str, box) -> Optional[str]:
+    """The cursor's state from a raw screen dump, looking only where the
+    cursor was found (fast enough to time its blink); None when the screen
+    is no longer the splash."""
+    from PIL import Image
+    x0, y0, x1, y1 = box
+    with Image.open(ppm) as img:
+        img = img.convert("RGB")
+        if not all(near(img.getpixel(xy), NIGHT_INK, 6) for xy in ((4, 4), (img.width - 5, img.height - 5))):
+            return None
+        region = img.crop((x0 - 2, y0 - 2, x1 + 3, y1 + 3))
+        green = sum(1 for p in region.getdata() if near(p, READY_GREEN, 14))
+    return "on" if green >= max(4, (x1 - x0) * (y1 - y0) // 4) else "off"
+
+
+def splash_cursor(path: str):
+    """(state, the cursor's box when it is shown) for a full screenshot."""
     from PIL import Image
     with Image.open(path) as img:
         img = img.convert("RGB")
@@ -1535,53 +1559,68 @@ def splash_state(path: str) -> Optional[str]:
         small = img.resize((64, 40))
     ink = sum(1 for p in small.getdata() if all(abs(a - b) <= 6 for a, b in zip(p, NIGHT_INK)))
     if ink < 64 * 40 * 0.85:
-        return None
+        return None, None
     chalk = [b for b in colour_boxes(path, CHALK, tol=12)[0] if b[4] >= 20]
     middle = [b for b in chalk if abs((b[0] + b[2]) / 2 - w / 2) < w * 0.12 and abs((b[1] + b[3]) / 2 - h / 2) < h * 0.2]
     if not middle:
-        return None
+        return None, None
     px0, py0, px1, py1, _ = max(middle, key=lambda b: b[4])
     green = [b for b in colour_boxes(path, READY_GREEN, tol=14)[0]
              if b[4] >= 6 and px0 - 10 <= b[0] and b[2] <= px1 + 60 and py0 <= b[1] and b[3] <= py1 + 30]
-    return "on" if green else "off"
+    if not green:
+        return "off", None
+    return "on", max(green, key=lambda b: b[4])[:4]
 
 
 def brand(vm: VM, suite: Suite) -> None:
     c = suite.check
     vm.start()
-    t0, seen, changes, last, i = time.time(), {}, [], None, 0
+    t0, seen, last, box, checked = time.time(), {}, None, None, time.time()
     agent_up = False
+    samples = []                        # (time, state) from fast samples of the cursor only
     while time.time() - t0 < 1200:
-        path = vm.screenshot("_boot")
-        state = splash_state(path)
-        if state:
-            if state not in seen:
+        state = None
+        if box:                         # the cursor found: sample just it, fast
+            state = cursor_state(vm.screendump_now("_blink"), box)
+            if state:
+                samples.append((time.time(), state))
+            else:
+                box = None
+        if not box:
+            path = vm.screenshot("_boot")
+            state, found = splash_cursor(path)
+            if state and state not in seen:
                 seen[state] = os.path.join(vm.workdir, f"brand-01-splash-cursor-{state}.png")
                 shutil.copy(path, seen[state])
-            if last and state != last:
-                changes.append(time.time())
+            box = found or box
+        if state:
+            seen.setdefault(state, "")
             last = state
-        i += 1
-        if i % 25 == 0:
+        if time.time() - checked > 3:
+            checked = time.time()
             if not agent_up:
                 try:
-                    vm.wait_agent(timeout=1)
+                    vm.wait_agent(timeout=0.5)
                     agent_up = True
                 except VMError:
                     pass
             if agent_up and vm.sh("pgrep -x openbox").rc == 0:
                 break
-        time.sleep(0.05)
+    # Changes between fast samples taken close together (a slow sample can hide a blink)
+    changes = [b[0] for a, b in zip(samples, samples[1:]) if a[1] != b[1] and b[0] - a[0] < 0.2]
     c("boot splash: the white P on Night Ink, with its green cursor", "on" in seen, repr(seen))
     c("boot splash: the cursor blinks (frames without it too)", "off" in seen and len(changes) >= 2,
-      f"{len(changes)} changes")
-    gaps = [b - a for a, b in zip(changes, changes[1:])]
-    if gaps and VM.kvm():
+      f"{len(changes)} changes in {len(samples)} fast samples")
+    gaps = [b - a for a, b in zip(changes, changes[1:]) if b - a < 1.5]
+    steps = sorted(b[0] - a[0] for a, b in zip(samples, samples[1:]))
+    step = steps[len(steps) // 2] if steps else 9.0
+    if gaps and VM.kvm() and step < 0.15:
         half = sorted(gaps)[len(gaps) // 2]
-        c("boot splash: the cursor changes every ~0.53 s (a 1.06 s blink, in steps)", 0.35 <= half <= 0.8,
-          f"median {half:.2f} s over {len(gaps)} changes")
+        c("boot splash: the cursor changes every ~0.5 s (a 1.0 s blink, in steps)", 0.35 <= half <= 0.7,
+          f"median {half:.2f} s over {len(gaps)} changes, sampled every {step:.2f} s")
     else:
-        suite.note(f"blink timing not checked (emulated CPU): {len(changes)} changes seen")
+        suite.note(f"blink timing not checked ({'emulated CPU' if not VM.kvm() else 'sampling too slow'}): "
+                   f"{len(changes)} changes, sampled every {step:.2f} s")
     vm.wait_agent(timeout=1200)
     vm.wait_until(lambda: screen_drawn(vm), 300, "the desktop to be drawn")
     vm.wait_until(lambda: vm.sh("pgrep -u primers -x xterm").rc == 0, 300, "the PRIMERS Brain window")
@@ -1598,6 +1637,11 @@ def brand(vm: VM, suite: Suite) -> None:
       vm.sh("test -f /usr/share/plymouth/themes/primers-still/throbber-0032.png && "
             "cmp -s /usr/share/plymouth/themes/primers/throbber-0001.png /usr/share/plymouth/themes/primers-still/throbber-0032.png && "
             "! cmp -s /usr/share/plymouth/themes/primers/throbber-0001.png /usr/share/plymouth/themes/primers/throbber-0032.png").rc == 0)
+    # Plymouth plays a throbber's frames over a fixed 2 s: on 8, off 8, twice = 0.5 s steps
+    sums = vm.sh("cd /usr/share/plymouth/themes/primers && md5sum throbber-*.png | cut -c1-32").out.split()
+    pattern = "".join("A" if h == sums[0] else "B" for h in sums) if sums else ""
+    c("the blink's frames: the cursor on for 8 frames and off for 8, twice (0.5 s steps in Plymouth's 2 s)",
+      pattern == "AAAAAAAABBBBBBBBAAAAAAAABBBBBBBB", pattern)
 
     # Reduced motion on a running system: the still splash and no GTK animations
     r = vm.sh("primers-reduce-motion on && primers-reduce-motion status && "
@@ -1628,8 +1672,10 @@ def brand(vm: VM, suite: Suite) -> None:
     def page_text() -> bool:              # the exam's dark text painted on its white page
         from PIL import Image
         with Image.open(vm.screenshot("brand-04-exam-kiosk")) as img:
-            page = img.convert("L").crop((0, KIOSK_BAR + 10, img.width, img.height)).resize((160, 100))
-        return sum(1 for v in page.getdata() if v < 110) >= 40
+            page = img.convert("L").crop((0, KIOSK_BAR + 10, img.width, img.height))
+        # Counted at full size (shrinking first greys thin text out): text is ~1.1-1.4 %
+        # of the demo exam page, 0 % of a blank one
+        return sum(1 for v in page.getdata() if v < 110) >= page.width * page.height * 0.003
     vm.wait_until(page_text, 300, "the exam page's text on screen", interval=5)
     settled(vm, "brand-04-exam-kiosk")
     vm.sh("primers-exam stop", timeout=300)

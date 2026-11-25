@@ -1,7 +1,7 @@
 """
 PRIMERS OS — reduced motion (``primers-reduce-motion on|off|status``).
 
-The Primers mark's cursor blinks on the boot splash (1.06 s, in steps), and
+The Primers mark's cursor blinks on the boot splash (1.0 s, in steps), and
 GTK and web pages animate. With reduced motion on:
 
 - the boot splash keeps the cursor still (the ``primers-still`` Plymouth

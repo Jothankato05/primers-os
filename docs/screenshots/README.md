@@ -8,7 +8,7 @@ results. Every logo in them is the official artwork from
 
 | File | What it shows |
 |---|---|
-| `boot-splash-cursor-on.png`, `boot-splash-cursor-off.png` | The boot splash: the white P on Night Ink #12161C, its green cursor blinking in steps (1.06 s: on, then off) |
+| `boot-splash-cursor-on.png`, `boot-splash-cursor-off.png` | The boot splash: the white P on Night Ink #12161C, its green cursor blinking in steps (0.5 s on, 0.5 s off: a 1.0 s blink; the brand's 1.06 s doesn't fit Plymouth's fixed 2 s throbber cycle evenly) |
 | `boot-splash-frames.png` | The splash's frames: cursor on, cursor off, and the still frame used with reduced motion (`sudo primers-reduce-motion on`) |
 | `login-screen.png` | The login screen with Lab Mode on: the lockup above the sign-in box, the app icon as the account picture |
 | `desktop.png` | The desktop with the PRIMERS Brain open: the app icon on its window and in the taskbar, window frames in the brand colours |

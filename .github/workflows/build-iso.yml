@@ -123,7 +123,7 @@ jobs:
           # the login screen, idle memory, sign-in to the exam page (docs/benchmarks.md; measured,
           # compared with the targets in the results, not a pass/fail gate)
           python3 primers-distro/tests/vm/run_vm_tests.py performance --installer script --iso "$iso" --out vm-results/performance || rc=1
-          # Brand: the boot splash (white P on Night Ink, green cursor blinking in 1.06 s steps),
+          # Brand: the boot splash (white P on Night Ink, green cursor blinking in 0.5 s steps),
           # reduced motion, login screen, desktop and exam kiosk; screenshots in the results
           python3 primers-distro/tests/vm/run_vm_tests.py brand --iso "$iso" --out vm-results/brand || rc=1
           # Primers ID: sign in with OpenID Connect against a test provider on this runner (device flow,

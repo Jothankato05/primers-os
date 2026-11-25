@@ -36,8 +36,9 @@
   GRUB menu and installer now use the official artwork for dark
   backgrounds as it is (the app icon: Chalk P and green cursor on Night
   Ink; the dark horizontal lockup), never recoloured or redrawn. The
-  splash's cursor blinks in steps (16 frames on, 16 off: 1.06 s at
-  Plymouth's 30 fps). `sudo primers-reduce-motion on` keeps it still (a
+  splash's cursor blinks in steps: 0.5 s on, 0.5 s off (a 1.0 s blink;
+  the brand's 1.06 s doesn't divide Plymouth's fixed 2 s throbber cycle
+  evenly, 1.0 s is the nearest even blink). `sudo primers-reduce-motion on` keeps it still (a
   second Plymouth theme; from the next boot) and turns GTK animations off,
   so web pages see prefers-reduced-motion. The login screen has the lockup
   above the sign-in box. The PRIMERS Brain window shows the app icon (an
