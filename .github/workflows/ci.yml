@@ -149,7 +149,7 @@ jobs:
             tests/test-image-perms.sh tests/vm/install.sh \
             overlays/usr/lib/primers/installer/sfdisk tests/test-installer-sfdisk.sh \
             tests/cbt/moodle/setup.sh tests/cbt/tcexam/setup.sh overlays/usr/bin/primers-fleet \
-            overlays/etc/initramfs-tools/hooks/primers-trim
+            overlays/etc/initramfs-tools/hooks/primers-trim overlays/usr/lib/primers/exam-prewarm
       - name: Image permission gate (owners and modes of what goes into the image)
         run: sudo primers-distro/tests/test-image-perms.sh
       - name: Installer sfdisk correction (fake sfdisk, and a real GPT disk on a loop device)

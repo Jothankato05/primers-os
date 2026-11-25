@@ -1369,7 +1369,9 @@ def guest_benchmark(vm: VM) -> dict:
 def journal_times(vm: VM, pattern: str) -> List[tuple]:
     """(time, line) for this boot's journal lines matching an extended regex."""
     out = []
-    for line in vm.sh(f"journalctl -b -o short-unix --no-pager | grep -E {shlex.quote(pattern)}").out.splitlines():
+    # (not the guest agent's own lines: it logs every command, these greps included)
+    for line in vm.sh(f"journalctl -b -o short-unix --no-pager | grep -v ' qemu-ga\\[' | "
+                      f"grep -E {shlex.quote(pattern)}").out.splitlines():
         with_time = line.split(" ", 1)
         try:
             out.append((float(with_time[0]), with_time[1] if len(with_time) > 1 else ""))
@@ -1428,14 +1430,16 @@ def kiosk_open_seconds(vm: VM, suite: Suite, shot: str):
         times = [t for t, line in journal_times(vm, pattern) if start <= t <= shown]
         if times:
             steps[name] = round(times[0] - start, 2)
-    detail = vm.sh(f"journalctl -b -o short-unix --no-pager --since=@{int(start) - 1} --until=@{int(shown) + 1}").out
+    detail = vm.sh(f"journalctl -b -o short-unix --no-pager --since=@{int(start) - 1} --until=@{int(shown) + 1} "
+                   "| grep -v ' qemu-ga\\['").out
     steps["journal"] = detail[-6000:]
     return round(shown - start, 2), steps
 
 
 def greeter_after_kernel(vm: VM) -> Optional[float]:
     """When the login screen appeared, in seconds after the kernel started."""
-    r = vm.sh("echo $(cut -d' ' -f1 /proc/uptime) $(ps -o etimes= -C lightdm-gtk-greeter | head -1)")
+    vm.wait_until(lambda: vm.sh("pgrep -f lightdm-gtk-greeter").rc == 0, 300, "the login screen")
+    r = vm.sh("echo $(cut -d' ' -f1 /proc/uptime) $(ps -o etimes= -p \"$(pgrep -o -f lightdm-gtk-greeter)\")")
     try:
         uptime, age = (float(x) for x in r.out.split()[:2])
         return round(uptime - age, 1)
@@ -1483,11 +1487,18 @@ def performance(vm: VM, suite: Suite) -> None:
         vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
         r = vm.sh(f"primers-exam start {EXAM_URL}", timeout=600)
         c(f"{profile}: exam started", r.rc == 0, r.out + r.err)
+        # Candidates sit down after the exam is started: by then the exam
+        # browser has been read into memory (primers-exam-prewarm)
+        t0 = time.time()
+        vm.wait_until(lambda: vm.sh("systemctl is-active primers-exam-prewarm.service").out.strip()
+                      not in ("activating", "active"), 300, f"{profile}: the exam browser loaded into memory")
+        prewarm_s = round(time.time() - t0, 1)
         kiosk_s, kiosk_steps = kiosk_open_seconds(vm, suite, f"perf-{profile}-kiosk")
         c(f"{profile}: time to the exam page measured", kiosk_s is not None)
         vm.sh("primers-exam stop", timeout=600)
         vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
         results["disks"][profile] = {"power_on_to_login_s": power_on, "login_screen_after_kernel_s": greeter_s,
+                                     "exam_browser_prewarm_s": prewarm_s,
                                      "kiosk_steps": kiosk_steps, "boot": boot,
                                      "login_screen_ram_mb": login_ram, "desktop_ram_mb": desk_ram,
                                      "kiosk_s": kiosk_s, "memory": bench_desk.get("memory", {}),

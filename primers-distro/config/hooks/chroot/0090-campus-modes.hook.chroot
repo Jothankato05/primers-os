@@ -52,6 +52,9 @@ install -d -m 2750 -o root -g adm /var/log/primers
 systemctl enable primers-exam-log.service
 # Exam servers that change address during an exam (CDNs) are followed
 systemctl enable primers-exam-refresh.timer
+# During an exam, the exam browser is read into memory after boot (benchmarks)
+chmod 0755 /usr/lib/primers/exam-prewarm
+systemctl enable primers-exam-prewarm.service
 # primers-fleet (ADR 0006): the agent runs only once the PC is paired with an
 # invigilator PC (its unit's condition); its keys are root's alone
 systemctl enable primers-fleet-agent.service

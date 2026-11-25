@@ -1,0 +1,16 @@
+[Unit]
+Description=PRIMERS Exam Mode: load the exam browser into memory before candidates sign in
+Documentation=file:///usr/share/doc/primers/benchmarks.md
+# Only while an exam runs; after the login screen is up, never in its way
+ConditionPathExists=/etc/primers/exam.conf
+After=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/primers/exam-prewarm
+Nice=19
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+[Install]
+WantedBy=graphical.target

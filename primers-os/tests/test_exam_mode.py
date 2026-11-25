@@ -434,6 +434,16 @@ def test_login_screen_restarts_locked_unless_someone_is_on_the_desktop(exam):
     assert any("sign out of the desktop" in w for w in warnings)
 
 
+def test_starting_an_exam_loads_the_exam_browser_into_memory(exam):
+    enabled(exam.lab)
+    exam.start("https://cbt.uni.edu.ng/")
+    assert ["systemctl", "start", "--no-block", "primers-exam-prewarm.service"] in exam.lab.fake.calls
+    unit = open(os.path.join(os.path.dirname(__file__), "..", "..", "primers-distro", "overlays", "etc", "systemd",
+                             "system", "primers-exam-prewarm.service")).read()
+    assert "ConditionPathExists=/etc/primers/exam.conf" in unit and "IOSchedulingClass=idle" in unit
+    assert "After=display-manager.service" in unit and "Nice=19" in unit
+
+
 def test_the_login_screen_offers_the_lab_account_during_an_exam(exam):
     """It remembers the last account chosen (often the administrator's):
     candidates mustn't have to pick theirs. Written while it is stopped, so

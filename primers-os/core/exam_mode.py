@@ -95,6 +95,7 @@ LOG_TAG = exam_log.LOG_TAG
 ADDRESS_GRACE = 3600
 MAX_ADDRESSES_PER_HOST = 16
 LOG_SERVICE = "primers-exam-log.service"
+PREWARM_SERVICE = "primers-exam-prewarm.service"
 GRUB_USER = "primers-exam"
 GRUB_DEFAULT_TEXT = """# Written by primers-exam while an exam runs. Removed when the exam stops.
 # No recovery mode or other systems in the boot menu, and the first entry
@@ -853,6 +854,9 @@ class ExamMode:
         self._stop_idle_consoles()
         warnings = self._end_lab_sessions("exam-start")
         warnings += self._restart_login_screen()
+        # Load the exam browser into memory while the PC waits for candidates
+        # (in the background, at the lowest priority; docs/benchmarks.md)
+        self.run(["systemctl", "start", "--no-block", PREWARM_SERVICE])
         unresolved = [h for h in hosts[1:] if not self.resolve([h])]
         if unresolved:
             warnings.append("not found, so not reachable during the exam: " + ", ".join(unresolved))

@@ -1,0 +1,28 @@
+#!/bin/sh
+# PRIMERS OS Exam Mode: read the exam browser's files into memory while the
+# PC waits at the login screen, so a candidate signing in doesn't wait for
+# the disk (docs/benchmarks.md: on a hard disk the exam page took 7 s after
+# sign-in, mostly loading the browser). Runs at the lowest CPU and disk
+# priority (primers-exam-prewarm.service); the memory is cache the kernel
+# frees as soon as anything else needs it.
+set -u
+wk=/usr/lib/x86_64-linux-gnu/webkit2gtk-4.0
+{
+  # The programs and every library they load
+  for bin in "$wk/WebKitWebProcess" "$wk/WebKitNetworkProcess" /usr/bin/python3; do
+    [ -x "$bin" ] || continue
+    echo "$bin"
+    ldd "$bin" 2>/dev/null | awk '$2 == "=>" && $3 ~ /^\// {print $3}'
+  done
+  # Python, its GTK/WebKit bindings and type libraries, the browser itself, fonts' cache
+  find /usr/lib/python3/dist-packages/gi /usr/lib/x86_64-linux-gnu/girepository-1.0 \
+       /usr/share/primers/lite-bee /var/cache/fontconfig "$wk" -type f 2>/dev/null
+  python3 -I -c 'import os; print(os.path.dirname(os.__file__))' 2>/dev/null |
+    while read -r stdlib; do
+      find "$stdlib" -maxdepth 1 -name '*.py' -type f
+      find "$stdlib/__pycache__" -type f 2>/dev/null
+    done
+} | sort -u | while read -r f; do
+  cat -- "$f" > /dev/null 2>&1
+done
+exit 0
