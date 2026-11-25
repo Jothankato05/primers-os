@@ -1,0 +1,47 @@
+#!/bin/bash
+# PRIMERS OS installer: sfdisk, with one correction for Calamares 3.2.61.
+#
+# On a UEFI "Erase disk" install, Calamares 3.2.61 sizes the root partition
+# to the very last sector of the disk (PartitionActions.cpp:
+# lastSectorForRoot = totalLogical() - 1). On GPT the last 33 sectors hold
+# the backup partition table, so sfdisk refuses ("The last usable GPT sector
+# is N, but M is requested") and the install fails. Calamares fixed this
+# upstream (lastSectorForRoot = lastUsableSector) after 3.2.61.
+#
+# When a partition appended to a GPT disk ends past the last usable sector,
+# this trims it to end there, as the fixed Calamares does. Every other call
+# goes to the real sfdisk unchanged. It is put in front of sfdisk only in
+# the live session (primers-installer-fixes.service), never on an
+# installed system.
+set -uo pipefail
+REAL=${PRIMERS_REAL_SFDISK:-/usr/sbin/sfdisk}    # an absolute path: this file is "sfdisk" on PATH
+[ -x "$REAL" ] || REAL=/sbin/sfdisk
+
+append=false dev=""
+for arg in "$@"; do
+  case "$arg" in
+    --append|-a) append=true ;;
+    -*) ;;
+    *) [ -z "$dev" ] && dev=$arg ;;
+  esac
+done
+$append && [ -n "$dev" ] || exec "$REAL" "$@"
+
+dump=$("$REAL" --dump "$dev" 2> /dev/null) || exec "$REAL" "$@"
+grep -qx 'label: gpt' <<< "$dump" || exec "$REAL" "$@"
+last=$(sed -n 's/^last-lba: *\([0-9][0-9]*\)$/\1/p' <<< "$dump")
+[ -n "$last" ] || exec "$REAL" "$@"
+
+script=$(cat)
+fixed=""
+while IFS= read -r line || [ -n "$line" ]; do
+  start=$(sed -n 's/.*\bstart= *\([0-9][0-9]*\).*/\1/p' <<< "$line")
+  size=$(sed -n 's/.*\bsize= *\([0-9][0-9]*\)\b.*/\1/p' <<< "$line")
+  if [ -n "$start" ] && [ -n "$size" ] && [ $((start + size - 1)) -gt "$last" ] && [ "$start" -le "$last" ]; then
+    new=$((last - start + 1))
+    logger -t primers-installer "sfdisk: partition at $start on $dev trimmed from $size to $new sectors to end at the last usable GPT sector $last (Calamares 3.2.61)"
+    line=$(sed "s/\bsize= *$size\b/size=$new/" <<< "$line")
+  fi
+  fixed+="$line"$'\n'
+done <<< "$script"
+printf '%s' "$fixed" | "$REAL" "$@"

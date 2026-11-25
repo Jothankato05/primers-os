@@ -1,0 +1,17 @@
+# PRIMERS OS live session: put the installer's sfdisk correction in front of
+# sfdisk (/usr/local/sbin comes first in root's PATH). See
+# /usr/lib/primers/installer/sfdisk. Never runs on an installed system: the
+# link lives in the live session's memory only and isn't copied by the
+# installer.
+[Unit]
+Description=PRIMERS OS installer fixes (live session only)
+ConditionKernelCommandLine=boot=casper
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/ln -sfn /usr/lib/primers/installer/sfdisk /usr/local/sbin/sfdisk
+
+[Install]
+WantedBy=multi-user.target

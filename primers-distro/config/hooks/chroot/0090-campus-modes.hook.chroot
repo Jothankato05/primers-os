@@ -61,6 +61,13 @@ chmod 0755 /usr/lib/primers/exam-shell
 grep -qx /usr/lib/primers/exam-shell /etc/shells || echo /usr/lib/primers/exam-shell >> /etc/shells
 command -v xsel setxkbmap >/dev/null || { echo "E: xsel/setxkbmap missing (exam clipboard and key lock)" >&2; exit 1; }
 
+# The installer's sfdisk correction (Calamares 3.2.61 GPT end-of-disk bug),
+# switched on in the live session only
+chmod 0755 /usr/lib/primers/installer/sfdisk
+systemctl enable primers-installer-fixes.service
+grep -q '^ConditionKernelCommandLine=boot=casper$' /etc/systemd/system/primers-installer-fixes.service \
+  || { echo "E: the installer fix must be limited to the live session" >&2; exit 1; }
+
 # The guest agent (for automated VM tests) must only ever start inside a VM
 if ! grep -q 'BindsTo=dev-virtio\\x2dports-org.qemu.guest_agent.0.device' \
      /lib/systemd/system/qemu-guest-agent.service; then
