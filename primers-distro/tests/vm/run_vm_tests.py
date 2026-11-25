@@ -525,21 +525,40 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     time.sleep(5 * slow)
     vm.screenshot("installer-08-confirm")
     vm.key("ret")                       # Install now
+    try:
+        return _installer_runs(vm, suite, slow)
+    finally:
+        # The installer's own debug log, whatever happened
+        log = vm.sh("cat /home/primers/.cache/calamares/session.log").out
+        with open(os.path.join(suite.out, "installer-session.log"), "w", encoding="utf-8") as f:
+            f.write(log)
+
+
+def installer_failed(vm: VM) -> bool:
+    windows = vm.as_user("primers", "xwininfo -root -tree").out
+    return "Installation Failed" in windows or '"Error"' in windows
+
+
+def _installer_runs(vm: VM, suite: Suite, slow: int) -> bool:
+    c = suite.check
     # Installing. Done when the new system has its boot loader and the
     # administrator, and no install step is still running. (The installer
     # can leave its target mounted after "All done"; the restart unmounts it.)
-    vm.wait_until(lambda: vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc == 0, 600,
-                  "the installer to start")
+    vm.wait_until(lambda: installer_failed(vm) or
+                  vm.sh("findmnt -rn -o TARGET | grep -q calamares-root").rc == 0, 600, "the installer to start")
     vm.screenshot("installer-09-installing")
+    if installer_failed(vm):
+        log = vm.sh("grep -n -i -B2 -A12 'sfdisk\\|error\\|failed' /home/primers/.cache/calamares/session.log "
+                    "| tail -n 80").out
+        return c("install with the installer: finished without errors", False, "installer failed:\n" + log)
     busy = "pgrep -x 'unsquashfs|grub-install|grub-mkconfig|update-grub|update-initramfs|mkinitramfs|apt-get|dpkg'"
     installed = ("t=$(findmnt -rn -o TARGET | grep calamares-root | head -n1); [ -z \"$t\" ] || "
                  "{ test -s \"$t/boot/grub/grub.cfg\" && grep -q '^labadmin:' \"$t/etc/passwd\" && ! " + busy + "; }")
     deadline = time.time() + 3600 * slow
-    failed, settled = "", 0
+    failed, settled = False, 0
     while time.time() < deadline and settled < 3:
-        windows = vm.as_user("primers", "xwininfo -root -tree").out
-        if "Installation Failed" in windows or '"Error"' in windows:
-            failed = windows
+        if installer_failed(vm):
+            failed = True
             break
         settled = settled + 1 if vm.sh(installed).rc == 0 else 0
         time.sleep(10)
@@ -547,11 +566,9 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     time.sleep(5)
     vm.as_user("primers", "xset s reset")
     vm.screenshot("installer-10-finished")
-    log = vm.sh("cat /home/primers/.cache/calamares/session.log").out
-    with open(os.path.join(suite.out, "installer-session.log"), "w", encoding="utf-8") as f:
-        f.write(log)
+    log = vm.sh("grep -n -i -B2 -A12 'error\\|failed' /home/primers/.cache/calamares/session.log | tail -n 80").out
     return c("install with the installer: finished without errors", not failed and settled >= 3 and
-             vm.sh("pgrep -x calamares").rc == 0, failed or log[-2000:])
+             vm.sh("pgrep -x calamares").rc == 0, log or "did not finish")
 
 
 def restart_to_login(vm: VM) -> None:
