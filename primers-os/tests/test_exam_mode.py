@@ -104,7 +104,8 @@ def exam(lab):  # noqa: F811
                          lightdm=str(r / "lightdm"), log=str(r / "var/log/primers/exam.jsonl"),
                          boot_id=str(r / "boot_id"), grub_script=str(r / "grub.d/09_primers_exam"),
                          grub_default=str(r / "default/grub.d/90-primers-exam.cfg"),
-                         grub_cfg=str(r / "boot/grub/grub.cfg"), cmdline=str(r / "cmdline"))
+                         grub_cfg=str(r / "boot/grub/grub.cfg"), cmdline=str(r / "cmdline"),
+                         greeter_state=str(r / "lightdm-greeter/state"))
     (r / "boot_id").write_text("b0a7-1d\n")
     (r / "cmdline").write_text("BOOT_IMAGE=/boot/vmlinuz root=UUID=1234 ro quiet splash\n")
     (r / "grub.d").mkdir()
@@ -411,21 +412,61 @@ def test_only_idle_consoles_are_stopped(exam):
     assert ["systemctl", "stop", "getty@tty2.service"] not in calls
 
 
+STOP_DM = ["systemctl", "stop", "display-manager.service"]
+START_DM = ["systemctl", "start", "display-manager.service"]
+
+
 def test_login_screen_restarts_locked_unless_someone_is_on_the_desktop(exam):
     enabled(exam.lab)
     exam.start("https://cbt.uni.edu.ng/")
-    assert ["systemctl", "restart", "display-manager.service"] in exam.lab.fake.calls
+    calls = exam.lab.fake.calls
+    assert STOP_DM in calls and START_DM in calls and calls.index(STOP_DM) < calls.index(START_DM)
     exam.stop()
     exam.lab.fake.calls.clear()
     exam.net.sessions = {"5": {"Class": "user", "Type": "x11", "TTY": "", "State": "closing"}}
     exam.start("https://cbt.uni.edu.ng/")                       # a session that is ending doesn't count
-    assert ["systemctl", "restart", "display-manager.service"] in exam.lab.fake.calls
+    assert START_DM in exam.lab.fake.calls
     exam.stop()
     exam.lab.fake.calls.clear()
     exam.net.sessions = {"5": {"Class": "user", "Type": "x11", "TTY": "", "State": "active"}}
     _, warnings = exam.start("https://cbt.uni.edu.ng/")
-    assert ["systemctl", "restart", "display-manager.service"] not in exam.lab.fake.calls
+    assert STOP_DM not in exam.lab.fake.calls and START_DM not in exam.lab.fake.calls
     assert any("sign out of the desktop" in w for w in warnings)
+
+
+def test_the_login_screen_offers_the_lab_account_during_an_exam(exam):
+    """It remembers the last account chosen (often the administrator's):
+    candidates mustn't have to pick theirs. Written while it is stopped, so
+    its own save on stopping can't overwrite it; again at boot."""
+    enabled(exam.lab)
+    state = exam.paths.greeter_state
+    os.makedirs(os.path.dirname(state))
+    with open(state, "w") as f:
+        f.write("[greeter]\nlast-user=labadmin\nlast-session=openbox\n")
+    seen = []
+    real_run = exam.run
+
+    def run(argv, *a, **kw):
+        if argv[:2] == ["systemctl", "start"] and "display-manager" in argv[-1]:
+            seen.append(open(state).read())
+        return real_run(argv, *a, **kw)
+    exam.run = run
+    exam.start("https://cbt.uni.edu.ng/")
+    assert seen and "last-user=lab\n" in seen[0] and "last-session=openbox" in seen[0]
+    with open(state, "w") as f:
+        f.write("[greeter]\nlast-user=labadmin\n")            # someone else used the PC meanwhile
+    assert exam.refresh()                                       # the boot refresh
+    assert open(state).read() == "[greeter]\nlast-user=lab\n"
+
+
+@pytest.mark.parametrize("old,want", [
+    ("", "[greeter]\nlast-user=lab\n"),
+    ("[greeter]\nlast-user=labadmin\nlast-session=openbox\n", "[greeter]\nlast-user=lab\nlast-session=openbox\n"),
+    ("[other]\nx=1\n", "[other]\nx=1\n[greeter]\nlast-user=lab\n"),
+    ("[greeter]\nlast-session=openbox\n[other]\nx=1\n", "[greeter]\nlast-session=openbox\nlast-user=lab\n[other]\nx=1\n"),
+])
+def test_greeter_state_text(old, want):
+    assert em.greeter_state_text(old, "lab") == want
 
 
 def test_exam_servers_are_pinned_so_the_lab_account_needs_no_dns(exam):

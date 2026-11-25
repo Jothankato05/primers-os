@@ -120,9 +120,12 @@ def lab_desktop_pid(vm: VM) -> str:
 
 def prefer_lab_at_login(vm: VM) -> None:
     """The login screen lists the administrator and lab: have it select lab,
-    as it does once lab has signed in there."""
-    vm.sh("d=/var/lib/lightdm/.cache/lightdm-gtk-greeter && install -d -o lightdm -g lightdm \"$d\" && "
-          "printf '[greeter]\\nlast-user=lab\\n' > \"$d/state\" && chown lightdm:lightdm \"$d/state\"")
+    as it does once lab has signed in there. Written while the login screen
+    is stopped: it saves its own choice when it stops. (During an exam,
+    Exam Mode does this itself.)"""
+    vm.sh("systemctl stop display-manager.service; d=/var/lib/lightdm/.cache/lightdm-gtk-greeter && "
+          "install -d -o lightdm -g lightdm \"$d\" && printf '[greeter]\\nlast-user=lab\\n' > \"$d/state\" && "
+          "chown lightdm:lightdm \"$d/state\"; systemctl start display-manager.service", timeout=180)
 
 
 def sign_in_lab(vm: VM, suite: Suite, shot: str, signed_in=kiosk_pid) -> str:
@@ -724,7 +727,7 @@ def exam_network(vm: VM, suite: Suite) -> None:
         else:
             suite.note("IPv6 part skipped: this machine has no IPv6 (the release workflow requires it)")
         return
-    vm.wait_until(lambda: vm.sh("ip -6 addr show scope global | grep -q 'inet6 fec0:'").rc == 0, 120,
+    vm.wait_until(lambda: vm.sh("ip -6 addr show | grep -q 'inet6 fec0:'").rc == 0, 120,
                   "an IPv6 address")
     v6_url = f"http://{V6_HOST}:{V6_PORT}/exam.html"
     r = vm.sh(f"curl -s -m 8 -o /dev/null -w '%{{http_code}}' -4 http://10.0.2.2:{V6_PORT}/exam.html; echo; "

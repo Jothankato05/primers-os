@@ -85,6 +85,8 @@ class ExamPaths:
     grub_default: str = "/etc/default/grub.d/90-primers-exam.cfg"
     grub_cfg: str = "/boot/grub/grub.cfg"
     cmdline: str = "/proc/cmdline"
+    # The login screen remembers the last account chosen: during an exam it offers the lab account
+    greeter_state: str = "/var/lib/lightdm/.cache/lightdm-gtk-greeter/state"
 
 
 LOG_TAG = exam_log.LOG_TAG
@@ -337,6 +339,29 @@ def hosts_text(original: str, pins: Dict[str, Addresses]) -> str:
 # ------------------------------------------------------------------ #
 #  Exam Mode
 # ------------------------------------------------------------------ #
+
+def greeter_state_text(old: str, user: str) -> str:
+    """lightdm-gtk-greeter's state file with last-user set, the rest kept."""
+    lines, in_greeter, done = [], False, False
+    for line in old.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            if in_greeter and not done:
+                lines.append(f"last-user={user}")
+                done = True
+            in_greeter = stripped == "[greeter]"
+        elif in_greeter and stripped.split("=", 1)[0].strip() == "last-user":
+            if not done:
+                lines.append(f"last-user={user}")
+                done = True
+            continue
+        lines.append(line)
+    if not done:
+        if not in_greeter:
+            lines.append("[greeter]")
+        lines.append(f"last-user={user}")
+    return "\n".join(lines).strip("\n") + "\n"
+
 
 def grub_password_hash(secret: bytes, salt: bytes, rounds: int = 10000) -> str:
     """The grub-mkpasswd-pbkdf2 form of a password."""
@@ -752,12 +777,35 @@ class ExamMode:
 
     def _restart_login_screen(self) -> List[str]:
         """The login screen's display picks up the console lock when it
-        starts. Restart it now unless someone is using this PC's desktop."""
+        starts. Restart it now unless someone is using this PC's desktop;
+        while it is stopped, have it offer the lab account (it remembers the
+        last account chosen, and saves its choice when it stops)."""
         if self._desktop_sessions():
             return ["sign out of the desktop on this PC so the login screen restarts locked "
                     "(until then Ctrl+Alt+F1..F12 still works there)"]
-        self.run(["systemctl", "restart", "display-manager.service"])
+        self.run(["systemctl", "stop", "display-manager.service"])
+        self._offer_lab_at_login()
+        self.run(["systemctl", "start", "display-manager.service"])
         return []
+
+    def _offer_lab_at_login(self) -> None:
+        """The login screen selects the lab account (candidates needn't pick it)."""
+        try:
+            user = self._lab_account().name
+            try:
+                with open(self.paths.greeter_state, encoding="utf-8") as f:
+                    old = f.read()
+            except FileNotFoundError:
+                old = ""
+            os.makedirs(os.path.dirname(self.paths.greeter_state), exist_ok=True)
+            lab_mode._atomic_write(self.paths.greeter_state, greeter_state_text(old, user))
+            with contextlib.suppress(KeyError, OSError):
+                import pwd
+                pw = pwd.getpwnam("lightdm")
+                for path in (os.path.dirname(self.paths.greeter_state), self.paths.greeter_state):
+                    os.chown(path, pw.pw_uid, pw.pw_gid)
+        except (OSError, ExamError, lab_mode.LabError) as e:
+            self.log(f"couldn't have the login screen offer the lab account: {e}")
 
     def _end_lab_sessions(self, reason: str) -> List[str]:
         try:
@@ -875,6 +923,8 @@ class ExamMode:
         # No addresses at all (never resolved): everything is blocked
         self._lock(acct, conf, addrs)
         self._stop_idle_consoles()
+        if not self._desktop_sessions():      # at boot, before the login screen starts
+            self._offer_lab_at_login()
         return True
 
     def journal(self, since: Optional[str] = None, everything: bool = False) -> str:
