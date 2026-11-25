@@ -442,6 +442,7 @@ ERASE_DISK = (172, 61)          # partition page: "Erase disk"
 LOGIN_MARK = (374, 101)         # users page: inside the tick (green) or cross (red) by the login name
 PASSWORD = (264, 210)
 PASSWORD_AGAIN = (470, 210)
+PASSWORD_MARK = (580, 210)      # inside the tick (green) or cross (red) after the passwords
 
 
 def window_origin(vm: VM, title: str):
@@ -498,21 +499,25 @@ def install_with_installer(vm: VM, suite: Suite) -> bool:
     vm.key("alt-n")
     time.sleep(6 * slow)
     # The login names the system uses are refused (the field starts focused)
-    vm.type("Lab")
+    vm.type_then_settle("Lab")
     time.sleep(3 * slow)
     mark = pixel(vm, "installer-04-login-lab-refused", *at(LOGIN_MARK))
     c("the installer refuses 'lab' as the administrator's login name", reddish(mark), f"mark colour {mark}")
     vm.key("ctrl-a")
-    vm.type("Labadmin")
+    vm.type_then_settle("Labadmin")
     time.sleep(3 * slow)
     mark = pixel(vm, "installer-05-login-labadmin", *at(LOGIN_MARK))
     c("the installer accepts 'labadmin'", greenish(mark), f"mark colour {mark}")
     vm.click(*at(PASSWORD), w, h)
-    vm.type(STAFF_PASSWORD)
+    time.sleep(1)
+    vm.type_then_settle(STAFF_PASSWORD)
     vm.click(*at(PASSWORD_AGAIN), w, h)
-    vm.type(STAFF_PASSWORD)
+    time.sleep(1)
+    vm.type_then_settle(STAFF_PASSWORD)
     time.sleep(3 * slow)
-    vm.screenshot("installer-06-users")
+    mark = pixel(vm, "installer-06-users", *at(PASSWORD_MARK))
+    if not c("setup: both passwords typed and matching", greenish(mark), f"mark colour {mark}"):
+        return False
     vm.key("alt-n")
     time.sleep(6 * slow)
     vm.screenshot("installer-07-summary")

@@ -308,10 +308,17 @@ class VM:
         self.qmp.call("send-key", keys=[{"type": "qcode", "data": k} for k in combo.split("-")],
                       **{"hold-time": hold_ms})
 
-    def type(self, text: str) -> None:
+    def type(self, text: str, gap: float = 0.03) -> None:
         for ch in text:
             self.key(KEYS.get(ch, ("shift-" + ch.lower()) if ch.isupper() else ch))
-            time.sleep(0.03)
+            time.sleep(gap)
+
+    def type_then_settle(self, text: str) -> None:
+        """Type, then wait for the keys to reach the guest: they queue in the
+        emulated keyboard and arrive slower than they are sent, while a
+        mouse click arrives at once (and would move focus too early)."""
+        self.type(text, gap=0.12)
+        time.sleep(1.5 + 0.1 * len(text))
 
     def click(self, x: int, y: int, width: int, height: int) -> None:
         """Left click at (x, y) on a width x height screen (usb-tablet: absolute)."""
