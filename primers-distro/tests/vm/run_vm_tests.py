@@ -1575,26 +1575,34 @@ def splash_cursor(path: str):
 def brand(vm: VM, suite: Suite) -> None:
     c = suite.check
     vm.start()
-    t0, seen, last, box, checked = time.time(), {}, None, None, time.time()
+    t0, seen, last, box, checked, flips = time.time(), {}, None, None, time.time(), 0
     agent_up = False
     samples = []                        # (time, state) from fast samples of the cursor only
     while time.time() - t0 < 1200:
         state = None
         if box:                         # the cursor found: sample just it, fast
-            state = cursor_state(vm.screendump_now("_blink"), box)
+            ppm = vm.screendump_now("_blink")
+            state = cursor_state(ppm, box)
             if state:
                 samples.append((time.time(), state))
+                if not seen.get(state):     # keep a picture of each state for the docs
+                    from PIL import Image
+                    seen[state] = os.path.join(vm.workdir, f"brand-01-splash-cursor-{state}.png")
+                    with Image.open(ppm) as img:
+                        img.save(seen[state])
             else:
                 box = None
         if not box:
             path = vm.screenshot("_boot")
             state, found = splash_cursor(path)
-            if state and state not in seen:
+            if state and not seen.get(state):
                 seen[state] = os.path.join(vm.workdir, f"brand-01-splash-cursor-{state}.png")
                 shutil.copy(path, seen[state])
             box = found or box
         if state:
             seen.setdefault(state, "")
+            if last and state != last:
+                flips += 1              # any change seen, however slow the sampling
             last = state
         if time.time() - checked > 3:
             checked = time.time()
@@ -1609,8 +1617,8 @@ def brand(vm: VM, suite: Suite) -> None:
     # Changes between fast samples taken close together (a slow sample can hide a blink)
     changes = [b[0] for a, b in zip(samples, samples[1:]) if a[1] != b[1] and b[0] - a[0] < 0.2]
     c("boot splash: the white P on Night Ink, with its green cursor", "on" in seen, repr(seen))
-    c("boot splash: the cursor blinks (frames without it too)", "off" in seen and len(changes) >= 2,
-      f"{len(changes)} changes in {len(samples)} fast samples")
+    c("boot splash: the cursor blinks (frames without it too)", "off" in seen and flips >= 2,
+      f"{flips} changes seen; {len(changes)} between fast samples ({len(samples)} taken)")
     gaps = [b - a for a, b in zip(changes, changes[1:]) if b - a < 1.5]
     steps = sorted(b[0] - a[0] for a, b in zip(samples, samples[1:]))
     step = steps[len(steps) // 2] if steps else 9.0
