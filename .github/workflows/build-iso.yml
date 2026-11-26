@@ -14,6 +14,13 @@ on:
         description: "With a pre-release tag: publish the signed ISO an earlier run of this workflow built (its run ID) instead of building again."
         required: false
         default: ""
+      scenario:
+        description: "VM tests to run: all (needed for anything to be published), or performance only (measurements: such a run keeps no ISO and can't publish)."
+        type: choice
+        options:
+          - all
+          - performance
+        default: all
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -37,7 +44,12 @@ jobs:
         id: tag
         env:
           INPUT_TAG: ${{ github.event.inputs.prerelease_tag }}
+          SCENARIO: ${{ github.event.inputs.scenario || 'all' }}
         run: |
+          if [ "$SCENARIO" != "all" ] && { [ -n "$INPUT_TAG" ] || [ "$GITHUB_REF_TYPE" = "tag" ]; }; then
+            echo "::error::a release needs every VM test: scenario must be 'all', not '$SCENARIO'"
+            exit 1
+          fi
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             tag="$GITHUB_REF_NAME"
           elif [ -n "$INPUT_TAG" ]; then
@@ -104,9 +116,16 @@ jobs:
 
       - name: VM tests (the image itself, booted; a failure stops the release)
         timeout-minutes: 180
+        env:
+          SCENARIO: ${{ github.event.inputs.scenario || 'all' }}
         run: |
           iso=$(ls primers-distro/*.iso | head -n1)
           rc=0
+          if [ "$SCENARIO" = "performance" ]; then
+            # Measurements only (docs/benchmarks.md): this run keeps no ISO and publishes nothing
+            python3 primers-distro/tests/vm/run_vm_tests.py performance --installer script --iso "$iso" --out vm-results/performance || rc=1
+            exit $rc
+          fi
           python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape || rc=1
           # Installs on a VM disk, cuts its power mid-exam, checks it comes back locked (ADR 0004)
           python3 primers-distro/tests/vm/run_vm_tests.py exam-power-cut --iso "$iso" --out vm-results/exam-power-cut || rc=1
@@ -179,6 +198,8 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
       - name: Upload ISO artifact
+        # Only an ISO that passed every VM test is kept (it is what a release may publish)
+        if: ${{ (github.event.inputs.scenario || 'all') == 'all' }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.files.outputs.iso }}

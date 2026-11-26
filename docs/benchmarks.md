@@ -124,6 +124,12 @@ from a cloud VM: the pilot's `benchmark` reports fill this in); UEFI boots
 
 ## Reproducing
 
+On GitHub: Actions → **Build and Release PRIMERS OS ISO** → Run workflow on
+the working branch with **scenario: performance**. It builds the image and
+runs only this test; such a run keeps no ISO and can never publish a release.
+
+On a machine with KVM:
+
 ```bash
 sudo PRIMERS_WORK_DIR=/mnt/primers-work ./primers-distro/build.sh
 python3 primers-distro/tests/vm/run_vm_tests.py performance --installer script \

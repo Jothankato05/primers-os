@@ -33,5 +33,7 @@ release, with:
   so the notes must have been committed before that run.
 
 Either way nothing is published unless every build, signing and VM-test
-step passed. A tag that exists is never moved; a final release (`v1.0.0`)
+step passed. A run started with **scenario: performance** (measurements,
+docs/benchmarks.md) refuses a tag and keeps no ISO, so it can't be
+published either. A tag that exists is never moved; a final release (`v1.0.0`)
 is only ever a draft, published by hand.
