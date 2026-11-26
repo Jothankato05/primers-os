@@ -44,9 +44,11 @@ What is measured:
 ## Results
 
 Run 33 is before any tuning; run 44 is the code of v1.0.0-rc1; run 47 is
-the working branch now (commit 1c07b57), with **five cold boots per disk
-profile**: the median, and the worst of the five in brackets. Memory and
-sign-in to exam are measured once per profile, after the boots.
+the working branch with the boot changes (commit 1c07b57), with **five cold
+boots per disk profile**: the median, and the worst of the five in
+brackets. Run 50 (commit 1dbb334, the same boot path, a full release run)
+measured another five boots per profile, below. Memory and sign-in to exam
+are measured once per profile, after the boots.
 
 | | Run 33, before | Run 44, v1.0.0-rc1 | **Run 47, now: median (worst)** | Target |
 |---|---|---|---|---|
@@ -66,6 +68,18 @@ The five boots of run 47, in seconds:
 | Hard disk: kernel to login screen | 27.0 | 28.8 | 28.9 | 29.8 | 28.0 |
 | SSD: power-on to login screen | 8.8 | 8.9 | 8.9 | 8.8 | 8.9 |
 | SSD: kernel to login screen | 4.3 | 4.5 | 4.5 | 4.4 | 4.5 |
+
+And of run 50 (the same boot path; median, worst):
+
+| | Boot 1 | 2 | 3 | 4 | 5 | Median | Worst |
+|---|---|---|---|---|---|---|---|
+| Hard disk: power-on to login screen | 68.6 | 69.1 | 69.4 | 69.3 | 72.9 | 69.3 | 72.9 |
+| Hard disk: kernel to login screen | 28.2 | 29.3 | 29.0 | 27.9 | 30.8 | 29.0 | **30.8** |
+| SSD: power-on to login screen | 8.9 | 8.9 | 8.8 | 8.8 | 8.8 | 8.8 | 8.9 |
+| SSD: kernel to login screen | 4.6 | 4.4 | 4.5 | 4.4 | 4.5 | 4.5 | 4.6 |
+
+Over the ten hard-disk boots of runs 47 and 50, kernel to login screen was
+27.0 to 30.8 s: the median is under 30 s, one boot in ten was 0.8 s over.
 
 ¹ Run 33 measured until every service had started (graphical.target);
 the login screen can appear a little earlier. ² Run 33's own figure (11 s)
@@ -89,6 +103,7 @@ whether or not its branch still exists.
 | 44 | working branch, debe563 | The code of v1.0.0-rc1 (full release run) | 72.9 s / 31.9 s | 8.9 s / 5.0 s |
 | 46 | `-perf4`, 2ced8a5 | Lab Mode's boot reset starts fewer programs; journal capped | 73.2 s / 28.2 s | 8.8 s / 4.3 s |
 | 47 | working branch, 1c07b57 | Plus: the login screen doesn't wait for the network; the wipe's two parts at the same time. **Five boots per profile** | median 69.1 s / 28.8 s, worst 69.7 s / 29.8 s | median 8.9 s / 4.5 s, worst 8.9 s / 4.5 s |
+| 50 | working branch, 1dbb334 | The same boot path, in a full release run (281 of 281 checks). Five boots per profile | median 69.3 s / 29.0 s, worst 72.9 s / 30.8 s | median 8.8 s / 4.5 s, worst 8.9 s / 4.6 s |
 
 Runs 33 to 46 booted each profile once; one boot can be a second or two
 either way (runs 36 and 44 booted the same boot path: 30.5 and 31.9 s).
@@ -122,9 +137,9 @@ the update checker (24 MB).
 
 ## Misses and the plan
 
-**Kernel to login screen on a hard disk now meets 30 s in all five boots
-(median 28.8 s, worst 29.8 s), with Lab Mode's wipe still finished before
-the login screen appears.** Power-on to login on the hard disk still
+**Kernel to login screen on a hard disk: median under 30 s (28.8 s in
+run 47, 29.0 s in run 50); the worst of ten boots was 30.8 s.** Lab Mode's
+wipe still finishes before the login screen appears in every boot. Power-on to login on the hard disk still
 misses the 30 s target: **median 69.1 s, worst 69.7 s.** Where the time
 goes (seconds; ranges are over the five boots):
 

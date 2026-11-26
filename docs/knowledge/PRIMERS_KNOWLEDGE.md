@@ -346,10 +346,10 @@ What has been measured, and what the pilot still has to measure. Send pilot figu
 
 Measured in a virtual machine (2 GB of memory, 2 CPU cores, Lab Mode on, legacy BIOS; the release workflow's performance test, run 47, five cold boots per disk type; median, and the worst of the five in brackets; details in docs/benchmarks.md):
 - Boot on an SSD: power-on to login screen 8.9 s (8.9 s); target under 15 s, met. Kernel to login screen 4.5 s (4.5 s).
-- Boot on a hard disk (emulated, ~120 operations a second): kernel to login screen 28.8 s (29.8 s), within 30 s, with Lab Mode's wipe finished before the login screen. Power-on to login screen 69.1 s (69.7 s); target under 30 s, missed. About 40 s of it passes before the kernel starts, while the boot loader reads the kernel through the emulated disk, which is much slower at this than a real hard disk; the real figure is not known until hard-disk lab PCs are measured.
+- Boot on a hard disk (emulated, ~120 operations a second): kernel to login screen 28.8 s (29.8 s); a second set of five boots (run 50) gave 29.0 s (30.8 s), so the median is under 30 s and one boot in ten was just over. Lab Mode's wipe always finished before the login screen. Power-on to login screen 69.1 s (69.7 s); target under 30 s, missed. About 40 s of it passes before the kernel starts, while the boot loader reads the kernel through the emulated disk, which is much slower at this than a real hard disk; the real figure is not known until hard-disk lab PCs are measured.
 - Idle memory: 320 to 328 MB at the login screen, 419 to 452 MB at the lab account's desktop; target under 600 MB, met.
 - A candidate signs in, the exam page is on screen: 0.85 s (SSD) and 1.66 s (hard disk); target under 3 s, met.
-- Automated checks: 277 checks in 12 scenarios passed on the code of v1.0.0-rc1 (release run 44), on live and installed systems.
+- Automated checks: 277 checks in 12 scenarios passed on the code of v1.0.0-rc1 (release runs 44 and 45); 281 of 281 on the working branch (run 50), on live and installed systems, including restarting straight from the installer on legacy BIOS and on UEFI with Secure Boot.
 
 Not yet measured (the Veritas pilot fills these in): boot time and RAM use on real lab hardware (hard disks and SSDs), number of PCs revived (that couldn't run Windows 11), licence savings per lab, exam sessions run without incident, student and invigilator satisfaction, offline transfers through FlowDrop.
 
