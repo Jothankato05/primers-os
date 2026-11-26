@@ -319,6 +319,49 @@ def _pid1_event(vm: VM, unit: str, message_id: str) -> int:
     return 0
 
 
+# Runs in the guest: which network units the login screen waited for this
+# boot. Follows After= from the display manager (systemd's own list, which
+# also holds other units' Before= and default dependencies), but only through
+# units that took part in this boot: an ordering with a unit nothing started
+# (rc-local.service when there is no /etc/rc.local) delays nothing.
+LOGIN_WAITS_FOR = r"""
+import collections, json, subprocess, sys
+def sh(*a):
+    return subprocess.run(a, capture_output=True, text=True).stdout
+booted = set()
+for line in sh("journalctl", "-b", "_PID=1", "-o", "json", "--output-fields=UNIT").splitlines():
+    try:
+        u = json.loads(line).get("UNIT")
+    except ValueError:
+        continue
+    if isinstance(u, str):
+        booted.add(u)
+for line in sh("systemctl", "list-units", "--all", "--state=active", "--plain", "--no-legend", "--no-pager").splitlines():
+    if line.split():
+        booted.add(line.split()[0])
+start = sh("systemctl", "show", "-p", "Id", "--value", "display-manager.service").strip()
+prev, todo = {start: None}, [start]
+while todo:
+    u = todo.pop()
+    for a in sh("systemctl", "show", "-p", "After", "--value", u).split():
+        if a not in prev and a in booted:
+            prev[a] = u
+            todo.append(a)
+found = 0
+for n in sys.argv[1:]:
+    if n in prev:
+        path, u = [], n
+        while u:
+            path.append(u)
+            u = prev[u]
+        print(" <- ".join(reversed(path)))
+        found += 1
+print(f"checked {len(prev)} units ordered before {start}, {len(booted)} took part in this boot; {found} network units among them")
+"""
+NETWORK_UNITS = ("network.target", "network-online.target", "NetworkManager.service",
+                 "NetworkManager-wait-online.service")
+
+
 def exam_power_cut(vm: VM, suite: Suite) -> None:
     c = suite.check
     subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", vm.disk, "24G"], check=True)
@@ -416,12 +459,9 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     c("the exam firewall was in place before any network interface came up (before NetworkManager started)",
       0 < fw_done <= nm_start and fw[:1] == ["success"] and fw[-1:] != ["0"],
       f"firewall done at {fw_done} µs, NetworkManager starting at {nm_start} µs; {fw}")
-    after = vm.sh("systemctl list-dependencies --after --all --plain --no-pager display-manager.service").out
-    netdeps = sorted({u.strip() for u in after.split() if u.strip() in
-                      ("network.target", "network-online.target", "NetworkManager.service",
-                       "NetworkManager-wait-online.service")})
-    c("the login screen doesn't wait for the network (no network or wait-online units before it)",
-      bool(after.strip()) and not netdeps, ", ".join(netdeps) or after[-300:])
+    r = vm.run(["/usr/bin/python3", "-", *NETWORK_UNITS], input_text=LOGIN_WAITS_FOR, timeout=300)
+    c("the login screen doesn't wait for the network (no network or wait-online unit ordered before it this boot)",
+      r.rc == 0 and r.out.rstrip().endswith("0 network units among them"), (r.out + r.err)[-800:])
     c("consoles and SysRq still locked after the reboot",
       vm.sh("cat /proc/sys/kernel/sysrq").out.strip() == "0"
       and vm.sh("systemctl show -p LoadState --value getty@tty2.service").out.strip() == "masked"
