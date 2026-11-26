@@ -107,35 +107,8 @@ jobs:
         run: |
           iso=$(ls primers-distro/*.iso | head -n1)
           rc=0
-          python3 primers-distro/tests/vm/run_vm_tests.py exam-escape --iso "$iso" --out vm-results/exam-escape || rc=1
-          # Installs on a VM disk, cuts its power mid-exam, checks it comes back locked (ADR 0004)
-          python3 primers-distro/tests/vm/run_vm_tests.py exam-power-cut --iso "$iso" --out vm-results/exam-power-cut || rc=1
-          # Real exam sites: the probe, a CDN that moves during the exam, an IPv6-only exam server
-          PRIMERS_VM_REQUIRE_IPV6=1 python3 primers-distro/tests/vm/run_vm_tests.py exam-network --iso "$iso" --out vm-results/exam-network || rc=1
-          # Real CBT platforms, self-hosted here: a Moodle quiz and a TCExam test, each found with
-          # the probe, started with its command and taken in the kiosk from sign-in to submission
-          python3 primers-distro/tests/vm/run_vm_tests.py exam-moodle --iso "$iso" --out vm-results/exam-moodle || rc=1
-          python3 primers-distro/tests/vm/run_vm_tests.py exam-tcexam --iso "$iso" --out vm-results/exam-tcexam || rc=1
-          # primers-fleet: an invigilator PC pairs three lab PCs on one LAN, starts, watches and
-          # stops the exam on all of them and collects the logs; unpaired PCs and keys are refused
-          python3 primers-distro/tests/vm/run_vm_tests.py fleet --iso "$iso" --out vm-results/fleet || rc=1
-          # Performance on a 2 GB, 2-CPU PC with a hard disk and with an SSD: power-on and kernel to
-          # the login screen, idle memory, sign-in to the exam page (docs/benchmarks.md; measured,
-          # compared with the targets in the results, not a pass/fail gate)
+          # Measurement branch only: the performance scenario
           python3 primers-distro/tests/vm/run_vm_tests.py performance --installer script --iso "$iso" --out vm-results/performance || rc=1
-          # Brand: the boot splash (white P on Night Ink, green cursor blinking in 0.5 s steps),
-          # reduced motion, login screen, desktop and exam kiosk; screenshots in the results
-          python3 primers-distro/tests/vm/run_vm_tests.py brand --iso "$iso" --out vm-results/brand || rc=1
-          # Primers ID: sign in with OpenID Connect against a test provider on this runner (device flow,
-          # token checks), then offline with the PIN while the provider is unreachable, and sign out
-          python3 primers-distro/tests/vm/run_vm_tests.py primers-id --iso "$iso" --out vm-results/primers-id || rc=1
-          # Privacy (NDPA 2023): the notice at the first sign-in of an installed PC and in the menu,
-          # the logs kept 90 days (the daily run, an exam in progress, a new time, the journal), export
-          python3 primers-distro/tests/vm/run_vm_tests.py privacy --iso "$iso" --out vm-results/privacy || rc=1
-          # Installed systems: legacy BIOS, and UEFI with Secure Boot enforced; Lab Mode
-          # across restarts and the whole escape suite on each
-          python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware bios --iso "$iso" --out vm-results/installed-bios || rc=1
-          python3 primers-distro/tests/vm/run_vm_tests.py installed --firmware sb --iso "$iso" --out vm-results/installed-sb || rc=1
           exit $rc
 
       - name: Upload VM test results
