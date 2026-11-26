@@ -210,7 +210,7 @@ jobs:
           gh api "repos/$repo/rules/branches/$default" --jq '.[] | .type' || true
           probe() {   # probe NAME SHA
             local ref="refs/tags/ci-probe/$GITHUB_RUN_ID-$1" out rc
-            out=$(gh api -X POST "repos/$repo/git/refs" -f ref="$ref" -f sha="$2" 2>&1); rc=$?
+            rc=0; out=$(gh api -X POST "repos/$repo/git/refs" -f ref="$ref" -f sha="$2" 2>&1) || rc=$?
             if [ $rc -eq 0 ]; then
               echo "$1: tag CREATED at $2"
               gh api -X DELETE "repos/$repo/git/$ref" && echo "$1: throwaway tag deleted" \
@@ -222,3 +222,10 @@ jobs:
           echo "== creating a tag with this job's token (contents: write)"
           probe default-branch "$main_sha"
           probe rc1 "$RC1"
+          # The commit just before the first workflow change on this branch
+          first=$(git log --reverse --format=%H "$main_sha..$RC1" -- .github/workflows | head -1)
+          before=$(git rev-parse "$first^")
+          echo "first commit changing workflow files after $default: $first"
+          probe before-workflow-change "$before"
+          probe first-workflow-change "$first"
+          echo "== probe tags left: $(gh api "repos/$repo/git/matching-refs/tags/ci-probe" --jq 'length')"
