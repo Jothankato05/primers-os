@@ -89,6 +89,7 @@ branding/              official Primers OS logo pack (SVG + PNG) — source of a
 docs/decisions/        architecture decision records
 docs/knowledge/        PRIMERS_KNOWLEDGE.md — the knowledge base Ask Primers answers from (one source; installed in /usr/share/primers/knowledge)
 docs/pilot-guide.md    running a one-lab pilot: install, Lab Mode, benchmarks
+docs/pilot/            the pilot kit: invigilator card, install checklist, results sheet, feedback forms, rollback plan
 docs/benchmarks.md     measured boot time and memory on a 2 GB PC, and the misses
 docs/primers-id.md     signing in with Primers ID (OpenID Connect), online and offline
 docs/privacy.md        the privacy notice (NDPA 2023), log retention and export

@@ -1,0 +1,1 @@
+pc_id,room,seat,make_model,cpu,ram_gb,disk_type,disk_gb,firmware,secure_boot,firmware_password_set,usb_boot_off,primers_version,installed_on,installed_by,lab_mode_on,fleet_paired,stopwatch_power_on_to_login_s,benchmark_boot_to_login_s,ram_in_use_idle_mb,disk_used_gb,kiosk_test,kiosk_test_notes,problems,checked_by

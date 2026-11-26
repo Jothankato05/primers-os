@@ -4,6 +4,11 @@ How to run a PRIMERS OS pilot in one computer lab (the first step of the
 rollout plan: one lab, Lab Mode, then Exam Mode and Primers ID) and collect
 the proof points the plan asks for.
 
+> **Pilot kit:** [docs/pilot/](pilot/README.md) has the printable pieces:
+> the invigilator card, the install checklist (one per PC), the results
+> sheet, the feedback forms and the rollback plan. Back up every PC first
+> ([rollback plan](pilot/rollback-plan.md)).
+
 ## 1. Install
 
 On each PC:

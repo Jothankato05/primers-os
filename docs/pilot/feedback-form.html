@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feedback: practice exam on PRIMERS OS</title>
+<style>
+  @page { size: A4; margin: 11mm 13mm; }
+  :root { --ink: #12161C; --line: #c9ccd1; }
+  * { box-sizing: border-box; }
+  body { font: 9.8pt/1.35 "DejaVu Sans", "Segoe UI", Arial, sans-serif; color: var(--ink); background: #fff; margin: 0; }
+  .sheet { max-width: 184mm; margin: 0 auto; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+  header { border-bottom: 2.5px solid var(--ink); padding-bottom: 3px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: baseline; }
+  h1 { font-size: 14pt; margin: 0; }
+  .tag { font-size: 8.4pt; }
+  .privacy { font-size: 8.6pt; border: 1px solid var(--line); border-radius: 4px; padding: 4px 7px; margin-bottom: 7px; }
+  ol { padding-left: 18px; margin: 0; }
+  ol > li { margin: 0 0 8px; }
+  .scale { display: flex; gap: 10px; margin-top: 3px; font-size: 9pt; }
+  .scale span::before { content: "☐ "; font-size: 11pt; }
+  .ends { font-size: 8pt; color: #444; margin-top: 1px; }
+  .lines div { border-bottom: 1px solid var(--line); height: 7mm; }
+  @media screen { body { background: #e9eaec; padding: 16px; } .sheet { background: #fff; padding: 12mm; box-shadow: 0 1px 4px rgba(0,0,0,.2); margin-bottom: 16px; } }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+<header><h1>Students: how was the practice exam?</h1><span class="tag">PRIMERS OS pilot · 2 minutes</span></header>
+<div class="privacy"><b>Please don't write your name or matric number.</b> This form is anonymous. Primers uses the
+answers only to improve PRIMERS OS for the university; nothing here affects your marks.</div>
+<ol>
+  <li>Signing in and getting to the exam was easy.
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+    <div class="ends">1 = strongly disagree · 5 = strongly agree</div></li>
+  <li>The questions were easy to read on the screen.
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div></li>
+  <li>The PC responded quickly (pages, answers, buttons).
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div></li>
+  <li>Did anything stop you or slow you down during the exam?
+    <div class="scale"><span>No</span><span>Yes: what?</span></div>
+    <div class="lines"><div></div></div></li>
+  <li>Compared with other computer-based exams you have taken, this was:
+    <div class="scale"><span>Better</span><span>About the same</span><span>Worse</span><span>My first one</span></div></li>
+  <li>Did you understand what the exam records about you (the line at the top of the screen)?
+    <div class="scale"><span>Yes</span><span>Partly</span><span>No</span><span>Didn't notice it</span></div></li>
+  <li>Anything else we should know?
+    <div class="lines"><div></div><div></div><div></div></div></li>
+</ol>
+</div>
+
+<div class="sheet">
+<header><h1>Invigilators: how did running the exam go?</h1><span class="tag">PRIMERS OS pilot · 5 minutes</span></header>
+<div class="privacy">Your name is optional. Write seat numbers and times for any problem; no student names or matric numbers.</div>
+<ol>
+  <li>Starting the exam on all PCs was easy.
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+    <div class="ends">1 = strongly disagree · 5 = strongly agree</div></li>
+  <li>From arriving to every PC ready, it took about <b>____ minutes</b> for <b>____ PCs</b>.</li>
+  <li><code>primers-fleet status</code> showed me what I needed to know.
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div></li>
+  <li>The invigilator card was clear enough to use without help.
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div></li>
+  <li>Problems during the exam (tick and give seats and times):
+    <div class="scale"><span>Power cut</span><span>PC froze</span><span>Page didn't load</span><span>Candidate got out of the exam</span><span>Other</span></div>
+    <div class="lines"><div></div><div></div></div></li>
+  <li>Collecting the exam logs and stopping the exam was easy.
+    <div class="scale"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div></li>
+  <li>Would you use PRIMERS OS for a real exam?
+    <div class="scale"><span>Yes</span><span>Yes, after changes</span><span>No</span></div>
+    What would have to change?
+    <div class="lines"><div></div><div></div></div></li>
+  <li>Anything else? <span class="ends">(Name, optional: ____________________)</span>
+    <div class="lines"><div></div><div></div></div></li>
+</ol>
+</div>
+
+</body>
+</html>
