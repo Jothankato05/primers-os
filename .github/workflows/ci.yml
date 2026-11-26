@@ -174,3 +174,51 @@ jobs:
           /usr/lib/qt5/bin/qmllint installer/calamares/branding/primers/show.qml
       - name: Every package exists in Ubuntu 22.04
         run: python3 primers-distro/tools/check-packages.py
+
+  # One-off diagnosis (removed after it has run): why creating the
+  # v1.0.0-rc1 release gets 403 "Resource not accessible by integration"
+  # although the token has contents: write. Reads the rulesets, then tries to
+  # create a throwaway tag (ci-probe/...) at the default branch's commit and
+  # at rc1's commit, which changes workflow files; any tag it creates is
+  # deleted at once.
+  release-permission-probe:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RC1: 7e27b4631e7dcb5688f9cdad86d88079cf65f697
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Probe
+        shell: bash
+        run: |
+          set -u
+          repo="$GITHUB_REPOSITORY"
+          default=$(gh api "repos/$repo" --jq .default_branch)
+          main_sha=$(gh api "repos/$repo/commits/$default" --jq .sha)
+          echo "default branch: $default at $main_sha"
+          echo "== workflow files rc1 changes relative to $default"
+          git diff --stat "$main_sha" "$RC1" -- .github/workflows || true
+          echo "== rulesets (repository and inherited)"
+          gh api "repos/$repo/rulesets?includes_parents=true" \
+            --jq '.[] | "\(.id)\t\(.name)\ttarget=\(.target)\tenforcement=\(.enforcement)\tsource=\(.source_type)"' \
+            || echo "(could not list rulesets)"
+          echo "== rules on branch $default"
+          gh api "repos/$repo/rules/branches/$default" --jq '.[] | .type' || true
+          probe() {   # probe NAME SHA
+            local ref="refs/tags/ci-probe/$GITHUB_RUN_ID-$1" out rc
+            out=$(gh api -X POST "repos/$repo/git/refs" -f ref="$ref" -f sha="$2" 2>&1); rc=$?
+            if [ $rc -eq 0 ]; then
+              echo "$1: tag CREATED at $2"
+              gh api -X DELETE "repos/$repo/git/$ref" && echo "$1: throwaway tag deleted" \
+                || echo "::warning::could not delete $ref"
+            else
+              echo "$1: tag REFUSED at $2: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-300)"
+            fi
+          }
+          echo "== creating a tag with this job's token (contents: write)"
+          probe default-branch "$main_sha"
+          probe rc1 "$RC1"
