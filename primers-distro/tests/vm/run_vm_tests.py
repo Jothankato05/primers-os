@@ -437,15 +437,18 @@ def install_from_live(vm: VM, suite: Suite) -> bool:
         time.sleep(10)
         if not install_with_installer(vm, suite):
             return False
+        if not restart_from_installer(vm, suite):
+            return False
+        vm.iso = None                   # taken out: later starts of this VM boot the disk only
     else:
         r = vm.run(["/bin/bash", "-s", "/dev/vda", STAFF_PASSWORD], timeout=2400, input_text=script)
         if not suite.check(f"install ({vm.firmware}): PRIMERS OS installed on the VM's disk",
                            r.rc == 0 and "installed on /dev/vda" in r.out, (r.out + r.err)[-3000:]):
             return False
-    vm.stop()
-    vm.iso = None
-    vm.start()
-    vm.wait_agent(timeout=900)
+        vm.stop()
+        vm.iso = None
+        vm.start()
+        vm.wait_agent(timeout=900)
     root = vm.sh("findmnt -n -o SOURCE /").out.strip()
     ok = suite.check("the installed system boots from its own disk",
                      root.startswith("/dev/vda") and "boot=casper" not in vm.sh("cat /proc/cmdline").out, root)
@@ -601,6 +604,50 @@ def _installer_runs(vm: VM, suite: Suite, slow: int) -> bool:
     log = vm.sh("grep -n -i -B2 -A12 'error\\|failed' /home/primers/.cache/calamares/session.log | tail -n 80").out
     return c("install with the installer: finished without errors", not failed and settled >= 3 and
              vm.sh("pgrep -x calamares").rc == 0, log or "did not finish")
+
+
+def restart_from_installer(vm: VM, suite: Suite) -> bool:
+    """What a person does at the end: leave 'Restart now' ticked and press
+    Done; when the live system asks for the installation medium to be
+    removed, take it out and press Enter; the PC starts the installed
+    system."""
+    before = vm.boot_id()
+    vm.screenshot("installer-11-restart-now")
+    vm.key("alt-d")                                     # Done ('Restart now' is ticked by default)
+    deadline, gone, ejected = time.time() + 900, None, False
+    while time.time() < deadline:
+        time.sleep(5)
+        if gone is None:
+            try:
+                vm.sh("true", timeout=10)
+                continue                                # still the live system
+            except (VMError, OSError):
+                gone = time.time()                      # it is shutting down
+                vm.log(f"[{vm.name}] the live system is restarting")
+        if not ejected and time.time() - gone > 20:
+            # The medium comes out when the live system asks (it ejects it itself
+            # first); with the virtual CD the test takes it out of the drive
+            try:
+                vm.qmp.call("eject", device="cd0", force=True)
+            except VMError:
+                pass
+            ejected = True
+            vm.screenshot("installer-12-remove-medium")
+        if ejected:
+            vm.key("ret")                               # "...then press ENTER"
+            try:
+                vm.wait_agent(timeout=10)
+                if vm.boot_id() not in ("", before):
+                    break
+            except (VMError, OSError):
+                pass
+    root = ""
+    try:
+        root = vm.sh("findmnt -n -o SOURCE /; grep -c boot=casper /proc/cmdline").out
+    except (VMError, OSError):
+        pass
+    return suite.check("the installer's 'Restart now' starts the installed system (medium removed when asked)",
+                       root.startswith("/dev/vda") and root.strip().endswith("0"), root or "no new boot")
 
 
 def restart_to_login(vm: VM) -> None:
