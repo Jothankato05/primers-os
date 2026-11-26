@@ -45,6 +45,7 @@ jobs:
         env:
           INPUT_TAG: ${{ github.event.inputs.prerelease_tag }}
           SCENARIO: ${{ github.event.inputs.scenario || 'all' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$SCENARIO" != "all" ] && { [ -n "$INPUT_TAG" ] || [ "$GITHUB_REF_TYPE" = "tag" ]; }; then
             echo "::error::a release needs every VM test: scenario must be 'all', not '$SCENARIO'"
@@ -61,6 +62,11 @@ jobs:
             tag="$INPUT_TAG"
           else
             tag=""
+          fi
+          if [ -n "$tag" ]; then
+            # The tag must be new, or already on exactly this commit; no release for it yet
+            state=$(primers-distro/tools/check-release-tag.sh "$tag" "$GITHUB_SHA")
+            echo "Tag $tag: $state"
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Release tag: ${tag:-none (build only)}"
@@ -278,10 +284,6 @@ jobs:
             echo "::error::'$RUN_ID' is not a run ID"
             exit 1
           fi
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" > /dev/null 2>&1; then
-            echo "::error::tag $TAG already exists; a published tag is never moved"
-            exit 1
-          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Check the earlier run
@@ -319,6 +321,11 @@ jobs:
           if [ -n "$bad" ]; then
             echo "::error::run $RUN_ID failed before publishing: $bad"; exit 1
           fi
+          # The tag must be new, or already on exactly the commit that run built
+          # (made by hand: this token can't create a tag on a commit that changes
+          # workflow files); no release for it yet
+          state=$(primers-distro/tools/check-release-tag.sh "$TAG" "$sha")
+          echo "Tag $TAG: $state"
           artifact=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
             --jq '[.artifacts[] | select(.expired == false and (.name | endswith(".iso")))][0].name // empty')
           if [ -z "$artifact" ]; then

@@ -148,12 +148,15 @@ jobs:
             tools/release-notes.sh tools/check-image-perms.sh tools/check-iso-perms.sh \
             tests/test-image-perms.sh tests/vm/install.sh \
             overlays/usr/lib/primers/installer/sfdisk tests/test-installer-sfdisk.sh \
+            tools/check-release-tag.sh tests/test-release-tag.sh \
             tests/cbt/moodle/setup.sh tests/cbt/tcexam/setup.sh overlays/usr/bin/primers-fleet \
             overlays/etc/initramfs-tools/hooks/primers-trim overlays/usr/lib/primers/exam-prewarm \
             overlays/usr/bin/primers-reduce-motion overlays/usr/bin/primers-id \
             overlays/usr/bin/primers-privacy
       - name: Image permission gate (owners and modes of what goes into the image)
         run: sudo primers-distro/tests/test-image-perms.sh
+      - name: Release tag check (a release only on a new tag, or on one already on the built commit)
+        run: primers-distro/tests/test-release-tag.sh
       - name: Installer sfdisk correction (fake sfdisk, and a real GPT disk on a loop device)
         run: sudo primers-distro/tests/test-installer-sfdisk.sh
       - name: VM test harness compiles
@@ -174,58 +177,3 @@ jobs:
           /usr/lib/qt5/bin/qmllint installer/calamares/branding/primers/show.qml
       - name: Every package exists in Ubuntu 22.04
         run: python3 primers-distro/tools/check-packages.py
-
-  # One-off diagnosis (removed after it has run): why creating the
-  # v1.0.0-rc1 release gets 403 "Resource not accessible by integration"
-  # although the token has contents: write. Reads the rulesets, then tries to
-  # create a throwaway tag (ci-probe/...) at the default branch's commit and
-  # at rc1's commit, which changes workflow files; any tag it creates is
-  # deleted at once.
-  release-permission-probe:
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RC1: 7e27b4631e7dcb5688f9cdad86d88079cf65f697
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Probe
-        shell: bash
-        run: |
-          set -u
-          repo="$GITHUB_REPOSITORY"
-          default=$(gh api "repos/$repo" --jq .default_branch)
-          main_sha=$(gh api "repos/$repo/commits/$default" --jq .sha)
-          echo "default branch: $default at $main_sha"
-          echo "== workflow files rc1 changes relative to $default"
-          git diff --stat "$main_sha" "$RC1" -- .github/workflows || true
-          echo "== rulesets (repository and inherited)"
-          gh api "repos/$repo/rulesets?includes_parents=true" \
-            --jq '.[] | "\(.id)\t\(.name)\ttarget=\(.target)\tenforcement=\(.enforcement)\tsource=\(.source_type)"' \
-            || echo "(could not list rulesets)"
-          echo "== rules on branch $default"
-          gh api "repos/$repo/rules/branches/$default" --jq '.[] | .type' || true
-          probe() {   # probe NAME SHA
-            local ref="refs/tags/ci-probe/$GITHUB_RUN_ID-$1" out rc
-            rc=0; out=$(gh api -X POST "repos/$repo/git/refs" -f ref="$ref" -f sha="$2" 2>&1) || rc=$?
-            if [ $rc -eq 0 ]; then
-              echo "$1: tag CREATED at $2"
-              gh api -X DELETE "repos/$repo/git/$ref" && echo "$1: throwaway tag deleted" \
-                || echo "::warning::could not delete $ref"
-            else
-              echo "$1: tag REFUSED at $2: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-300)"
-            fi
-          }
-          echo "== creating a tag with this job's token (contents: write)"
-          probe default-branch "$main_sha"
-          probe rc1 "$RC1"
-          # The commit just before the first workflow change on this branch
-          first=$(git log --reverse --format=%H "$main_sha..$RC1" -- .github/workflows | head -1)
-          before=$(git rev-parse "$first^")
-          echo "first commit changing workflow files after $default: $first"
-          probe before-workflow-change "$before"
-          probe first-workflow-change "$first"
-          echo "== probe tags left: $(gh api "repos/$repo/git/matching-refs/tags/ci-probe" --jq 'length')"
