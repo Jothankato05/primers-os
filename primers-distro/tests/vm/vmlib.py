@@ -181,9 +181,14 @@ class VM:
             args += ["-device", "virtio-scsi-pci,id=scsi0",
                      "-drive", f"file={self.disk},if=none,id=disk0,format=qcow2" +
                      "".join(f",throttling.{k}={v}" for k, v in limits.items()),
-                     "-device", f"scsi-hd,drive=disk0,bus=scsi0.0,rotation_rate={rotation}"]
+                     "-device", f"scsi-hd,drive=disk0,bus=scsi0.0,rotation_rate={rotation},bootindex=0"]
         elif self.disk:
-            args += ["-drive", f"file={self.disk},if=virtio,format=qcow2"]
+            args += ["-drive", f"file={self.disk},if=none,id=disk0,format=qcow2",
+                     "-device", "virtio-blk-pci,drive=disk0,bootindex=0"]
+        # The disk comes first in the boot order, then the DVD, as on a PC: a blank
+        # disk is skipped. Without a place in the boot order, UEFI firmware in QEMU
+        # (OVMF) drops the disk's boot entries, the one the installer writes too,
+        # so a restart straight from the installer found nothing to boot.
         if self.iso:
             args += ["-drive", f"file={self.iso},media=cdrom,if=none,id=cd0,readonly=on",
                      "-device", f"ide-cd,drive=cd0,bootindex={0 if not self.disk else 1}"]
