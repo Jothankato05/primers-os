@@ -297,9 +297,26 @@ def escape_checks(vm: VM, suite: Suite, installed: bool = False) -> None:
 #  Exam Mode across a power cut (ADR 0004), on an installed system
 # ------------------------------------------------------------------ #
 
-def _monotonic(vm: VM, unit: str, prop: str) -> int:
-    out = vm.sh(f"systemctl show -p {prop} --value {unit}").out.strip()
-    return int(out) if out.isdigit() else 0
+# systemd's own journal messages: a unit's start job began ("Starting ...")
+# and finished ("Started ..." / "Finished ...")
+JOB_STARTING = "7d4958e842da4a758f6c1cdc7b36dcc5"
+JOB_DONE = "39f53479d3a045ac8e11786248231fbf"
+
+
+def _pid1_event(vm: VM, unit: str, message_id: str) -> int:
+    """When systemd logged, this boot, that `unit`'s start began (JOB_STARTING)
+    or finished (JOB_DONE): microseconds since boot, or 0 if it didn't.
+
+    Read from the journal, not from `systemctl show`: systemd forgets an
+    inactive one-shot unit's timestamps when it unloads the unit (after a
+    daemon-reload), and then reports 0."""
+    r = vm.sh(f"journalctl -b -o json --no-pager _PID=1 UNIT={unit} MESSAGE_ID={message_id}")
+    for line in r.out.splitlines():
+        try:
+            return int(json.loads(line)["__MONOTONIC_TIMESTAMP"])
+        except (ValueError, KeyError, TypeError):
+            continue
+    return 0
 
 
 def exam_power_cut(vm: VM, suite: Suite) -> None:
@@ -385,20 +402,20 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     st = vm.sh("primers-exam status")
     c("after the power cut the PC is still in Exam Mode with every lock in place",
       st.rc == 0 and "Exam Mode: ON" in st.out, st.out)
-    reset_done = _monotonic(vm, "primers-lab-reset.service", "ExecMainExitTimestampMonotonic")
-    dm_start = _monotonic(vm, "lightdm.service", "ExecMainStartTimestampMonotonic")
+    reset_done = _pid1_event(vm, "primers-lab-reset.service", JOB_DONE)
+    dm_start = _pid1_event(vm, "lightdm.service", JOB_STARTING)
     c("the exam firewall was back before the login screen started", 0 < reset_done <= dm_start,
-      f"lab reset done at {reset_done}, login screen started at {dm_start}")
+      f"lab reset done at {reset_done} µs, login screen starting at {dm_start} µs")
     # Before any network interface came up: the early firewall unit finished
     # (with the exam table in place) before NetworkManager started, and the
     # login screen no longer waits for the network
-    fw_done = _monotonic(vm, "primers-exam-firewall.service", "ExecMainExitTimestampMonotonic")
-    nm_start = _monotonic(vm, "NetworkManager.service", "ExecMainStartTimestampMonotonic")
+    fw_done = _pid1_event(vm, "primers-exam-firewall.service", JOB_DONE)
+    nm_start = _pid1_event(vm, "NetworkManager.service", JOB_STARTING)
     fw = vm.sh("systemctl show -p Result --value primers-exam-firewall.service; "
                "journalctl -b -o cat -t primers-exam | grep -c 'before the network came up'").out.split()
     c("the exam firewall was in place before any network interface came up (before NetworkManager started)",
       0 < fw_done <= nm_start and fw[:1] == ["success"] and fw[-1:] != ["0"],
-      f"firewall done at {fw_done}, NetworkManager started at {nm_start}; {fw}")
+      f"firewall done at {fw_done} µs, NetworkManager starting at {nm_start} µs; {fw}")
     after = vm.sh("systemctl list-dependencies --after --all --plain --no-pager display-manager.service").out
     netdeps = sorted({u.strip() for u in after.split() if u.strip() in
                       ("network.target", "network-online.target", "NetworkManager.service",

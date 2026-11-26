@@ -18,14 +18,15 @@ artifact (`performance/performance.json`).
 ## The test PC
 
 - A VM with **2 GB of memory and 2 CPU cores** (KVM on a GitHub-hosted
-  runner, AMD EPYC 7763), PRIMERS OS installed on its disk (legacy BIOS,
+  runner: an AMD EPYC 7763 or 9V74, whichever the run gets), PRIMERS OS installed on its disk (legacy BIOS,
   Lab Mode on).
 - **Hard disk profile:** the disk is seen as rotating (7200 rpm) and
   limited to ~120 I/O operations and 110 MB/s, like a desktop hard disk.
 - **SSD profile:** seen as solid-state, ~20000 I/O operations and 500 MB/s,
   like a SATA SSD.
-- Each profile is a **cold boot**: the VM is shut down and switched on, so
-  nothing is in its memory.
+- Each profile is booted **cold five times** (`PRIMERS_PERF_BOOTS`, default
+  5): the VM is shut down and switched on, so nothing is in its memory. The
+  results give the median and the worst boot, and every boot's figures.
 
 What is measured:
 
@@ -42,16 +43,29 @@ What is measured:
 
 ## Results
 
-Run 33 is before any tuning; run 36 is after the fixes below
-(commits 66053ef and 4ced0c7).
+Run 33 is before any tuning; run 44 is the code of v1.0.0-rc1; run 47 is
+the working branch now (commit 1c07b57), with **five cold boots per disk
+profile**: the median, and the worst of the five in brackets. Memory and
+sign-in to exam are measured once per profile, after the boots.
 
-| | Hard disk, before | **Hard disk, now** | SSD, before | **SSD, now** | Target |
+| | Run 33, before | Run 44, v1.0.0-rc1 | **Run 47, now: median (worst)** | Target |
+|---|---|---|---|---|
+| Hard disk: power-on to login screen | 126 s | 72.9 s | **69.1 s (69.7 s)** ✗ | 30 s |
+| Hard disk: kernel to login screen | 36.4 s¹ | 31.9 s | **28.8 s (29.8 s)** | |
+| SSD: power-on to login screen | 16.9 s | 8.9 s | **8.9 s (8.9 s)** ✓ | 15 s |
+| SSD: kernel to login screen | 5.8 s¹ | 5.0 s | **4.5 s (4.5 s)** | |
+| Idle memory, login screen (hard disk / SSD) | 354 / 351 MB | 333 / 321 MB | **328 / 320 MB** ✓ | 600 MB |
+| Idle memory, lab desktop (hard disk / SSD) | 425 / 455 MB | 447 / 434 MB | **452 / 419 MB** ✓ | 600 MB |
+| Sign-in to exam page (hard disk / SSD) | 7.2 / 1.2 s² | 1.62 / 0.81 s | **1.66 / 0.85 s** ✓ | 3 s |
+
+The five boots of run 47, in seconds:
+
+| | Boot 1 | 2 | 3 | 4 | 5 |
 |---|---|---|---|---|---|
-| Power-on to login screen | 126 s | **72.9 s** ✗ | 16.9 s | **8.8 s** ✓ | 30 s / 15 s |
-| Kernel to login screen | 36.4 s¹ | **30.5 s** ✗ | 5.8 s¹ | **4.4 s** ✓ | |
-| Idle memory, login screen | 354 MB | **333 MB** ✓ | 351 MB | **324 MB** ✓ | 600 MB |
-| Idle memory, lab desktop | 425 MB | **437 MB** ✓ | 455 MB | **437 MB** ✓ | 600 MB |
-| Sign-in to exam page | 7.2 s² | **1.7 s** ✓ | 1.2 s² | **1.0 s** ✓ | 3 s |
+| Hard disk: power-on to login screen | 68.3 | 68.8 | 69.1 | 69.7 | 69.3 |
+| Hard disk: kernel to login screen | 27.0 | 28.8 | 28.9 | 29.8 | 28.0 |
+| SSD: power-on to login screen | 8.8 | 8.9 | 8.9 | 8.8 | 8.9 |
+| SSD: kernel to login screen | 4.3 | 4.5 | 4.5 | 4.4 | 4.5 |
 
 ¹ Run 33 measured until every service had started (graphical.target);
 the login screen can appear a little earlier. ² Run 33's own figure (11 s)
@@ -59,19 +73,40 @@ was wrong: the guest agent logs the test's commands, and the test counted
 its own polling. These are the step times from run 34 (before the
 pre-warm).
 
-Where the sign-in time goes now (seconds after the session opens):
+### Every measurement run
+
+Measurement runs used to be made on separate branches; they are now made
+on the working branch with the workflow's `scenario: performance` input
+(see Reproducing). Each run's raw results stay in its `vm-test-results`
+artifact (`performance/performance.json`) until the artifact expires,
+whether or not its branch still exists.
+
+| Run | Branch, commit | What it measured | Hard disk: power-on / kernel to login | SSD: power-on / kernel to login |
+|---|---|---|---|---|
+| 33 | `-perf`, e1d3762 | Before any tuning | 126 s / 36.4 s¹ | 16.9 s / 5.8 s¹ |
+| 34 | `-perf2`, c24bf2b | Smaller initramfs, no boot menu wait | 72.9 s / not recorded | 8.8 s / 5.0 s |
+| 36 | `-perf3`, 5642445 | Plus unused services off, exam browser pre-warm | 72.9 s / 30.5 s | 8.8 s / 4.4 s |
+| 44 | working branch, debe563 | The code of v1.0.0-rc1 (full release run) | 72.9 s / 31.9 s | 8.9 s / 5.0 s |
+| 46 | `-perf4`, 2ced8a5 | Lab Mode's boot reset starts fewer programs; journal capped | 73.2 s / 28.2 s | 8.8 s / 4.3 s |
+| 47 | working branch, 1c07b57 | Plus: the login screen doesn't wait for the network; the wipe's two parts at the same time. **Five boots per profile** | median 69.1 s / 28.8 s, worst 69.7 s / 29.8 s | median 8.9 s / 4.5 s, worst 8.9 s / 4.5 s |
+
+Runs 33 to 46 booted each profile once; one boot can be a second or two
+either way (runs 36 and 44 booted the same boot path: 30.5 and 31.9 s).
+
+Where the sign-in time goes now (seconds after the session opens, run 47):
 
 | Step | Hard disk | SSD |
 |---|---|---|
-| Exam session started | 0.34 | 0.34 |
-| Exam browser window open | 1.22 | 0.82 |
-| Exam server answered | 1.50 | 0.99 |
-| Exam page shown | **1.67** | **1.00** |
+| Exam session started | 0.32 | 0.29 |
+| Exam browser window open | 1.25 | 0.69 |
+| Exam server answered | 1.52 | 0.83 |
+| Exam page shown | **1.66** | **0.85** |
 
-Memory at the idle lab desktop (437 MB in use, of 1968 MB): the largest
-processes are Xorg (84 MB), the Lab Mode sign-in notice (60 MB, until the
-student closes it), the Bluetooth, network and sound tray icons (52, 48,
-44 MB), the file manager / desktop (43 MB) and the update checker (24 MB).
+Memory at the idle lab desktop (452 MB in use on the hard disk profile, of
+1968 MB): the largest processes are Xorg (86 MB), the Lab Mode sign-in
+notice (61 MB, until the student closes it), the Bluetooth, network and
+sound tray icons (52, 48, 44 MB), the file manager / desktop (43 MB) and
+the update checker (24 MB).
 
 ## What was fixed
 
@@ -80,43 +115,57 @@ student closes it), the Bluetooth, network and sound tray icons (52, 48,
 | The initramfs carried AMD/NVIDIA graphics and data-centre network drivers and firmware (179 MB) that the boot loader reads before the kernel starts. A hook (`/etc/initramfs-tools/hooks/primers-trim`) leaves them out; they load from the system a few seconds later. Every disk, USB, keyboard and Intel graphics driver stays; the build checks both. | 179 → 82 MB; ISO 2.09 → 1.90 GB; power-on on the hard disk 126 → 73 s |
 | No boot menu wait (it was 5 s on every boot). Shown for 10 s when another system is installed (Ubuntu's os-prober script) or with Shift/Esc; 10 s after an interrupted boot (was 30). The installer's settings match. | −5 s on every boot |
 | Services a lab PC doesn't use are no longer started at boot (packages kept; D-Bus starts blueman's and Avahi's helpers if anything asks): winbind, networkd-dispatcher, avahi-daemon, blueman-mechanism (22 s on the hard disk, in the way of the login screen), Ubuntu Pro units, apport. The fleet agent no longer starts the wait-for-network at every boot. | kernel to login 36 → 30 s (hard disk), 5.8 → 4.4 s (SSD) |
-| While an exam is on, the exam browser (its programs, libraries, Python bindings; ~220 MB of cache the kernel drops when memory is needed) is read into memory after the login screen is up and after `primers-exam start`, at the lowest CPU and disk priority (`primers-exam-prewarm.service`; 11.8 s on the hard disk, 2.6 s on the SSD). | sign-in to exam page 7.2 → 1.7 s on the hard disk |
+| While an exam is on, the exam browser (its programs, libraries, Python bindings; ~220 MB of cache the kernel drops when memory is needed) is read into memory after the login screen is up and after `primers-exam start`, at the lowest CPU and disk priority (`primers-exam-prewarm.service`; 9.6 s on the hard disk, 2.7 s on the SSD). | sign-in to exam page 7.2 → 1.7 s on the hard disk |
+| Lab Mode's boot reset starts no programs it has nothing for: no `systemctl stop user@UID` when nothing of the lab account is running (always so at boot), no `groupadd` and `usermod` when passwordless sign-in was granted at an earlier boot, and the Exam Mode code is only loaded when an exam is on. The journal is capped at 200 MB on disk (`SystemMaxUse`, 16 MB files), so writing it to disk at boot has a bounded amount to do; the exam log keeps its own durable copy (ADR 0004). | run 46: kernel to login 31.9 → 28.2 s (hard disk, one boot) |
+| **The login screen no longer waits for the network.** The vendor's `systemd-user-sessions.service` (which the login screen waits for) is replaced by a copy without `After=network.target` (the build stops if the vendor file changes). NetworkManager now starts beside the boot reset instead of before it. To keep Exam Mode's network lock first, `primers-exam-firewall.service` puts the exam firewall in place **before `network-pre.target`**, so before NetworkManager brings up any interface; the boot reset still re-applies every lock as before. The `exam-power-cut` VM test checks both orders on each release: the firewall finished before NetworkManager started, and nothing network-related is ordered before the login screen. | the network (6–7 s on the hard disk) is off the login screen's path |
+| The wipe's two parts run at the same time: the lab account's home folder is rebuilt from the template while its files elsewhere are removed (`/tmp`, `/var/tmp`, `/dev/shm`, its crontab and mail, Wi-Fi connections only it could use). The wipe still finishes before the login screen can start (`Before=systemd-user-sessions.service display-manager.service`, unchanged; ADR 0004). | the wipe: 1.9 s (run 46) → 1.5–1.7 s on the hard disk |
 
 ## Misses and the plan
 
-**1. Power-on to login on a hard disk: 72.9 s (target 30 s).** Of this,
-~42 s pass before the kernel starts: the firmware and the boot loader
-reading the kernel (15 MB) and the initramfs (82 MB). The test's hard disk
-counts every small read the boot loader makes against its ~120 operations
-a second, which is right for scattered reads but pessimistic for one long
-file: a real 7200 rpm disk reads 100 MB in about a second. The figure for a
-real hard disk is therefore not known from this test.
+**Kernel to login screen on a hard disk now meets 30 s in all five boots
+(median 28.8 s, worst 29.8 s), with Lab Mode's wipe still finished before
+the login screen appears.** Power-on to login on the hard disk still
+misses the 30 s target: **median 69.1 s, worst 69.7 s.** Where the time
+goes (seconds; ranges are over the five boots):
+
+| Step | Hard disk | SSD |
+|---|---|---|
+| Before the kernel starts: firmware, then the boot loader reading the kernel (15 MB) and initramfs (82 MB) | **40.3** | 4.4 |
+| Kernel and initramfs, up to the system's service manager | 4.2 | 1.9 |
+| Service manager start-up to the basic system (reading its unit files, devices, AppArmor profiles, filesystems, swap) | 9.2–10.6 | 0.5 |
+| Lab Mode's boot reset (the wipe and the locks, before the login screen) | 10.4–11.6 | 0.3 |
+| …of which Python starting from a cold disk | 4.9–6.2 | |
+| …of which loading the PRIMERS modules and checking the account | 3.8–4.8 | |
+| …of which the wipe itself (home and the rest at the same time) | 1.5–1.7 | 0.1 |
+| The display server and login screen starting | 1.8–4.5 | 1.6 |
+
+**1. Before the kernel: 40 s of the 69 s.** The test's hard disk counts
+every small read the boot loader makes against its ~120 operations a
+second, which is right for scattered reads but pessimistic for reading one
+long file: a real 7200 rpm disk reads 100 MB in about a second. The figure
+for a real hard disk is therefore not known from this test; the pilot
+measures it (the install checklist's stopwatch line, and `benchmark` in
+the Brain).
 
 - Measure on real lab PCs with hard disks: `benchmark` in the Brain
   reports boot to login from the boot's own record (on UEFI PCs including
   the firmware and boot loader; pilot guide, "Collect proof points"), and a
   stopwatch from the power button to the login screen gives the rest.
-- Make the initramfs much smaller on installed PCs: build it for the PC's
-  own hardware (`MODULES=dep`) at install time; expected ~25-35 MB.
-  Needs an ADR and tests on real hardware first: an initramfs built for one
-  PC may not boot if its disk is moved to a different PC.
+- If real PCs are slow here too: make the initramfs much smaller on
+  installed PCs by building it for the PC's own hardware (`MODULES=dep`) at
+  install time; expected ~25-35 MB. Needs an ADR and tests on real
+  hardware first: an initramfs built for one PC may not boot if its disk is
+  moved to a different PC.
 
-**2. Kernel to login screen on a hard disk: 30.5 s (target 30 s).** The
-login screen waits for:
-
-| Step | Hard disk |
-|---|---|
-| Lab Mode's boot reset (`primers-lab-reset`, ordered before the login screen so a power cut can't leave a student's files for the next one) | 11.5 s, mostly Python starting from a cold disk |
-| Writing the journal to disk (`systemd-journal-flush`) | 6.3 s |
-| NetworkManager (user sessions wait for the network target) | 5.8 s |
-
-- Lab Mode's boot reset: do the locks first (they must be in place before
-  the login screen: ADR 0004) and wipe the lab account without waiting for
-  Python, or skip the wipe when the account is already pristine (it is
-  wiped again at every sign-in anyway).
-- Journal: cap its size on disk (`SystemMaxUse`), so the flush has less to
-  write; the exam log keeps its own durable copy (ADR 0004).
-- Then measure again; on the SSD the same boot takes 4.4 s.
+**2. Lab Mode's boot reset: 10.4–11.6 s, ordered before the login screen
+on purpose** (a power cut must not leave one student's files for the next:
+ADR 0004). It is not moved after the login screen or into the background.
+Python's own start-up is left as it is. One option left that keeps the
+wipe before the login screen: start the reset as soon as the filesystems
+are mounted instead of after the basic system (which takes 9–11 s on this
+test's hard disk, so part of it could overlap); it would then run before
+AppArmor and the temporary-file setup, so it needs its own review and tests
+before it is done.
 
 **Not measured yet:** real lab hardware (CPU, disk and graphics differ
 from a cloud VM: the pilot's `benchmark` reports fill this in); UEFI boots

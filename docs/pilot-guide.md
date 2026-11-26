@@ -255,9 +255,10 @@ does.
 Also record, per lab: how many PCs were revived (couldn't run Windows 11),
 licence cost saved per seat, and a short student satisfaction survey.
 
-Send these figures to Primers: they go into section 7.10 of the knowledge
-base (`docs/knowledge/PRIMERS_KNOWLEDGE.md`), which Ask Primers answers from
-on every PC (try `ask how fast does it boot on a hard disk?` in the PRIMERS Brain).
+Send these figures to Primers: they go into section 7.11 (proof points) of
+the knowledge base (`docs/knowledge/PRIMERS_KNOWLEDGE.md`), which Ask Primers
+answers from on every PC (try `ask how fast does it boot on a hard disk?` in
+the PRIMERS Brain).
 
 ## 7. If something goes wrong
 
