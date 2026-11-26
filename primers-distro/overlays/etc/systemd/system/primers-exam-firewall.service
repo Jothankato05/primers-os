@@ -1,0 +1,22 @@
+# PRIMERS OS Exam Mode: during an exam, the exam firewall is in place before
+# any network interface comes up (NetworkManager starts after
+# network-pre.target), from the exam servers' last known addresses. The full
+# lock with fresh addresses follows before the login screen (Lab Mode's boot
+# service) and before every exam session. ADR 0004.
+[Unit]
+Description=PRIMERS OS Exam Mode: the exam firewall, before the network
+Documentation=file:/usr/share/doc/primers/decisions/0004-exam-power-cuts.md
+DefaultDependencies=no
+ConditionPathExists=/etc/primers/exam.conf
+After=local-fs.target systemd-journald.socket
+Before=network-pre.target shutdown.target
+Wants=network-pre.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/primers-exam boot-firewall
+
+[Install]
+WantedBy=multi-user.target

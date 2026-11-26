@@ -26,6 +26,7 @@ group. If a check fails nothing is deleted and the lab account is not let
 in (fail closed), so one student's files never reach the next.
 """
 
+import concurrent.futures
 import contextlib
 import fcntl
 import grp
@@ -39,7 +40,7 @@ import syslog
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 DEFAULT_USER = "lab"
 GECOS = "Shared lab account (files are deleted at sign-out)"
@@ -509,15 +510,33 @@ class LabMode:
             t.append(time.monotonic())
             self._stop_user(acct)
             t.append(time.monotonic())
-            self._reset_home(acct, template)
-            t.append(time.monotonic())
-            self._clean_elsewhere(acct)
+            # The home folder and what the account left elsewhere (temp folders,
+            # crontab, mail, network connections) don't depend on each other:
+            # both are wiped at once, and both must succeed
+            home, elsewhere = self._both(lambda: self._reset_home(acct, template),
+                                         lambda: self._clean_elsewhere(acct))
             self._record(reason)
             t.append(time.monotonic())
         took = [b - a for a, b in zip(t, t[1:])]
         self.log(f"reset lab account '{acct.name}' ({reason}) in {t[-1] - t[0]:.1f} s: checks {took[0]:.1f}, "
-                 f"stop {took[1]:.1f}, home {took[2]:.1f}, elsewhere {took[3]:.1f}")
+                 f"stop {took[1]:.1f}, home {home:.1f} and elsewhere {elsewhere:.1f} at the same time")
         return acct
+
+    @staticmethod
+    def _both(first: Callable[[], None], second: Callable[[], None]) -> Tuple[float, float]:
+        """Run two independent steps at the same time; wait for both; raise
+        the first one's error (after both have finished). Their durations."""
+        def timed(step):
+            start = time.monotonic()
+            step()
+            return time.monotonic() - start
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(timed, first), pool.submit(timed, second)]
+            concurrent.futures.wait(futures)
+        for f in futures:
+            if f.exception() is not None:
+                raise f.exception()
+        return futures[0].result(), futures[1].result()
 
     def enable(self, user: str = DEFAULT_USER, template: Optional[str] = None) -> LabConfig:
         if not NAME_RE.match(user):

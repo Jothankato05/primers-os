@@ -50,6 +50,8 @@ def _parser() -> argparse.ArgumentParser:
     # Run by the primers-exam-log service and the primers-exam-refresh timer, not by people
     sub.add_parser("log-writer", help=argparse.SUPPRESS)
     sub.add_parser("refresh", help=argparse.SUPPRESS)
+    # primers-exam-firewall.service, at boot before the network comes up
+    sub.add_parser("boot-firewall", help=argparse.SUPPRESS)
     return p
 
 
@@ -117,6 +119,8 @@ def main(argv=None) -> int:
             sys.stdout.write(exam.journal(args.since, args.all) or "No exam activity logged.\n")
         elif args.command == "refresh":
             exam.refresh(addresses_only=True)
+        elif args.command == "boot-firewall":
+            exam.boot_firewall()
         elif args.command == "log-writer":
             conf = exam.config()
             started = exam_log.parse_time(conf.started) if conf and conf.started else None

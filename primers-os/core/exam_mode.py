@@ -889,6 +889,23 @@ class ExamMode:
         except OSError as e:
             raise ExamError(f"can't write the exam log {self.paths.log}: {e}")
 
+    def boot_firewall(self) -> bool:
+        """At boot, before any network interface comes up
+        (primers-exam-firewall.service, ordered before network-pre.target):
+        the exam firewall from the exam servers' last known addresses (the
+        /etc/hosts pins and the recently seen ones), without looking any name
+        up: there is no network yet. The full lock, with fresh addresses,
+        follows before the login screen (refresh, from Lab Mode's boot
+        service) and before every exam session. False when no exam is on."""
+        conf = self.config()
+        if conf is None:
+            return False
+        acct = self._lab_account()
+        pins = {h: a for h, a in self.pinned().items() if h in conf.allow}
+        self._apply_firewall(acct.uid, self.allowed(conf.allow, pins), conf.ports)
+        self.log("exam firewall in place before the network came up (boot)")
+        return True
+
     def refresh(self, addresses_only: bool = False) -> bool:
         """Re-apply every lock with fresh addresses (boot, every exam sign-in),
         or, with addresses_only (the primers-exam-refresh timer, every few

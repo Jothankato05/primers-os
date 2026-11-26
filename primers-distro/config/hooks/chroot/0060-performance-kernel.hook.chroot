@@ -88,3 +88,29 @@ systemctl enable zramswap.service 2>/dev/null || true
 chmod 0644 /etc/systemd/journald.conf.d/80-primers-journal-size.conf
 grep -qx 'SystemMaxUse=200M' /etc/systemd/journald.conf.d/80-primers-journal-size.conf \
   || { echo "E: the journal's size cap is missing" >&2; exit 1; }
+
+# The login screen doesn't wait for the network (docs/benchmarks.md): LightDM
+# starts after systemd-user-sessions.service, which Ubuntu orders after
+# network.target for network logins (NIS, LDAP, NFS homes) that PRIMERS OS
+# doesn't use, and NetworkManager takes seconds to start on a hard disk. An
+# ordering can't be removed with a drop-in, so /etc gets a copy of the unit
+# without it; the build stops if Ubuntu's unit changes. During an exam the
+# exam firewall is in place before any interface comes up
+# (primers-exam-firewall.service, hook 0090); Lab Mode's wipe still comes
+# before the login screen (primers-lab-reset.service is ordered before
+# systemd-user-sessions.service).
+vendor=/lib/systemd/system/systemd-user-sessions.service
+expected='After=remote-fs.target nss-user-lookup.target network.target home.mount'
+grep -qx "$expected" "$vendor" && [ "$(grep -c '^After=' "$vendor")" -eq 1 ] \
+  || { echo "E: Ubuntu's systemd-user-sessions.service changed: check the login screen's ordering" >&2; exit 1; }
+{
+  echo "# PRIMERS OS: Ubuntu's $vendor without 'network.target' in After="
+  echo "# (hook 0060-performance-kernel: the login screen doesn't wait for the network)."
+  sed "s|^$expected\$|After=remote-fs.target nss-user-lookup.target home.mount|" "$vendor"
+} > /etc/systemd/system/systemd-user-sessions.service
+chmod 0644 /etc/systemd/system/systemd-user-sessions.service
+grep -qx 'After=remote-fs.target nss-user-lookup.target home.mount' /etc/systemd/system/systemd-user-sessions.service \
+  && grep -q '^ExecStart=/lib/systemd/systemd-user-sessions start$' /etc/systemd/system/systemd-user-sessions.service \
+  || { echo "E: the systemd-user-sessions.service copy is wrong" >&2; exit 1; }
+grep -q '^Before=systemd-user-sessions.service display-manager.service$' /etc/systemd/system/primers-lab-reset.service \
+  || { echo "E: Lab Mode's wipe must come before the login screen" >&2; exit 1; }

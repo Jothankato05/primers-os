@@ -237,6 +237,41 @@ def test_refresh(exam):
     assert "196.46.20.99\tcbt.uni.edu.ng" in open(exam.paths.hosts).read()
 
 
+def test_boot_firewall_before_the_network_uses_last_known_addresses_only(exam):
+    """At boot, before any interface is up: the firewall from the pinned and
+    recently seen addresses; no name lookups (there is no network yet)."""
+    enabled(exam.lab)
+    assert exam.boot_firewall() is False                        # no exam: nothing to do
+    exam.start("https://cbt.uni.edu.ng/")
+    exam.net.table = False                                      # a reboot: /run is empty again
+    os.unlink(exam.paths.rules)
+    before = len(exam.net.rules)
+    exam.resolve = lambda hosts: pytest.fail("looked a name up before the network was up")
+    assert exam.boot_firewall() is True
+    assert len(exam.net.rules) == before + 1 and exam.net.table
+    rules = exam.net.rules[-1]
+    assert f"meta skuid {UID} jump exam" in rules and allow4(rules) == "196.46.20.10"
+    assert any("before the network came up" in line for line in exam.lab.fake.logs)
+
+
+def test_boot_firewall_refuses_an_unsafe_lab_account(exam):
+    enabled(exam.lab)
+    exam.start("https://cbt.uni.edu.ng/")
+    exam.lab.fake.accounts["lab"].groups.append("sudo")
+    with pytest.raises(em.ExamError, match="won't use account"):
+        exam.boot_firewall()
+
+
+def test_the_boot_firewall_unit_runs_before_any_network_interface():
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "primers-distro", "overlays", "etc", "systemd",
+                        "system", "primers-exam-firewall.service")
+    unit = open(path).read()
+    for line in ("DefaultDependencies=no", "ConditionPathExists=/etc/primers/exam.conf",
+                 "Before=network-pre.target shutdown.target", "Wants=network-pre.target",
+                 "ExecStart=/usr/bin/primers-exam boot-firewall", "WantedBy=multi-user.target"):
+        assert line in unit.splitlines(), line
+
+
 def test_refresh_with_nothing_known_blocks_everything(exam):
     enabled(exam.lab)
     now = [1_000_000.0]

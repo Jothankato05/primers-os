@@ -267,6 +267,34 @@ def test_later_boots_start_no_programs_with_nothing_to_do(lab):
                for line in lab.fake.logs)
 
 
+def test_home_and_elsewhere_are_wiped_at_once_and_both_must_succeed(lab):
+    import threading
+    home = enabled(lab)
+    started, both = [], threading.Barrier(2, timeout=5)
+
+    def wait_for_the_other(name, step):
+        def run(*a):
+            started.append(name)
+            both.wait()                      # fails (BrokenBarrierError) unless the other runs at the same time
+            return step(*a)
+        return run
+    lab._reset_home = wait_for_the_other("home", lab._reset_home)
+    lab._clean_elsewhere = wait_for_the_other("elsewhere", lab._clean_elsewhere)
+    (home / "x").write_text("x")
+    lab.reset()
+    assert sorted(started) == ["elsewhere", "home"] and not (home / "x").exists()
+    assert any("at the same time" in line for line in lab.fake.logs)
+
+    def broken(acct):
+        raise OSError("disk error")
+    cleaned = []
+    lab._reset_home = lambda acct, template: cleaned.append("home")
+    lab._clean_elsewhere = broken
+    with pytest.raises(OSError, match="disk error"):         # one failing step fails the reset
+        lab.reset()
+    assert cleaned == ["home"]                                # after the other one finished
+
+
 def test_the_lab_hook_loads_exam_mode_only_during_an_exam(tmp_path, monkeypatch):
     import primers_lab
     from core import exam_mode

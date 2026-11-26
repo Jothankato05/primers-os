@@ -52,6 +52,14 @@ install -d -m 2750 -o root -g adm /var/log/primers
 systemctl enable primers-exam-log.service
 # Exam servers that change address during an exam (CDNs) are followed
 systemctl enable primers-exam-refresh.timer
+# During an exam the exam firewall is in place before any network interface
+# comes up (NetworkManager starts after network-pre.target), so the login
+# screen needn't wait for the network (hook 0060)
+systemctl enable primers-exam-firewall.service
+grep -qx 'Before=network-pre.target shutdown.target' /etc/systemd/system/primers-exam-firewall.service \
+  && grep -qx 'Wants=network-pre.target' /etc/systemd/system/primers-exam-firewall.service \
+  && grep -qx 'After=network-pre.target dbus.service' /lib/systemd/system/NetworkManager.service \
+  || { echo "E: the exam firewall must come before the network: check primers-exam-firewall.service and NetworkManager.service" >&2; exit 1; }
 # During an exam, the exam browser is read into memory after boot (benchmarks)
 chmod 0755 /usr/lib/primers/exam-prewarm
 systemctl enable primers-exam-prewarm.service

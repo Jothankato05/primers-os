@@ -20,6 +20,7 @@ import os
 import re
 import shlex
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -388,6 +389,22 @@ def exam_power_cut(vm: VM, suite: Suite) -> None:
     dm_start = _monotonic(vm, "lightdm.service", "ExecMainStartTimestampMonotonic")
     c("the exam firewall was back before the login screen started", 0 < reset_done <= dm_start,
       f"lab reset done at {reset_done}, login screen started at {dm_start}")
+    # Before any network interface came up: the early firewall unit finished
+    # (with the exam table in place) before NetworkManager started, and the
+    # login screen no longer waits for the network
+    fw_done = _monotonic(vm, "primers-exam-firewall.service", "ExecMainExitTimestampMonotonic")
+    nm_start = _monotonic(vm, "NetworkManager.service", "ExecMainStartTimestampMonotonic")
+    fw = vm.sh("systemctl show -p Result --value primers-exam-firewall.service; "
+               "journalctl -b -o cat -t primers-exam | grep -c 'before the network came up'").out.split()
+    c("the exam firewall was in place before any network interface came up (before NetworkManager started)",
+      0 < fw_done <= nm_start and fw[:1] == ["success"] and fw[-1:] != ["0"],
+      f"firewall done at {fw_done}, NetworkManager started at {nm_start}; {fw}")
+    after = vm.sh("systemctl list-dependencies --after --all --plain --no-pager display-manager.service").out
+    netdeps = sorted({u.strip() for u in after.split() if u.strip() in
+                      ("network.target", "network-online.target", "NetworkManager.service",
+                       "NetworkManager-wait-online.service")})
+    c("the login screen doesn't wait for the network (no network or wait-online units before it)",
+      bool(after.strip()) and not netdeps, ", ".join(netdeps) or after[-300:])
     c("consoles and SysRq still locked after the reboot",
       vm.sh("cat /proc/sys/kernel/sysrq").out.strip() == "0"
       and vm.sh("systemctl show -p LoadState --value getty@tty2.service").out.strip() == "masked"
@@ -1401,6 +1418,15 @@ def fleet_scenario(ctrl: VM, suite: Suite) -> None:
 
 PERF_MEMORY_MB, PERF_CPUS = 2048, 2
 PERF_TARGETS = {"boot_hdd_s": 30.0, "boot_ssd_s": 15.0, "idle_ram_mb": 600, "kiosk_s": 3.0}
+PERF_BOOTS = int(os.environ.get("PRIMERS_PERF_BOOTS", "5"))     # cold boots per disk profile
+
+
+def spread(values) -> Optional[dict]:
+    """Median and worst of several measurements (None when one is missing)."""
+    if not values or any(v is None for v in values):
+        return None
+    return {"n": len(values), "median": round(statistics.median(values), 1), "worst": max(values),
+            "best": min(values), "each": values}
 
 
 def guest_benchmark(vm: VM) -> dict:
@@ -1508,21 +1534,35 @@ def performance(vm: VM, suite: Suite) -> None:
                "targets": PERF_TARGETS, "disks": {}}
     for profile in ("hdd", "ssd"):
         vm.disk_profile = profile
-        power_on = cold_boot(vm)
-        c(f"{profile}: power-on to the login screen measured", power_on is not None)
-        vm.wait_until(lambda: vm.sh("systemd-analyze").rc == 0, 600, f"{profile}: the boot to finish")
-        vm.wait_until(lambda: vm.sh("systemctl is-active display-manager.service").out.strip() == "active",
-                      300, f"{profile}: the login screen")
-        greeter_s = greeter_after_kernel(vm)
-        bench = guest_benchmark(vm)
-        boot = bench.get("boot", {})
+        boots = []
+        for n in range(PERF_BOOTS):                             # one boot proves nothing
+            power_on = cold_boot(vm)
+            vm.wait_until(lambda: vm.sh("systemd-analyze").rc == 0, 600, f"{profile}: the boot to finish")
+            vm.wait_until(lambda: vm.sh("systemctl is-active display-manager.service").out.strip() == "active",
+                          300, f"{profile}: the login screen")
+            bench = guest_benchmark(vm)
+            boots.append({"power_on_to_login_s": power_on, "login_screen_after_kernel_s": greeter_after_kernel(vm),
+                          "boot": bench.get("boot", {}),
+                          "login_screen_chain": vm.sh("systemd-analyze critical-chain --no-pager "
+                                                      "display-manager.service | head -25").out,
+                          "lab_reset_log": vm.sh("journalctl -b -o short-monotonic --no-pager -t primers-lab "
+                                                 "| tail -n 20").out,
+                          "slowest_units": vm.sh("systemd-analyze blame --no-pager | head -12").out})
+            vm.log(f"[{vm.name}] {profile} boot {n + 1}: power-on to login {power_on} s, "
+                   f"kernel to login {boots[-1]['login_screen_after_kernel_s']} s")
+        c(f"{profile}: {PERF_BOOTS} cold boots measured (power-on and kernel to the login screen)",
+          all(b["power_on_to_login_s"] is not None and b["login_screen_after_kernel_s"] is not None for b in boots),
+          json.dumps([[b["power_on_to_login_s"], b["login_screen_after_kernel_s"]] for b in boots]))
         c(f"{profile}: the system sees a {'rotating' if profile == 'hdd' else 'solid-state'} disk",
           bench.get("disk", {}).get("rotational") is (profile == "hdd"), json.dumps(bench.get("disk")))
-        c(f"{profile}: boot to the login screen measured", boot.get("to_login") is not None, json.dumps(boot))
-        slowest = vm.sh("systemd-analyze blame --no-pager | head -12").out
+        c(f"{profile}: boot to the login screen measured", all(b["boot"].get("to_login") is not None for b in boots),
+          json.dumps([b["boot"] for b in boots]))
+        power_on = spread([b["power_on_to_login_s"] for b in boots])
+        greeter_s = spread([b["login_screen_after_kernel_s"] for b in boots])
+        to_login = spread([b["boot"].get("to_login") for b in boots])
+        boot = boots[-1]["boot"]
+        slowest, dm_chain, lab_log = (boots[-1][k] for k in ("slowest_units", "login_screen_chain", "lab_reset_log"))
         chain = vm.sh("systemd-analyze critical-chain --no-pager graphical.target | head -25").out
-        dm_chain = vm.sh("systemd-analyze critical-chain --no-pager display-manager.service | head -25").out
-        lab_log = vm.sh("journalctl -b -o short-monotonic --no-pager -t primers-lab | tail -n 20").out
         time.sleep(120)                                         # idle at the login screen
         login_ram = guest_benchmark(vm).get("memory", {}).get("used_mb")
         prefer_lab_at_login(vm)
@@ -1547,6 +1587,7 @@ def performance(vm: VM, suite: Suite) -> None:
         vm.sh("primers-exam stop", timeout=600)
         vm.wait_until(lambda: vm.sh("pgrep -u lab").rc != 0, 120, "the lab session to end")
         results["disks"][profile] = {"power_on_to_login_s": power_on, "login_screen_after_kernel_s": greeter_s,
+                                     "services_up_after_kernel_s": to_login, "boots": boots,
                                      "exam_browser_prewarm_s": prewarm_s,
                                      "kiosk_steps": kiosk_steps, "boot": boot,
                                      "login_screen_ram_mb": login_ram, "desktop_ram_mb": desk_ram,
@@ -1554,10 +1595,16 @@ def performance(vm: VM, suite: Suite) -> None:
                                      "slowest_units": slowest, "critical_chain": chain,
                                      "login_screen_chain": dm_chain, "lab_reset_log": lab_log, "top_rss_kb": top}
         target = PERF_TARGETS["boot_hdd_s" if profile == "hdd" else "boot_ssd_s"]
-        for what, value, limit, unit in (("power-on to login screen", power_on, target, "s"),
-                                         ("kernel start to login screen", greeter_s, target, "s"),
-                                         ("kernel start to all services up", boot.get("to_login"), target, "s"),
-                                         ("idle RAM at the desktop", desk_ram, PERF_TARGETS["idle_ram_mb"], "MB"),
+        for what, value in (("power-on to login screen", power_on), ("kernel start to login screen", greeter_s),
+                            ("kernel start to all services up", to_login)):
+            if value is None:
+                suite.note(f"{profile}: {what}: not measured")
+                continue
+            suite.note(f"{profile}: {what} over {value['n']} cold boots: median {value['median']} s "
+                       f"({'meets' if value['median'] < target else 'MISSES'}), worst {value['worst']} s "
+                       f"({'meets' if value['worst'] < target else 'MISSES'}) (target < {target} s); "
+                       f"each: {value['each']}")
+        for what, value, limit, unit in (("idle RAM at the desktop", desk_ram, PERF_TARGETS["idle_ram_mb"], "MB"),
                                          ("idle RAM at the login screen", login_ram, PERF_TARGETS["idle_ram_mb"], "MB"),
                                          ("sign-in to exam page", kiosk_s, PERF_TARGETS["kiosk_s"], "s")):
             verdict = "n/a" if value is None else ("meets" if value < limit else "MISSES")
