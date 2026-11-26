@@ -16,11 +16,15 @@ Called by the system, not by people:
   primers-lab notice                                    (desktop autostart)
 """
 
-import argparse
-import os
-import shutil
-import subprocess
-import sys
+import time
+
+STARTED = time.monotonic()      # before the imports below: how long the boot hook really takes
+
+import argparse  # noqa: E402
+import os  # noqa: E402
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -86,11 +90,17 @@ def _print_status(lab: lab_mode.LabMode) -> int:
     return 0
 
 
+# exam_mode.ExamPaths().conf, here so a boot without an exam doesn't load Exam Mode
+EXAM_CONF = "/etc/primers/exam.conf"
+
+
 def exam_hook(lab: lab_mode.LabMode, event: str, user) -> int:
     """During an exam, refresh the exam firewall at boot and before every
     lab session. No firewall, no exam session (fail closed)."""
     if event not in ("boot", "session-setup") or (event == "session-setup" and not lab.is_lab_session(user)):
         return 0
+    if not os.path.exists(EXAM_CONF):
+        return 0            # no exam: nothing to refresh (and no need to load the exam module)
     from core import exam_mode
     exam = exam_mode.ExamMode(lab)
     try:
@@ -126,6 +136,8 @@ def main(argv=None) -> int:
             rc = lab.hook(args.event, user)
             if rc == 0:
                 rc = exam_hook(lab, args.event, user)
+            if args.event == "boot":
+                lab.log(f"boot hook done {time.monotonic() - STARTED:.1f} s after primers-lab started")
             return rc
         except Exception as e:  # a crash must never let a dirty lab session start
             lab.log(f"hook {args.event} crashed: {e!r}")

@@ -83,3 +83,8 @@ for unit in winbind networkd-dispatcher avahi-daemon blueman-mechanism ubuntu-ad
   fi
 done
 systemctl enable zramswap.service 2>/dev/null || true
+
+# A small system journal: less to open and write at boot (docs/benchmarks.md)
+chmod 0644 /etc/systemd/journald.conf.d/80-primers-journal-size.conf
+grep -qx 'SystemMaxUse=200M' /etc/systemd/journald.conf.d/80-primers-journal-size.conf \
+  || { echo "E: the journal's size cap is missing" >&2; exit 1; }

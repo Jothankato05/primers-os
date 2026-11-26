@@ -412,6 +412,8 @@ class LabMode:
 
     def _stop_user(self, acct: Account) -> None:
         """End every process of the lab account (its session is over)."""
+        if not pids_of(acct.uid, self.paths.proc):
+            return      # nothing of the account's is running (always so at boot): no systemctl to start
         self.run(["systemctl", "stop", f"user@{acct.uid}.service"])
         for _ in range(50):
             pids = pids_of(acct.uid, self.paths.proc)
@@ -479,6 +481,8 @@ class LabMode:
     def _passwordless(self, acct: Account, allow: bool) -> None:
         """Let the account sign in from LightDM without a password, or not."""
         if allow:
+            if PASSWORDLESS_GROUP in acct.groups:
+                return      # granted at an earlier boot (the group list is read fresh by lookup)
             self.run(["groupadd", "--system", "-f", PASSWORDLESS_GROUP])
             self._checked(["usermod", "--append", "--groups", PASSWORDLESS_GROUP, acct.name])
         elif PASSWORDLESS_GROUP in acct.groups:
@@ -498,14 +502,21 @@ class LabMode:
         conf = self.config()
         if conf is None:
             raise LabError("Lab Mode is off")
+        t = [time.monotonic()]
         with self._locked():
             acct = self._guard(self.lookup(conf.user), conf)
             template = self._template(conf)
+            t.append(time.monotonic())
             self._stop_user(acct)
+            t.append(time.monotonic())
             self._reset_home(acct, template)
+            t.append(time.monotonic())
             self._clean_elsewhere(acct)
             self._record(reason)
-        self.log(f"reset lab account '{acct.name}' ({reason})")
+            t.append(time.monotonic())
+        took = [b - a for a, b in zip(t, t[1:])]
+        self.log(f"reset lab account '{acct.name}' ({reason}) in {t[-1] - t[0]:.1f} s: checks {took[0]:.1f}, "
+                 f"stop {took[1]:.1f}, home {took[2]:.1f}, elsewhere {took[3]:.1f}")
         return acct
 
     def enable(self, user: str = DEFAULT_USER, template: Optional[str] = None) -> LabConfig:

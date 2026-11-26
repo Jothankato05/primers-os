@@ -250,6 +250,46 @@ def test_boot_grants_passwordless_sign_in_only_with_the_wipe_hooks(lab):
     assert any("can't sign in" in line for line in lab.fake.logs)
 
 
+def test_later_boots_start_no_programs_with_nothing_to_do(lab):
+    """At boot nothing of the lab account runs and passwordless sign-in was
+    granted at an earlier boot: no systemctl, groupadd or usermod to load
+    from a cold disk, but the wipe itself still happens, and is timed."""
+    home = enabled(lab)
+    assert lab.hook("boot", None) == 0                  # the first boot grants passwordless sign-in
+    (home / "left-behind.txt").write_text("a student's file")
+    lab.fake.calls.clear()
+    assert lab.hook("boot", None) == 0                  # a later boot
+    names = [c[0] for c in lab.fake.calls]
+    assert not {"systemctl", "groupadd", "usermod"} & set(names)
+    assert "find" in names and not (home / "left-behind.txt").exists()
+    assert lab.status()["sign_in_ready"] is True
+    assert any(line.startswith("reset lab account 'lab' (boot) in ") and "stop " in line and "home " in line
+               for line in lab.fake.logs)
+
+
+def test_the_lab_hook_loads_exam_mode_only_during_an_exam(tmp_path, monkeypatch):
+    import primers_lab
+    from core import exam_mode
+    assert primers_lab.EXAM_CONF == exam_mode.ExamPaths().conf
+
+    class Lab:
+        def is_lab_session(self, user=None):
+            return True
+    refreshed = []
+
+    class Exam:
+        def __init__(self, lab):
+            pass
+
+        def refresh(self):
+            refreshed.append(1)
+    monkeypatch.setattr(exam_mode, "ExamMode", Exam)
+    monkeypatch.setattr(primers_lab, "EXAM_CONF", str(tmp_path / "exam.conf"))
+    assert primers_lab.exam_hook(Lab(), "boot", None) == 0 and refreshed == []     # no exam
+    (tmp_path / "exam.conf").write_text("URL=https://cbt.example\n")
+    assert primers_lab.exam_hook(Lab(), "boot", None) == 0 and refreshed == [1]    # an exam: locks refreshed
+
+
 def test_failed_boot_reset_revokes_passwordless_sign_in(lab):
     enabled(lab)
     lab.hook("boot", None)

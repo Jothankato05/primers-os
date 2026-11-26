@@ -316,9 +316,12 @@ def test_parse_getent_and_config_damage(tmp_path):
         em.read_config(str(path))
 
 
-def test_lab_hook_refreshes_the_exam_firewall(monkeypatch):
+def test_lab_hook_refreshes_the_exam_firewall(monkeypatch, tmp_path):
     import primers_lab
     calls = []
+    conf = tmp_path / "exam.conf"                 # an exam is running
+    conf.write_text("URL=https://cbt.example\n")
+    monkeypatch.setattr(primers_lab, "EXAM_CONF", str(conf))
 
     class FakeExam:
         fail = False

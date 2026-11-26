@@ -1474,6 +1474,8 @@ def performance(vm: VM, suite: Suite) -> None:
         c(f"{profile}: boot to the login screen measured", boot.get("to_login") is not None, json.dumps(boot))
         slowest = vm.sh("systemd-analyze blame --no-pager | head -12").out
         chain = vm.sh("systemd-analyze critical-chain --no-pager graphical.target | head -25").out
+        dm_chain = vm.sh("systemd-analyze critical-chain --no-pager display-manager.service | head -25").out
+        lab_log = vm.sh("journalctl -b -o short-monotonic --no-pager -t primers-lab | tail -n 20").out
         time.sleep(120)                                         # idle at the login screen
         login_ram = guest_benchmark(vm).get("memory", {}).get("used_mb")
         prefer_lab_at_login(vm)
@@ -1502,7 +1504,8 @@ def performance(vm: VM, suite: Suite) -> None:
                                      "kiosk_steps": kiosk_steps, "boot": boot,
                                      "login_screen_ram_mb": login_ram, "desktop_ram_mb": desk_ram,
                                      "kiosk_s": kiosk_s, "memory": bench_desk.get("memory", {}),
-                                     "slowest_units": slowest, "critical_chain": chain, "top_rss_kb": top}
+                                     "slowest_units": slowest, "critical_chain": chain,
+                                     "login_screen_chain": dm_chain, "lab_reset_log": lab_log, "top_rss_kb": top}
         target = PERF_TARGETS["boot_hdd_s" if profile == "hdd" else "boot_ssd_s"]
         for what, value, limit, unit in (("power-on to login screen", power_on, target, "s"),
                                          ("kernel start to login screen", greeter_s, target, "s"),
