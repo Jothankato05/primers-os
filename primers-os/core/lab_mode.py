@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Lab Mode: one shared account for computer labs.
+PRIMERS OS - Lab Mode: one shared account for computer labs.
 
 A lab machine gets a passwordless, non-admin account (default ``lab``)
 whose home folder is rebuilt from a template whenever someone signs in or

@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Command Interpreter
+PRIMERS OS - Command Interpreter
 Translates user text input into structured system commands.
 """
 
@@ -233,7 +233,7 @@ class CommandInterpreter:
         return difflib.get_close_matches(word.lower(), self.command_words(), n=n, cutoff=0.6)
 
     def get_help_text(self) -> str:
-        lines = ["\n  PRIMERS OS — Available Commands\n  " + "─" * 38]
+        lines = ["\n  PRIMERS OS - Available Commands\n  " + "─" * 38]
         listed = set()
         for group, cmds in HELP_GROUPS.items():
             lines.append(f"\n  [{group}]")
@@ -248,7 +248,7 @@ class CommandInterpreter:
             lines.append("\n  [Plugins]")
             for w in extra:
                 lines.append(f"    {w:<14} {self.COMMAND_MAP[w][1]}")
-        lines.append("\n  Tip: natural language works too — 'show me processes', 'am i safe?',")
+        lines.append("\n  Tip: natural language works too - 'show me processes', 'am i safe?',")
         lines.append("       'what is 2^10', 'any advice?', 'who founded Primers?'\n")
         return "\n".join(lines)
 

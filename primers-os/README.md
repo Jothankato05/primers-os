@@ -16,7 +16,7 @@ python3 main.py --version
 ```
 
 On PRIMERS OS it's simply `primers` (or `Super+Enter`). Exit code is `0` when
-every one-shot command succeeded, `1` otherwise — handy for scripts.
+every one-shot command succeeded, `1` otherwise - handy for scripts.
 
 ## Commands
 
@@ -25,11 +25,11 @@ every one-shot command succeeded, `1` otherwise — handy for scripts.
 | System | `status` · `alerts` · `datasaver` (metered network, paused downloads) · `lab` (shared-computer Lab Mode) · `exam` (is a computer-based test running?) · `benchmark [--json]` (boot time, RAM, disk vs PRIMERS targets) · `study 25` / `study stop` (focus timer) · `kernel [info\|load\|uptime\|net]` · `version` |
 | Processes | `ps [--sort=cpu\|memory\|pid\|name] [--limit=N]` · `find <name>` · `launch <cmd>` · `kill <pid> [--force] [--yes]` · `suspend` / `resume <pid>` · `priority <pid> <nice>` |
 | Security | `security` · `threats [--level=HIGH]` · `connections` · `cyber scan [1-1024]` · `cyber report` |
-| Intelligence | `ask <question>` — Ask Primers (offline knowledge base) · `advise` — prioritised recommendations · `learn stats\|suggest\|clear` · `task add\|list\|run\|enable\|disable\|remove\|history` |
+| Intelligence | `ask <question>` - Ask Primers (offline knowledge base) · `advise` - prioritised recommendations · `learn stats\|suggest\|clear` · `task add\|list\|run\|enable\|disable\|remove\|history` |
 | Services | `browse <site or search>` (Primers Lite Bee) · `math <expr>` · `gpa add\|remove\|report\|clear` · `graph scan\|show\|anomalies\|stats\|export` · `modules [install <name>]` · `plugins` |
 | Interface | `gui start\|stop\|open` · `voice start\|stop` · `help` · `clear` · `exit` |
 
-Natural language works too — anchored phrases, so ordinary sentences never
+Natural language works too - anchored phrases, so ordinary sentences never
 trigger actions by accident:
 
 ```
@@ -46,7 +46,7 @@ Anything else phrased as a question goes to **Ask Primers**.
 `knowledge/PRIMERS_KNOWLEDGE.md` is loaded at boot and split by heading.
 Questions are answered offline, in this order:
 
-1. **Emergencies first** — anything that sounds like danger shows Nigeria's
+1. **Emergencies first** - anything that sounds like danger shows Nigeria's
    emergency number (112) and SecureLink before anything else, and is
    checked before any other command (so *"help me, I'm in danger"* never
    just prints the help text).

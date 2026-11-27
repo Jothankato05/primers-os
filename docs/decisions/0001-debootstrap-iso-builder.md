@@ -1,4 +1,4 @@
-# 0001 — Build the ISO with debootstrap + GRUB instead of live-build
+# 0001 - Build the ISO with debootstrap + GRUB instead of live-build
 
 - **Status:** accepted
 - **Date:** 2026-11-24
@@ -7,8 +7,8 @@
 
 The ISO was built with `live-build`. Every CI build (runs 7–13, tags
 `v1.0.2`–`v1.0.8-genesis`) failed. On the `ubuntu-22.04` runner, `apt install
-live-build` gives version **3.0~a57-1ubuntu41** — the 2012-era branch Ubuntu
-still carries — not the modern Debian live-build. In that version:
+live-build` gives version **3.0~a57-1ubuntu41** - the 2012-era branch Ubuntu
+still carries - not the modern Debian live-build. In that version:
 
 - `--mode ubuntu` with the syslinux bootloader always requires
   `gfxboot-theme-ubuntu`, and every theme option requires a

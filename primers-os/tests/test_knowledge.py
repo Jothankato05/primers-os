@@ -19,7 +19,7 @@ version: 9.9
 
 ## 4. Products
 
-### 4.1 Widget — Live
+### 4.1 Widget - Live
 A widget that counts bees in a hive.
 - Works offline.
 
@@ -49,7 +49,7 @@ def kb():
 def test_parsing(kb):
     assert kb.metadata["version"] == "9.9"
     titles = [c.title for c in kb.chunks]
-    assert "1. Identity" in titles and "4. Products › 4.1 Widget — Live" in titles
+    assert "1. Identity" in titles and "4. Products › 4.1 Widget - Live" in titles
     assert [f.question for f in kb.faqs] == ["Who founded Example?", "Does it work without internet?"]
     assert kb.glossary == {"Lab Mode": "Shared-machine mode that wipes the session"}
 
@@ -58,7 +58,7 @@ def test_faq_glossary_and_sections(kb):
     assert kb.answer("who founded example").text == "Ada Lovelace, Founder."
     assert kb.answer("what is lab mode").kind == "glossary"
     a = kb.answer("tell me about the widget")
-    assert a.kind == "section" and "counts bees" in a.text and a.sources[0].endswith("Widget — Live")
+    assert a.kind == "section" and "counts bees" in a.text and a.sources[0].endswith("Widget - Live")
     hq = kb.answer("where is the headquarters")
     assert hq.text == "Headquarters: Abuja, Nigeria"
 

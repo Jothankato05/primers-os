@@ -1,6 +1,6 @@
 # Primers Lite Bee
 
-**A fast, data-saving web browser for PRIMERS OS — built for 2G, LTE and Wi-Fi.**
+**A fast, data-saving web browser for PRIMERS OS - built for 2G, LTE and Wi-Fi.**
 From Primers Group.
 
 Lite Bee is our own browser: its own interface, network awareness, data
@@ -17,9 +17,9 @@ button.
 
 | Mode | When (Auto) | What loads |
 |---|---|---|
-| **Full** | Wi-Fi, Ethernet | Everything — ads and trackers still blocked |
+| **Full** | Wi-Fi, Ethernet | Everything - ads and trackers still blocked |
 | **Lite** | LTE, 3G, phone hotspots, any metered network | No autoplay, no web fonts, no third-party images/media |
-| **Ultra** | 2G / EDGE / GPRS | Text first — no images, video, fonts or third-party scripts; mobile pages requested |
+| **Ultra** | 2G / EDGE / GPRS | Text first - no images, video, fonts or third-party scripts; mobile pages requested |
 
 Blocking happens *inside the engine* (WebKit content rules), before any
 request is sent, so blocked bytes are never downloaded. On a test page with

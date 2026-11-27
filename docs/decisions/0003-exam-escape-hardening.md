@@ -1,4 +1,4 @@
-# 0003 — Closing the escape routes around the exam kiosk
+# 0003 - Closing the escape routes around the exam kiosk
 
 - **Status:** accepted
 - **Date:** 2026-11-24

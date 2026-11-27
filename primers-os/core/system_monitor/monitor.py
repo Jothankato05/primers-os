@@ -1,5 +1,5 @@
 """
-PRIMERS OS — System Monitor
+PRIMERS OS - System Monitor
 Tracks CPU, memory, disk and network in a background thread.
 """
 

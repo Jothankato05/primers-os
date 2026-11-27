@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PRIMERS OS — remove build output.
+# PRIMERS OS - remove build output.
 #   sudo ./clean.sh          remove ISO, image tree and stage stamps (keeps the chroot)
 #   sudo ./clean.sh --all    remove everything, including the chroot and caches
 set -euo pipefail

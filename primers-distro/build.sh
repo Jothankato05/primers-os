@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════╗
-# ║   PRIMERS OS — ISO Build System v2                           ║
+# ║   PRIMERS OS - ISO Build System v2                           ║
 # ║   debootstrap → chroot → squashfs → GRUB hybrid ISO          ║
 # ╚══════════════════════════════════════════════════════════════╝
 #
@@ -137,7 +137,7 @@ check_host() {
 }
 
 # ──────────────────────────────────────────────────────────────
-#  Stage 1 — bootstrap: minimal Ubuntu base
+#  Stage 1 - bootstrap: minimal Ubuntu base
 # ──────────────────────────────────────────────────────────────
 
 stage_bootstrap() {
@@ -154,7 +154,7 @@ stage_bootstrap() {
 }
 
 # ──────────────────────────────────────────────────────────────
-#  Stage 2 — packages: kernel, desktop, PRIMERS stack
+#  Stage 2 - packages: kernel, desktop, PRIMERS stack
 # ──────────────────────────────────────────────────────────────
 
 write_apt_sources() {
@@ -271,7 +271,7 @@ stage_packages() {
 }
 
 # ──────────────────────────────────────────────────────────────
-#  Stage 3 — customize: overlays, PRIMERS brain, installer, hooks
+#  Stage 3 - customize: overlays, PRIMERS brain, installer, hooks
 # ──────────────────────────────────────────────────────────────
 
 stage_customize() {
@@ -315,7 +315,7 @@ stage_customize() {
 
   log "Configuring live session (casper)"
   cat > "$CHROOT/etc/casper.conf" <<EOF
-# PRIMERS OS live session — read by casper at boot
+# PRIMERS OS live session - read by casper at boot
 export USERNAME="$LIVE_USER"
 export USERFULLNAME="$LIVE_USER_FULLNAME"
 export HOST="$LIVE_HOSTNAME"
@@ -338,7 +338,7 @@ EOF
 }
 
 # ──────────────────────────────────────────────────────────────
-#  Stage 4 — finalize: initramfs, cleanup, security checks
+#  Stage 4 - finalize: initramfs, cleanup, security checks
 # ──────────────────────────────────────────────────────────────
 
 stage_finalize() {
@@ -367,16 +367,16 @@ stage_finalize() {
 
   # Hard security gate: nothing from the build host may leak into the image
   if [ -e "$CHROOT$BUILD_CA_IN_CHROOT" ]; then
-    die "Build CA still present in chroot — refusing to continue"
+    die "Build CA still present in chroot - refusing to continue"
   fi
   if [ -n "${BUILD_CA_FILE:-}" ] && \
      grep -qF "$(sed -n '2p' "$BUILD_CA_FILE")" "$CHROOT/etc/ssl/certs/ca-certificates.crt" 2>/dev/null; then
-    die "Build CA still present in the system trust store — refusing to continue"
+    die "Build CA still present in the system trust store - refusing to continue"
   fi
 }
 
 # ──────────────────────────────────────────────────────────────
-#  Stage 5 — image: squashfs + GRUB (BIOS + UEFI) hybrid ISO
+#  Stage 5 - image: squashfs + GRUB (BIOS + UEFI) hybrid ISO
 # ──────────────────────────────────────────────────────────────
 
 write_grub_cfg() {
@@ -461,7 +461,7 @@ make_efi_boot() {
 }
 
 stage_image() {
-  [ -x "$CHROOT/bin/bash" ] || die "No chroot found — run the earlier stages first"
+  [ -x "$CHROOT/bin/bash" ] || die "No chroot found - run the earlier stages first"
   umount_chroot
 
   log "Preparing ISO tree"
@@ -489,7 +489,7 @@ stage_image() {
     log "Reusing existing root filesystem image (REUSE_SQUASHFS=1)"
     mv "$kept" "$IMAGE/casper/filesystem.squashfs"
   else
-    log "Compressing root filesystem (squashfs, $SQUASHFS_COMP) — this takes a while"
+    log "Compressing root filesystem (squashfs, $SQUASHFS_COMP) - this takes a while"
     local comp_opts=(-comp "$SQUASHFS_COMP")
     [ "$SQUASHFS_COMP" = "xz" ] && comp_opts+=(-Xbcj x86 -b 1M)
     mksquashfs "$CHROOT" "$IMAGE/casper/filesystem.squashfs" \
@@ -558,7 +558,7 @@ main() {
   trap on_exit EXIT
 
   echo "╔══════════════════════════════════════════╗"
-  echo "║   $PRIMERS_NAME — ISO Build System v2       ║"
+  echo "║   $PRIMERS_NAME - ISO Build System v2       ║"
   echo "╚══════════════════════════════════════════╝"
   log "Work dir: $WORK"
 
@@ -573,7 +573,7 @@ main() {
       continue
     fi
     if has_stamp "$s"; then
-      log "Stage '$s' already done — skipping (use --from $s to redo)"
+      log "Stage '$s' already done - skipping (use --from $s to redo)"
       continue
     fi
     start=$(date +%s)

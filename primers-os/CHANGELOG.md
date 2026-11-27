@@ -1,11 +1,11 @@
 # Changelog
 
-## [1.0.0-genesis] — 2026-11-24
+## [1.0.0-genesis] - 2026-11-24
 
 ### Distribution
 - **New ISO builder** (`primers-distro/build.sh`): debootstrap → chroot →
   squashfs → hybrid BIOS/UEFI ISO, in resumable stages. Replaces live-build,
-  whose Ubuntu 22.04 version (3.0) could not build jammy images — the cause
+  whose Ubuntu 22.04 version (3.0) could not build jammy images - the cause
   of every failed CI build (see docs/decisions/0001).
 - Fixed package names for Ubuntu 22.04 (`linux-firmware`, HWE kernel, real
   Firefox .deb from Mozilla's repository instead of the snap stub), 32-bit
@@ -99,7 +99,7 @@
   suggestions, `modules`, `plugins`, `gui stop/open`, user plugin directory,
   port exposure (local vs network) in `cyber report`.
 - Ask Primers: the Primers knowledge base ships with the OS and answers
-  offline (`ask`, or just ask a question) — emergencies first, glossary,
+  offline (`ask`, or just ask a question) - emergencies first, glossary,
   FAQ, quoted sections, never invented; `[VERIFY]` items marked unconfirmed.
 - `browse` opens Primers Lite Bee.
 - 131 Brain tests + 41 Lite Bee tests; CI on Python 3.10 and 3.12 and a real

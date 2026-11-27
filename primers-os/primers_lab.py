@@ -1,5 +1,5 @@
 """
-primers-lab — Lab Mode for shared computers (installed as /usr/bin/primers-lab).
+primers-lab - Lab Mode for shared computers (installed as /usr/bin/primers-lab).
 
   sudo primers-lab enable [--user NAME] [--template DIR]
   sudo primers-lab disable

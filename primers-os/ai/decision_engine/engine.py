@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Decision Engine
+PRIMERS OS - Decision Engine
 Analyses system state and makes intelligent recommendations.
 Phase 1: rule-based logic. Phase 2+: ML model integration.
 """

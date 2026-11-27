@@ -1,5 +1,5 @@
 """
-PRIMERS OS — tunable configuration.
+PRIMERS OS - tunable configuration.
 
 Values can be overridden with environment variables of the same name
 prefixed with ``PRIMERS_`` (e.g. ``PRIMERS_GUI_PORT=8080``).
@@ -42,7 +42,7 @@ class Settings:
         self.AUTOMATION_INTERVAL = _env("AUTOMATION_INTERVAL", 10.0, float)
         self.MAX_THREAT_LOGS = _env("MAX_THREAT_LOGS", 1000, int)
 
-        # Web dashboard — localhost only unless explicitly overridden
+        # Web dashboard - localhost only unless explicitly overridden
         self.GUI_HOST = _env("GUI_HOST", "127.0.0.1", str)
         self.GUI_PORT = _env("GUI_PORT", 5000, int)
 

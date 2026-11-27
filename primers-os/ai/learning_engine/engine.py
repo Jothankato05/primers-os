@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Learning Engine
+PRIMERS OS - Learning Engine
 Tracks command history and suggests future commands based on usage patterns.
 History is stored privately (0600) in the user's data directory.
 """

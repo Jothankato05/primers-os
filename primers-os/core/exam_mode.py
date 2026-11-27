@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Exam Mode: computer-based tests on lab machines.
+PRIMERS OS - Exam Mode: computer-based tests on lab machines.
 
 Exam Mode runs on top of Lab Mode (the shared, wiped ``lab`` account). While
 an exam is on (``sudo primers-exam start https://cbt.example.edu.ng``):

@@ -1,9 +1,9 @@
 """
-PRIMERS OS — Math Engine Service
+PRIMERS OS - Math Engine Service
 Safe mathematical expression evaluator.
 
 Expressions are parsed with :mod:`ast` and only arithmetic nodes, numeric
-literals, whitelisted constants and whitelisted functions are evaluated —
+literals, whitelisted constants and whitelisted functions are evaluated -
 no ``eval``, no attribute access, no subscripts. Size limits stop inputs
 such as ``9^9^9`` or ``factorial(10^9)`` from freezing the shell.
 """

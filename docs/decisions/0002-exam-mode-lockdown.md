@@ -1,4 +1,4 @@
-# 0002 — Exam Mode: kiosk session plus a per-account firewall
+# 0002 - Exam Mode: kiosk session plus a per-account firewall
 
 - **Status:** accepted
 - **Date:** 2026-11-24

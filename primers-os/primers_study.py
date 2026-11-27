@@ -1,5 +1,5 @@
 """
-primers-study — Study Mode focus timer (installed as /usr/bin/primers-study).
+primers-study - Study Mode focus timer (installed as /usr/bin/primers-study).
 
   primers-study start [MINUTES]   start a session (default 25 minutes)
   primers-study stop              end it early

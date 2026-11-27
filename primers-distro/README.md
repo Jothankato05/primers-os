@@ -1,4 +1,4 @@
-# ⚛ PRIMERS OS — Distribution & ISO build
+# ⚛ PRIMERS OS - Distribution & ISO build
 
 Builds the PRIMERS OS live/installable ISO from Ubuntu 22.04 ("jammy")
 packages: `debootstrap` a base system, install packages in a chroot, apply
@@ -120,8 +120,8 @@ tools/check-packages.py         verifies every package name against the Ubuntu a
 
 ### Data Saver (system updates)
 
-Background downloads — the daily package-list refresh, automatic security
-upgrades and firmware metadata refresh — are postponed while NetworkManager
+Background downloads - the daily package-list refresh, automatic security
+upgrades and firmware metadata refresh - are postponed while NetworkManager
 reports the connection as **metered** (mobile data and phone hotspots that
 announce themselves; you can also mark any connection metered in its
 settings). They run on the next Wi-Fi/Ethernet connection. The gate is
@@ -260,7 +260,7 @@ Exam Mode's job).
 | `gaming` | Steam, controller udev rules, Vulkan tools, extra 32-bit drivers |
 | `office` | LibreOffice, Thunderbird, Evince, printing |
 | `ai-ml` | Jupyter, NumPy, pandas, scikit-learn, Matplotlib, SciPy, PyTorch |
-| `cyber` | nmap, Wireshark, tcpdump, aircrack-ng, John, Hydra, sqlmap, Nikto, gobuster — **only for systems you are authorised to test** |
+| `cyber` | nmap, Wireshark, tcpdump, aircrack-ng, John, Hydra, sqlmap, Nikto, gobuster - **only for systems you are authorised to test** |
 | `voice` | microphone support + SpeechRecognition for Brain voice commands |
 | `macos-compat` | instructions for Darling (not packaged for Ubuntu 22.04) |
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════╗
-║           PRIMERS OS — SYSTEM CONTROLLER              ║
+║           PRIMERS OS - SYSTEM CONTROLLER              ║
 ║           AI-Native Modular OS Platform               ║
 ╚═══════════════════════════════════════════════════════╝
 
@@ -30,7 +30,7 @@ from configs.settings import Settings  # noqa: E402
 def parse_args(argv=None):
     p = argparse.ArgumentParser(
         prog="primers",
-        description="PRIMERS OS — AI-native system controller",
+        description="PRIMERS OS - AI-native system controller",
     )
     p.add_argument("command", nargs="*", help="run this command and exit (e.g. 'primers status')")
     p.add_argument("-c", "--command", dest="commands", action="append", default=[],

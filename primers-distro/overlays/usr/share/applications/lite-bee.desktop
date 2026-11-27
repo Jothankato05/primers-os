@@ -2,7 +2,7 @@
 Type=Application
 Name=Primers Lite Bee
 GenericName=Web Browser
-Comment=Fast, data-saving web browser — built for 2G, LTE and Wi-Fi
+Comment=Fast, data-saving web browser for 2G, LTE and Wi-Fi
 Exec=lite-bee %U
 Icon=lite-bee
 Terminal=false

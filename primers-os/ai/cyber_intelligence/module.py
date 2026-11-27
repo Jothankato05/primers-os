@@ -20,11 +20,11 @@ class CyberIntelligence:
     }
 
     HIGH_RISK_PORTS = {
-        21: "FTP — plaintext credentials",
-        23: "Telnet — plaintext, legacy protocol",
-        445: "SMB — commonly targeted for ransomware",
-        3389: "RDP — primary target for brute force attacks",
-        5900: "VNC — often exposed without authentication"
+        21: "FTP - plaintext credentials",
+        23: "Telnet - plaintext, legacy protocol",
+        445: "SMB - commonly targeted for ransomware",
+        3389: "RDP - primary target for brute force attacks",
+        5900: "VNC - often exposed without authentication"
     }
 
     def __init__(self):
@@ -162,9 +162,9 @@ class CyberIntelligence:
         for res in self._last_scan_results:
             port = res["port"]
             if port == 21:
-                recommendations.append("Disable FTP — use SFTP instead.")
+                recommendations.append("Disable FTP - use SFTP instead.")
             elif port == 23:
-                recommendations.append("Disable Telnet — use SSH instead.")
+                recommendations.append("Disable Telnet - use SSH instead.")
             elif port == 445:
                 recommendations.append("Close SMB (Port 445) unless absolutely necessary for file sharing.")
             elif port == 3389:
@@ -175,7 +175,7 @@ class CyberIntelligence:
         exposed = [r["port"] for r in self._last_scan_results if r.get("exposure") == "network"]
         if exposed:
             recommendations.append(
-                f"Ports {', '.join(map(str, exposed))} accept connections from the network — "
+                f"Ports {', '.join(map(str, exposed))} accept connections from the network - "
                 "bind them to 127.0.0.1 or block them with 'sudo ufw deny <port>' if not needed.")
 
         if not recommendations and self._last_scan_results:

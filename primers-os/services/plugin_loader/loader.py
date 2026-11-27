@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Plugin loader.
+PRIMERS OS - Plugin loader.
 
 Plugins are Python files exposing ``NAME``, ``DESCRIPTION``, ``COMMANDS``
 and a ``register(shell)`` function that calls
@@ -71,7 +71,7 @@ class PluginLoader:
             name = getattr(module, "NAME", os.path.basename(os.path.dirname(file_path)))
             register_fn = getattr(module, "register", None)
             if not callable(register_fn):
-                self.logger.warning(f"Plugin {name} has no register() function — skipped.")
+                self.logger.warning(f"Plugin {name} has no register() function - skipped.")
                 return
             register_fn(self.shell)
             self.plugins.append({

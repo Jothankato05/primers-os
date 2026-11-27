@@ -1,5 +1,5 @@
 """
-PRIMERS OS — filesystem locations.
+PRIMERS OS - filesystem locations.
 
 Resolution order for the per-user data directory (usage history, tasks,
 GPA records, logs, user plugins):

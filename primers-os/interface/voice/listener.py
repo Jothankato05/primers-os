@@ -1,9 +1,9 @@
 """
-PRIMERS OS — Voice command listener.
+PRIMERS OS - Voice command listener.
 
 Optional: needs the SpeechRecognition package and a microphone (PyAudio).
 Speech is transcribed with Google's Web Speech API, so audio leaves the
-machine while the listener is on — it is off by default and the shell says
+machine while the listener is on - it is off by default and the shell says
 so when it is switched on.
 
 Say "primers <command>", e.g. "primers system status". Recognised text is

@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Automation Engine
+PRIMERS OS - Automation Engine
 Schedules shell commands at intervals or at a time of day.
 
 Tasks run as the current user. The task file is private (0600) inside the

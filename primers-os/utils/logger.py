@@ -1,5 +1,5 @@
 """
-PRIMERS OS — centralised logging.
+PRIMERS OS - centralised logging.
 
 Everything goes to a rotating ``primers.log`` in the log directory. The
 terminal only shows errors by default so background threads never scribble

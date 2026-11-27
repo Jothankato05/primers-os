@@ -1,5 +1,5 @@
 """
-Primers Lite Bee — the browser window.
+Primers Lite Bee - the browser window.
 
 GTK 3 interface around the system WebKit engine. Lite Bee's own work:
 choosing how much to download for the current connection, blocking it inside
@@ -169,8 +169,8 @@ class BrowserWindow(Gtk.ApplicationWindow):
         box.pack_start(self.conn_label, False, False, 0)
         group = None
         self.mode_radios: Dict[str, Gtk.RadioButton] = {}
-        options = [("auto", "Auto — pick for this connection")] + \
-                  [(k, f"{m.label} — {m.summary}") for k, m in MODES.items()]
+        options = [("auto", "Auto: pick for this connection")] + \
+                  [(k, f"{m.label}: {m.summary}") for k, m in MODES.items()]
         for key, text in options:
             rb = Gtk.RadioButton.new_with_label_from_widget(group, text)
             rb.get_child().set_line_wrap(True)
@@ -459,7 +459,7 @@ class BrowserWindow(Gtk.ApplicationWindow):
     def update_mode_button(self):
         s, m = self.app.settings, self.app.mode
         self.mode_btn.set_label(m.label + (" ·A" if s.mode == "auto" else ""))
-        self.mode_btn.set_tooltip_text(f"{m.label} mode ({'automatic' if s.mode == 'auto' else 'manual'}) — "
+        self.mode_btn.set_tooltip_text(f"{m.label} mode ({'automatic' if s.mode == 'auto' else 'manual'}) - "
                                        f"{self.app.connection.describe()}\n{m.summary}")
         self.conn_label.set_markup(f"<b>Connection:</b> {html.escape(self.app.connection.describe())}")
         radio = self.mode_radios.get(s.mode)
@@ -542,7 +542,7 @@ class BrowserWindow(Gtk.ApplicationWindow):
         dlg = Gtk.AboutDialog(transient_for=self, modal=True)
         dlg.set_program_name(APP_NAME)
         dlg.set_version(VERSION)
-        dlg.set_comments("A fast, data-saving browser for PRIMERS OS — from Primers Group.")
+        dlg.set_comments("A fast, data-saving browser for PRIMERS OS, from Primers Group.")
         dlg.set_logo(GdkPixbuf.Pixbuf.new_from_file_at_size(os.path.join(ASSETS, "lite-bee-128.png"), 96, 96))
         dlg.set_website("https://primersgroup.ng")
         dlg.run()
@@ -876,7 +876,7 @@ class LiteBeeApp(Gtk.Application):
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="lite-bee", description=f"{APP_NAME} — fast, data-saving browser")
+    parser = argparse.ArgumentParser(prog="lite-bee", description=f"{APP_NAME}: fast, data-saving browser")
     parser.add_argument("urls", nargs="*", help="addresses or searches to open")
     parser.add_argument("--mode", choices=["auto", "full", "lite", "ultra"], help="set the data mode and remember it")
     parser.add_argument("--kiosk", action="store_true",

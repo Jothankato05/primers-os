@@ -1,7 +1,7 @@
-# ⚛ PRIMERS OS 1.0 Genesis
+# PRIMERS OS 1.0 Genesis
 
 An AI-native Linux desktop built on **Ubuntu 22.04 LTS**. Lightweight Openbox
-desktop, Windows apps and games out of the box, and the **PRIMERS Brain** — a
+desktop, Windows apps and games out of the box, and the **PRIMERS Brain**, a
 system controller you talk to in plain language that monitors, secures and
 learns how you use your computer.
 
@@ -9,9 +9,9 @@ This repository contains both halves of the OS:
 
 | Directory | What it is |
 |---|---|
-| [`primers-os/`](primers-os/README.md) | **PRIMERS Brain** — the Python system controller (CLI shell, web dashboard, AI engines, plugins) |
-| [`primers-lite-bee/`](primers-lite-bee/README.md) | **Primers Lite Bee** — our fast, data-saving browser for 2G, LTE and Wi-Fi |
-| [`primers-distro/`](primers-distro/README.md) | **The distribution** — ISO build system, desktop configuration, installer, module system |
+| [`primers-os/`](primers-os/README.md) | **PRIMERS Brain** - the Python system controller (CLI shell, web dashboard, AI engines, plugins) |
+| [`primers-lite-bee/`](primers-lite-bee/README.md) | **Primers Lite Bee** - our fast, data-saving browser for 2G, LTE and Wi-Fi |
+| [`primers-distro/`](primers-distro/README.md) | **The distribution** - ISO build system, desktop configuration, installer, module system |
 
 ---
 
@@ -44,7 +44,7 @@ qemu-system-x86_64 -enable-kvm -m 4096 -smp 2 -cdrom primers-distro/primers-os-1
 ```
 
 **Install:** write the ISO to a USB stick (balenaEtcher, Rufus in DD mode, or
-`dd`), boot it — Secure Boot can stay on — and double-click **Install PRIMERS
+`dd`), boot it - Secure Boot can stay on - and double-click **Install PRIMERS
 OS** on the desktop. The installer handles BIOS and UEFI machines and offers
 full-disk encryption. When it finishes and restarts, remove the USB stick and
 press Enter at the prompt.
@@ -56,7 +56,7 @@ press Enter at the prompt.
 | | |
 |---|---|
 | **PRIMERS Brain** | Opens on login (or `Super+Enter`). `status`, `ps`, `threats`, `advise`, `math 2^10`… or just ask: *"how is my system?"*, *"am I safe?"*, *"any advice?"* |
-| **Ask Primers** | Offline answers about Primers from the built-in knowledge base: *"what is Veltis One?"*, *"who founded Primers?"* — emergencies first (112) |
+| **Ask Primers** | Offline answers about Primers from the built-in knowledge base: *"what is Veltis One?"*, *"who founded Primers?"* - emergencies first (112) |
 | **Primers Lite Bee** | Default browser. Detects Wi-Fi / LTE / 2G and switches between Full, Lite and Ultra data modes; ads and trackers blocked in the engine; data meter in MB (and ₦); offline saving, reader mode, session restore |
 | **Desktop** | Openbox + tint2 panel, PCManFM, dark theme, LightDM login |
 | **Windows apps** | Wine (64- and 32-bit); double-click any `.exe` or `primers-compat app.exe` |
@@ -67,7 +67,7 @@ press Enter at the prompt.
 | **Study Mode** | `study 25` starts a focus timer: Lite Bee pauses social media, video, games and betting sites, the panel counts down, a notice says when to take a break |
 | **Benchmark** | `benchmark` in the Brain measures boot time, idle RAM and disk against the PRIMERS targets and saves a shareable report (hardware facts only) |
 | **Lab Mode** | For shared lab PCs: `sudo primers-lab enable` adds a passwordless `lab` account that is wiped at every sign-out and boot, so each student starts clean |
-| **Security** | Firewall on, CPU mitigations on, automatic security updates, AppArmor, no shared passwords — the live user exists only in the live session |
+| **Security** | Firewall on, CPU mitigations on, automatic security updates, AppArmor, no shared passwords - the live user exists only in the live session |
 | **Kernel** | Ubuntu HWE kernel (6.8) for recent GPUs and Wi-Fi, zram swap, performance governor on AC power |
 
 ## Repository layout
@@ -78,7 +78,7 @@ primers-os/            PRIMERS Brain (Python 3.10+)
   core/ ai/ services/  monitoring, security, learning, automation, math, GPA, graph…
   interface/           CLI shell, web dashboard, voice
   tests/               pytest suite
-  knowledge/           PRIMERS_KNOWLEDGE.md — the system knowledge layer (Ask Primers)
+  knowledge/           PRIMERS_KNOWLEDGE.md - the system knowledge layer (Ask Primers)
 primers-lite-bee/      Primers Lite Bee browser (Python + GTK + WebKit)
 primers-distro/        ISO build system
   build.sh             debootstrap → chroot → squashfs → hybrid BIOS/UEFI ISO
@@ -86,7 +86,7 @@ primers-distro/        ISO build system
   overlays/            files copied into the OS (launchers, desktop config, module registry)
   installer/calamares/ installer configuration and branding
   tools/               check-packages.py (validates every package name)
-branding/              official Primers OS logo pack (SVG + PNG) — source of all OS artwork
+branding/              official Primers OS logo pack (SVG + PNG) - source of all OS artwork
 docs/decisions/        architecture decision records
 docs/pilot-guide.md    running a one-lab pilot: install, Lab Mode, benchmarks
 .github/workflows/     CI (tests + lint) and ISO build/release
@@ -115,5 +115,5 @@ read-only and listens on `localhost` only.
 
 ## Roadmap
 
-- **1.0 Genesis** (this release) — installable OS, Brain with learning, automation, dashboard, plugins, Lab, Study and Exam modes
-- **Next** — local speech recognition, graphical settings for the Brain, OTA module catalogue
+- **1.0 Genesis** (this release) - installable OS, Brain with learning, automation, dashboard, plugins, Lab, Study and Exam modes
+- **Next** - local speech recognition, graphical settings for the Brain, OTA module catalogue

@@ -20,6 +20,6 @@ alias run-windows='primers-compat'
 if [ -z "${PRIMERS_QUIET:-}" ] && [ "$SHLVL" -le 2 ]; then
   echo ""
   echo "  ⚛  PRIMERS OS 1.0 Genesis"
-  echo "  'primers' — AI brain   ·   'primers-install' — add software"
+  echo "  'primers': AI brain   ·   'primers-install': add software"
   echo ""
 fi

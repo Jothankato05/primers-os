@@ -1,4 +1,4 @@
-/* Primers Lite Bee — reader mode.
+/* Primers Lite Bee - reader mode.
  * Keeps the main article text of the current page and drops everything
  * else (menus, ads, scripts, embeds). Runs only on the page's own content. */
 (function () {

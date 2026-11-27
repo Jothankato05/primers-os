@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Security Engine
+PRIMERS OS - Security Engine
 Defensive monitoring: threat detection, anomaly analysis, connection auditing.
 This module is STRICTLY defensive. No offensive capabilities.
 """

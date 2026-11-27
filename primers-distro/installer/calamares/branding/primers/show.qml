@@ -80,7 +80,7 @@ Presentation {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 color: "#B9BEC6"; font.pixelSize: 16
-                text: "Press Super+Enter any time. Ask it 'how is my system?', 'am I safe?' or 'any advice?' — it monitors, explains and learns how you work."
+                text: "Press Super+Enter any time. Ask it 'how is my system?', 'am I safe?' or 'any advice?' It watches your system, explains what it finds and learns how you work."
             }
         }
     }
@@ -185,7 +185,7 @@ Presentation {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 color: "#f4efe6"; font.pixelSize: 16
-                text: "Our own browser, built for speed. It sees whether you are on Wi-Fi, LTE or 2G and loads only what your connection can afford — ads and trackers blocked, a live data meter, and pages saved for offline reading."
+                text: "Our own browser, built for speed. It sees whether you are on Wi-Fi, LTE or 2G and loads only what your connection can afford. It blocks ads and trackers, shows a live data meter and saves pages for offline reading."
             }
         }
     }

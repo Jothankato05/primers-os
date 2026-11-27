@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Study Mode: a focus timer that pauses distractions.
+PRIMERS OS - Study Mode: a focus timer that pauses distractions.
 
 ``study 25`` (in the Brain) or ``primers-study start 25`` starts a 25-minute
 session. While it runs, Primers Lite Bee pauses distracting sites (social

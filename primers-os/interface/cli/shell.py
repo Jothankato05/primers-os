@@ -1,5 +1,5 @@
 """
-PRIMERS OS — CLI Shell
+PRIMERS OS - CLI Shell
 Primary human-computer interaction layer.
 """
 
@@ -187,7 +187,7 @@ class PrimersShell:
             return True
 
         if source == "voice" and parsed.action not in VOICE_SAFE_ACTIONS:
-            print(C.warn(f"\n  🎙 Voice can't run '{parsed.raw}' — type it instead (voice is read-only)."))
+            print(C.warn(f"\n  🎙 Voice can't run '{parsed.raw}' - type it instead (voice is read-only)."))
             return False
 
         if self.le and parsed.action not in ("unknown", "exit"):
@@ -279,7 +279,7 @@ class PrimersShell:
         if cmd is not None and cmd.flags.get("yes"):
             return True
         if not self.interactive:
-            print(C.warn(f"  {question} — re-run with --yes to confirm."))
+            print(C.warn(f"  {question} - re-run with --yes to confirm."))
             return False
         try:
             answer = input(f"\n  {question} [y/N] ").strip().lower()
@@ -514,17 +514,17 @@ class PrimersShell:
         print(f"  {C.hi('DATA SAVER')}")
         print(divider())
         if not st.available:
-            print(C.warn("  NetworkManager is not available — can't tell whether this connection is metered."))
+            print(C.warn("  NetworkManager is not available - can't tell whether this connection is metered."))
             print(f"\n{divider()}\n")
             return
         print(f"\n  Connection:    {C.info(st.connection_text)}  {C.dim('(internet: ' + st.connectivity_text + ')')}")
         print(f"  Metered:       {C.warn(st.metered_text) if st.metered else C.ok(st.metered_text)}")
         if st.background_downloads_paused:
-            print(f"  Background:    {C.warn('paused')} — package lists, upgrades and firmware refresh wait for Wi-Fi/Ethernet")
+            print(f"  Background:    {C.warn('paused')} - package lists, upgrades and firmware refresh wait for Wi-Fi/Ethernet")
         elif st.metered and st.override:
             print(f"  Background:    {C.warn('allowed on metered')} {C.dim('(override: ' + network_status.OVERRIDE_FILE + ')')}")
         else:
-            print(f"  Background:    {C.ok('normal')} — updates download as usual")
+            print(f"  Background:    {C.ok('normal')} - updates download as usual")
         print(f"\n  {C.dim('Browsing data is saved separately by Primers Lite Bee (Lite/Ultra modes).')}")
         if st.metered and not st.override:
             print(C.dim("  Allow updates on metered links: sudo mkdir -p /etc/primers && "
@@ -700,7 +700,7 @@ class PrimersShell:
         print(f"  {C.hi('PRIMERS ADVICE')}")
         print(divider())
         if not recs:
-            print(C.ok("  ✓ All clear — nothing needs your attention right now."))
+            print(C.ok("  ✓ All clear - nothing needs your attention right now."))
         for r in recs[:10]:
             col = C.err if r.severity == "CRITICAL" else C.warn if r.severity in ("WARNING", "MEDIUM") else C.dim
             print(f"\n  {col(f'[{r.severity}]')} {r.reason}")
@@ -718,7 +718,7 @@ class PrimersShell:
             print(C.err("  ✗ Knowledge base not available."))
             return
         if not question:
-            print(f"\n  {C.hi('ASK PRIMERS')}  {C.dim('— e.g. ask what is Veltis One?')}")
+            print(f"\n  {C.hi('ASK PRIMERS')}  {C.dim(' - e.g. ask what is Veltis One?')}")
             print(f"  {C.dim('Topics:')} " + ", ".join(t.split(". ", 1)[-1].split(" (")[0] for t in self.kb.topics()[:12]))
             return
         ans = self.kb.answer(question)
@@ -764,7 +764,7 @@ class PrimersShell:
                 for item in stats["command_sequences"]:
                     print(f"    - {item['sequence']:<20} {item['count']}×")
             if not stats["total_commands"]:
-                print(C.dim("  No history yet — PRIMERS learns as you use it."))
+                print(C.dim("  No history yet - PRIMERS learns as you use it."))
         elif sub == "suggest":
             suggestions = self.le.suggest(self._recent[-3:] or None)
             print(f"\n  {C.hi('AI SUGGESTIONS')}")
@@ -860,7 +860,7 @@ class PrimersShell:
             except ValueError as e:
                 print(C.err(f"  ✗ {e}"))
                 return
-            print(C.ok(f"  ✓ Port scan complete — {len(found)} open port(s). Type 'cyber report'."))
+            print(C.ok(f"  ✓ Port scan complete - {len(found)} open port(s). Type 'cyber report'."))
         elif sub == "report":
             report = self.cyber.get_report()
             level_col = C.err if report["risk_score"] > 50 else C.warn if report["risk_score"] > 25 else C.ok
@@ -894,7 +894,7 @@ class PrimersShell:
         if sub == "info":
             info = self.kernel.get_all()
             cpu, mem = info["cpu"], info["memory"]
-            print(f"\n  {C.hi('KERNEL INTERFACE — SYSTEM INFO')}")
+            print(f"\n  {C.hi('KERNEL INTERFACE - SYSTEM INFO')}")
             print(f"  Kernel:  {C.info(info['kernel'][:100])}")
             print(f"  CPU:     {C.hi(cpu['model'])} ({cpu['cores']} threads @ {cpu['mhz']} MHz)")
             print(f"  Memory:  {mem['MemAvailable']} / {mem['MemTotal']} MB available")
@@ -978,7 +978,7 @@ class PrimersShell:
             print(C.dim("  Scanning network topology..."))
             self.graph.scan()
             st = self.graph.get_stats()
-            print(C.ok(f"  ✓ Network scan complete — {st['node_count']} nodes, {st['edge_count']} connections."))
+            print(C.ok(f"  ✓ Network scan complete - {st['node_count']} nodes, {st['edge_count']} connections."))
         elif sub == "show":
             print(C.info(self.graph.render_ascii()))
         elif sub == "anomalies":
@@ -1002,7 +1002,7 @@ class PrimersShell:
     def _cmd_modules(self, cmd: ParsedCommand):
         registry = self.settings.MODULES_REGISTRY
         if not os.path.exists(registry):
-            print(C.warn(f"  Module registry not found ({registry}) — modules are available on PRIMERS OS installs."))
+            print(C.warn(f"  Module registry not found ({registry}) - modules are available on PRIMERS OS installs."))
             return
         with open(registry, encoding="utf-8") as f:
             modules = json.load(f).get("modules", [])
@@ -1079,7 +1079,7 @@ class PrimersShell:
                 print(C.err(f"  ✗ Voice unavailable: {reason}"))
                 return
             if self.voice.start_listening():
-                print(C.ok("  ✓ Voice engine on. Say \"primers <command>\" — e.g. \"primers system status\"."))
+                print(C.ok("  ✓ Voice engine on. Say \"primers <command>\" - e.g. \"primers system status\"."))
                 print(C.warn("    Speech is sent to Google's speech service for transcription while voice is on."))
         elif sub == "stop":
             self.voice.stop_listening()

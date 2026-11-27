@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Process Manager
+PRIMERS OS - Process Manager
 Manages system processes: list, launch, terminate, prioritise, isolate.
 """
 

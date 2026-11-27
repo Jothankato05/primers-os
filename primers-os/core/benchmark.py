@@ -1,5 +1,5 @@
 """
-PRIMERS OS — benchmark: measure this machine against the design targets.
+PRIMERS OS - benchmark: measure this machine against the design targets.
 
 The Primers knowledge base sets engineering targets for the OS (2 GB minimum
 RAM, under 600 MB idle RAM, cold boot to the login screen in under 15 s on an

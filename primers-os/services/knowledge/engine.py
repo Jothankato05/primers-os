@@ -1,8 +1,8 @@
 """
-PRIMERS OS — Knowledge layer ("Ask Primers", offline).
+PRIMERS OS - Knowledge layer ("Ask Primers", offline).
 
 Loads the Primers knowledge base (Markdown with YAML front matter), chunks it
-by heading, and answers questions by retrieval — never by invention:
+by heading, and answers questions by retrieval - never by invention:
 
 1. Emergencies first: anything that sounds like danger gets Nigeria's 112
    and SecureLink before anything else.
@@ -223,7 +223,7 @@ class KnowledgeBase:
             cells = [c for c in cells if c]
             if len(cells) == 2:
                 return f"{cells[0]}: {cells[1]}"
-            return " — ".join(cells)
+            return " - ".join(cells)
         return stripped
 
     def _excerpt(self, chunk: Chunk, query_tokens: List[str], max_lines: int) -> str:
@@ -273,7 +273,7 @@ class KnowledgeBase:
     def answer(self, question: str, max_lines: int = 14) -> Answer:
         question = (question or "").strip()
         if not question:
-            return Answer("none", "Ask me anything about Primers — e.g. 'what is Veltis One?'")
+            return Answer("none", "Ask me anything about Primers - e.g. 'what is Veltis One?'")
 
         if not self.available:
             found = Answer("none", "The Primers knowledge base is not installed on this system.")
@@ -282,7 +282,7 @@ class KnowledgeBase:
 
         if self.is_emergency(question):
             banner = (f"If you are in danger, call {EMERGENCY_NUMBER} now (Nigeria emergency line).\n"
-                      "SecureLink — Primers' emergency broadcasting — routes alerts to fire services, "
+                      "SecureLink - Primers' emergency broadcasting - routes alerts to fire services, "
                       "police and road safety responders around you.")
             text = banner if found.kind == "none" else f"{banner}\n\n{found.text}"
             return Answer("emergency", text, ["Emergencies first"] + found.sources, emergency=True)

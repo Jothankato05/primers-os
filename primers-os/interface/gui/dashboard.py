@@ -1,5 +1,5 @@
 """
-PRIMERS OS — Web Dashboard
+PRIMERS OS - Web Dashboard
 
 A small read-only Flask app showing live system metrics. It listens on
 127.0.0.1 by default and rejects requests whose Host header is not local,
@@ -178,7 +178,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       $("credits").textContent = Number(gpa.credits).toFixed(1);
       $("updated").textContent = new Date().toLocaleTimeString();
     } catch (err) {
-      $("updated").textContent = "error — " + err.message;
+      $("updated").textContent = "error - " + err.message;
       $("updated").className = "error";
     }
   }

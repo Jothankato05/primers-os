@@ -2,7 +2,7 @@
 Content-blocking rules in WebKit's content-extension (Safari) JSON format.
 
 Rules are compiled by WebKit itself, so blocking happens inside the engine
-before a single byte is requested — that is where the data savings come from.
+before a single byte is requested - that is where the data savings come from.
 """
 
 import json

@@ -4,7 +4,7 @@ import ipaddress
 import re
 from urllib.parse import quote_plus, urlparse
 
-# DuckDuckGo Lite: no JavaScript, tiny pages — ideal on 2G.
+# DuckDuckGo Lite: no JavaScript, tiny pages - ideal on 2G.
 SEARCH_ENGINES = {
     "duckduckgo-lite": "https://lite.duckduckgo.com/lite/?q={query}",
     "duckduckgo": "https://duckduckgo.com/?q={query}",

@@ -90,7 +90,7 @@ Virtual phone numbers and SMS platform (Express, MongoDB, SMS providers, Paystac
 
 Status labels: Live, Pilot, In build, Concept.
 
-### 4.1 SecureLink (flagship) — In build / Pilot
+### 4.1 SecureLink (flagship) - In build / Pilot
 Real-time, proximity-based emergency broadcasting. Originally called CampusGuard. Investor framing: "the Palantir of Africa".
 - Discreet triggers that work without unlocking the phone: screen tap gesture routes to fire services, volume button routes to police, shake routes to accident and road safety responders, the phone's own SOS button broadcasts to the full community responder network.
 - Hooks into each device's built-in SOS system instead of acting as an isolated app.
@@ -98,7 +98,7 @@ Real-time, proximity-based emergency broadcasting. Originally called CampusGuard
 - Known risk being addressed: the device being thrown away after an alert. Mitigations: deadman's switch and geofenced radius alerts.
 - OS use: the Safety module. Campuses, estates, companies and communities get a live incident map, responder dispatch and alert history.
 
-### 4.2 Veltis One — Pilot proposal (Veritas University)
+### 4.2 Veltis One - Pilot proposal (Veritas University)
 Unified campus smart card that combines three things in one card.
 1. Student ID (replaces the traditional ID card).
 2. Attendance by tapping to unlock classroom and chapel doors, bound to the real owner so proxy attendance is impossible.
@@ -111,7 +111,7 @@ Unified campus smart card that combines three things in one card.
 - Phase 2 (not the pilot): virtual card in Apple, Google and Samsung wallets.
 - OS use: the Campus module (ID, attendance, payments).
 
-### 4.3 BraidUp — Live (web), Android in Play Store preparation
+### 4.3 BraidUp - Live (web), Android in Play Store preparation
 Connects university students with campus braiders, barbers, makeup artists and lash stylists, starting at Veritas University. Co-founded by Jothan and Favour (Zishia). Sits under Primers Group.
 - Braids and Barbers are equal tabs. Home visits (stylist comes to the student's room). Wig vendors sell through in-app payment.
 - Pinterest-style, interactive browsing. Real stylist photos only, no placeholder styles.
@@ -120,33 +120,33 @@ Connects university students with campus braiders, barbers, makeup artists and l
 - Repo: github.com/Jothankato05/Braidup. Support: braidup.primerscorperation@gmail.com
 - OS use: the Student Life marketplace.
 
-### 4.4 Velaji — Live (velaji.vercel.app)
+### 4.4 Velaji - Live (velaji.vercel.app)
 Child immunisation tracking. Unique child identifier plus a digital card that works like a bank card. Offline-first and USSD on basic feature phones. Links civil registration and health insurance benefits for families without national ID numbers.
 - OS use: the Health module for clinics, PHCs and health NGOs.
 
-### 4.5 PrimeLink — Concept / In build
+### 4.5 PrimeLink - Concept / In build
 Community risk intelligence with parametric insurance triggers. Village composite scores across health, agriculture, environment, finance and climate.
 - OS use: the Insights module for governments, NGOs, insurers and development partners.
 
-### 4.6 SweepDesk — In build
+### 4.6 SweepDesk - In build
 Automated sweep account allocation and fund management. Tagline: "One Inflow. Automatic Sweep. Proper Allocation. Full Accountability." Inflows land in a master project account and are automatically split into dedicated sub-account wallets by pre-approved percentages.
 - Two interfaces: the SweepDesk bank plugin (connects to a bank's core system) and the Sweep Control dashboard.
 - OS use: the Finance module for organisations, projects, churches, associations and student unions that need transparent money handling.
 
-### 4.7 SendOff — Live
+### 4.7 SendOff - Live
 Graduation keepsake shirt app (repo: sendoffglobal). Lets graduating students create and collect signatures and messages on a keepsake.
 - OS use: Student Life, seasonal (final year and convocation).
 
-### 4.8 Rotawise — Prototype
+### 4.8 Rotawise - Prototype
 Built by Team Primers for NASA Space Apps Challenge 2026, Abuja (challenge: "Field Shift: Adapting Farms with NASA Data"). Uses NASA data to help farmers adapt crop and field decisions.
 - Live app: rotawise-five.vercel.app. Deck: rotawise-deck.vercel.app. Repo: github.com/Jothankato05/Rotawise
 - OS use: Agriculture insights, feeds PrimeLink's agriculture score.
 
-### 4.9 Abuja Life — In build
+### 4.9 Abuja Life - In build
 Browser-based life simulation game set in Abuja on a real Abuja map (React, Tailwind). Being steered toward a direction that real estate and city developers would find valuable.
 - OS use: Games and Experiences.
 
-### 4.10 Primers Group website — Live
+### 4.10 Primers Group website - Live
 Corporate site on primersgroup.ng, multi-page, compiling everything about the company. Runs Google AdSense; a Primers blog is planned. Repo: github.com/Jothankato05/primers-website
 
 ### Not Primers products (do not list, claim or promote)

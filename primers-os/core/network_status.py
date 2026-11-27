@@ -1,5 +1,5 @@
 """
-PRIMERS OS — network status from NetworkManager (over D-Bus via busctl).
+PRIMERS OS - network status from NetworkManager (over D-Bus via busctl).
 
 Used by the Data Saver: background downloads (package lists, upgrades,
 firmware metadata) are postponed while the connection is metered. Parsing

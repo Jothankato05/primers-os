@@ -71,7 +71,7 @@ def home(mode: Mode, conn: Optional[ConnectionInfo], data_label: str, preference
     pref = "Auto" if preference == "auto" else "Manual"
     links = "".join(f"<a href='{html.escape(url, quote=True)}'>{html.escape(name)}</a>"
                     for name, url in QUICK_LINKS)
-    saved = (f"<a href='bee:saved'>{saved_count} saved page{'s' if saved_count != 1 else ''} — read offline</a>"
+    saved = (f"<a href='bee:saved'>{saved_count} saved page{'s' if saved_count != 1 else ''} - read offline</a>"
              if saved_count else "")
     action = html.escape(search_action, quote=True)
     body = f"""

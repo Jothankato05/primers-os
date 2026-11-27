@@ -54,10 +54,10 @@
     },
     {
       "name": "macos-compat",
-      "description": "macOS app compatibility (Darling) — experimental, manual",
+      "description": "macOS app compatibility (Darling) - experimental, manual",
       "size_mb": 0,
       "packages": [],
-      "notes": "Darling is not packaged for Ubuntu 22.04. See https://docs.darlinghq.org/build-instructions.html — it runs command-line macOS tools only.",
+      "notes": "Darling is not packaged for Ubuntu 22.04. See https://docs.darlinghq.org/build-instructions.html - it runs command-line macOS tools only.",
       "post_install": "echo 'Darling must be built from source: https://docs.darlinghq.org/build-instructions.html'"
     }
   ]

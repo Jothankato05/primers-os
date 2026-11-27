@@ -1,5 +1,5 @@
 """
-Sample PRIMERS OS plugin — copy this file to
+Sample PRIMERS OS plugin - copy this file to
 ~/.local/share/primers/plugins/ to start writing your own.
 """
 
@@ -12,7 +12,7 @@ COMMANDS = {
 
 def plugin_hello(cmd=None, shell=None):
     who = " ".join(cmd.args) if cmd is not None and cmd.args else "world"
-    return f"Hello, {who}! — from the PRIMERS OS plugin system ⚛"
+    return f"Hello, {who}! - from the PRIMERS OS plugin system ⚛"
 
 
 def register(shell):

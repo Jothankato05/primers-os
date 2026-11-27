@@ -1,5 +1,5 @@
 """
-primers-exam — Exam Mode for computer-based tests (installed as /usr/bin/primers-exam).
+primers-exam - Exam Mode for computer-based tests (installed as /usr/bin/primers-exam).
 
   sudo primers-exam start URL [--allow HOST]...   start an exam on this PC
   sudo primers-exam stop                          end it

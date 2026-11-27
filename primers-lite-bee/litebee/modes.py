@@ -6,7 +6,7 @@ Lite Bee picks how much of the web to download based on the connection:
   full   Wi-Fi / Ethernet: everything, trackers and ads still blocked
   lite   LTE, 3G, phone hotspots, metered links: no autoplay video,
          no web fonts, no third-party media, lazy everything
-  ultra  2G / EDGE / very slow links: text first — no images, media,
+  ultra  2G / EDGE / very slow links: text first - no images, media,
          fonts or third-party scripts; mobile pages requested
 
 "auto" (the default) chooses one of these from the detected connection.
@@ -49,7 +49,7 @@ MODES: Dict[str, Mode] = {
         javascript=True, webgl=False, mobile_pages=False,
     ),
     "ultra": Mode(
-        key="ultra", label="Ultra", summary="For 2G/EDGE: text first — no images, video, fonts or third-party scripts.",
+        key="ultra", label="Ultra", summary="For 2G/EDGE: text first, with no images, video, fonts or third-party scripts.",
         load_images=False, autoplay_media=False, block_fonts=True, block_media=True,
         block_third_party_scripts=True, block_third_party_images=True,
         javascript=True, webgl=False, mobile_pages=True,
