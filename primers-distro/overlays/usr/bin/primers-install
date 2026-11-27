@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS Module Installer — installs curated bundles of apt packages.
+# PRIMERS OS Module Installer: installs curated bundles of apt packages.
 #   primers-install              list modules
 #   primers-install <module>     install a module (asks for your password)
 #   primers-install --info <m>   show what a module contains
@@ -11,7 +11,7 @@ REGISTRY="${PRIMERS_MODULE_REGISTRY:-/usr/lib/primers/modules/module_registry.js
 list_modules() {
   echo ""
   echo "  ╔══════════════════════════════════════╗"
-  echo "  ║   PRIMERS OS — Module Installer      ║"
+  echo "  ║   PRIMERS OS · Module Installer      ║"
   echo "  ╚══════════════════════════════════════╝"
   echo ""
   python3 - "$REGISTRY" <<'PYEOF'
@@ -48,7 +48,7 @@ if [ $# -eq 0 ]; then list_modules; exit 0; fi
 if [ "$1" = "--info" ]; then
   [ $# -ge 2 ] || { echo "Usage: primers-install --info <module>"; exit 1; }
   module_field "$2" description >/dev/null 2>&1 || { echo "[ERROR] Unknown module: $2" >&2; exit 1; }
-  echo "  $2 — $(module_field "$2" description)"
+  echo "  $2: $(module_field "$2" description)"
   echo "  Packages: $(module_field "$2" packages | tr '\n' ' ')"
   notes="$(module_field "$2" notes)"; [ -n "$notes" ] && echo "  Notes: $notes"
   exit 0

@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS Compatibility Launcher — runs Windows programs with Wine.
+# PRIMERS OS Compatibility Launcher: runs Windows programs with Wine.
 set -euo pipefail
 
 usage() {

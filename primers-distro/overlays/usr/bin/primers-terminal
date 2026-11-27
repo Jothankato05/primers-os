@@ -3,4 +3,4 @@
 # drops to a normal shell instead of vanishing.
 exec xterm -class PrimersBrain -title "PRIMERS OS" -geometry 120x35 \
   -fa Monospace -fs 11 -bg "#12161C" -fg "#F5F2EA" -cr "#1E9E62" \
-  -e sh -c 'primers "$@"; echo; echo "  PRIMERS Brain exited — this is a regular shell now (type primers to restart)."; exec bash' primers-terminal "$@"
+  -e sh -c 'primers "$@"; echo; echo "  PRIMERS Brain exited. This is a regular shell now (type primers to restart)."; exec bash' primers-terminal "$@"

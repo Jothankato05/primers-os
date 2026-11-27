@@ -1,5 +1,5 @@
 #!/bin/sh
-# PRIMERS OS Data Saver — gate for background downloads.
+# PRIMERS OS Data Saver: gate for background downloads.
 #
 # Exit 0 (go ahead) on unmetered or unknown networks, 1 (skip this run) when
 # NetworkManager says the connection is metered: mobile data, and phone
@@ -17,7 +17,7 @@ state=$(busctl get-property org.freedesktop.NetworkManager /org/freedesktop/Netw
           org.freedesktop.NetworkManager Metered 2>/dev/null | awk '{print $2}')
 case "$state" in
   1|3)
-    echo "PRIMERS Data Saver: metered connection — postponing background download until Wi-Fi/Ethernet"
+    echo "PRIMERS Data Saver: metered connection, so the background download waits for Wi-Fi or Ethernet"
     exit 1 ;;
 esac
 exit 0
