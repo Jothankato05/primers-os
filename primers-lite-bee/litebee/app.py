@@ -302,7 +302,7 @@ class BrowserWindow(Gtk.ApplicationWindow):
         tab.title_label.set_text(title)
         tab.title_label.set_tooltip_text(title)
         if tab is self.current:
-            self.set_title(f"{title} — {APP_NAME}")
+            self.set_title(f"{title} - {APP_NAME}")
 
     def on_uri(self, view, _pspec, tab):
         if tab is self.current:
@@ -451,7 +451,7 @@ class BrowserWindow(Gtk.ApplicationWindow):
         self.reload_btn.set_image(Gtk.Image.new_from_icon_name(
             "process-stop-symbolic" if view.is_loading() else "view-refresh-symbolic", Gtk.IconSize.BUTTON))
         self.progress.set_visible(view.is_loading())
-        self.set_title(f"{view.get_title() or 'New tab'} — {APP_NAME}")
+        self.set_title(f"{view.get_title() or 'New tab'} - {APP_NAME}")
         self.update_mode_button()
         self.update_data_label()
         return False

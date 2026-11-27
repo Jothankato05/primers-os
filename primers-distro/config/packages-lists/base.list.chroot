@@ -1,4 +1,4 @@
-# PRIMERS OS — base system (Ubuntu 22.04 "jammy" package names)
+# PRIMERS OS - base system (Ubuntu 22.04 "jammy" package names)
 # One package per line; '#' starts a comment. ':i386' selects 32-bit.
 # The kernel and casper are installed by build.sh (see KERNEL_PACKAGE).
 

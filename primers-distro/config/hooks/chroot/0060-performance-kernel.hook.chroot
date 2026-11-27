@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS — bootloader defaults and CPU governor for installed systems
+# PRIMERS OS - bootloader defaults and CPU governor for installed systems
 set -euo pipefail
 
 # Kernel command line for installed systems. CPU vulnerability mitigations

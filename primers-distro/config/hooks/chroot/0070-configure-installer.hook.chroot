@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS — installer (Calamares) integration for the live session
+# PRIMERS OS - installer (Calamares) integration for the live session
 # Calamares configuration lives in /etc/calamares (copied by build.sh).
 set -euo pipefail
 

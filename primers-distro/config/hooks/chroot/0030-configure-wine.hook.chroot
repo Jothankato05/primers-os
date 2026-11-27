@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS — Windows application support
+# PRIMERS OS - Windows application support
 # Wine itself comes from primers.list.chroot. Each user's Wine prefix is
 # created automatically the first time primers-compat runs.
 set -euo pipefail

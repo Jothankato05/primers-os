@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS — desktop look & feel, artwork, display manager
+# PRIMERS OS - desktop look & feel, artwork, display manager
 #
 # Artwork comes from the official logo pack (branding/primers-os-logo,
 # installed to /usr/share/primers/branding by build.sh). Brand rules: Night
@@ -152,7 +152,7 @@ if os.path.isdir(gdir):
         colour = INK + (255,) if part == "c" else (38, 44, 53, 255)
         Image.new("RGBA", (6, 6), colour).save(f"{gdir}/terminal_box_{part}.png")
 
-# Plymouth: 32 frames ≈ 1.06 s at Plymouth's 30 fps — cursor on, then off
+# Plymouth: 32 frames ≈ 1.06 s at Plymouth's 30 fps - cursor on, then off
 pdir = "/usr/share/plymouth/themes/primers"
 if os.path.isdir(pdir):
     on = fit(mark_dark, 112)

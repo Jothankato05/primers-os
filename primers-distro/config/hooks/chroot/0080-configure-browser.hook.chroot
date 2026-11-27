@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS — Primers Lite Bee as the default web browser
+# PRIMERS OS - Primers Lite Bee as the default web browser
 set -euo pipefail
 
 LB=/usr/share/primers/lite-bee

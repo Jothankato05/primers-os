@@ -1,5 +1,5 @@
 #!/bin/bash
-# PRIMERS OS — PRIMERS brain checks
+# PRIMERS OS - PRIMERS brain checks
 # build.sh copies the brain to /usr/share/primers/brain; this hook
 # precompiles it and refuses to ship an image where it cannot start.
 set -euo pipefail
