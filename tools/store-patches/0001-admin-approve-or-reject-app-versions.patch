@@ -1,0 +1,282 @@
+From d582a8b6d029c1b9562915b98fda43b64808ba2a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 27 Nov 2026 22:02:19 +0000
+Subject: [PATCH] Admin: approve or reject app versions
+
+A version is only offered for download once approved (an app's page shows
+its latest approved version), but the admin page had no way to approve
+one: the server's PATCH /admin/apps/:id/versions/:versionId/review was
+never called. Approving an app left its versions pending, so its Download
+button stayed off (PRIMERS OS 1.0.0-rc1, Pronexa).
+
+- App details: "Approve version" and "Reject version" on each version
+  (reject asks first), with a note that a version isn't offered for
+  download until approved.
+- App list: a "N versions to review" badge, and a "Versions to review"
+  filter that lists apps of any status with a version waiting (an
+  approved app's new version didn't show under "Pending").
+- The version review route returns the updated version; the admin app
+  list includes each app's pending_versions count.
+- test/admin-versions.test.js: admins only, the right version of the
+  right app, unknown statuses refused, the count and the filter (5 tests;
+  12 of 12 pass). Checked in a browser against the built client: the
+  badge, the buttons, and the PATCH they send.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VGfk4ZgHHmt749n4y6mqNR
+---
+ client/src/pages/AdminDashboard.jsx | 40 ++++++++++++
+ server/routes/admin.js              | 28 ++++++--
+ test/admin-versions.test.js         | 99 +++++++++++++++++++++++++++++
+ 3 files changed, 163 insertions(+), 4 deletions(-)
+ create mode 100644 test/admin-versions.test.js
+
+diff --git a/client/src/pages/AdminDashboard.jsx b/client/src/pages/AdminDashboard.jsx
+index 5cab4ce..5f38142 100644
+--- a/client/src/pages/AdminDashboard.jsx
++++ b/client/src/pages/AdminDashboard.jsx
+@@ -100,6 +100,23 @@ export default function AdminDashboard() {
+     } catch (e) { toast.error(e.message); }
+   };
+ 
++  // A version is only offered for download once approved (the app's page shows
++  // its latest approved version), so each version is reviewed on its own
++  const reviewVersion = async (appId, versionId, status) => {
++    if (status === 'rejected' && !confirm('Reject this version? It will not be offered for download.')) return;
++    try {
++      await apiRequest(`/admin/apps/${appId}/versions/${versionId}/review`, {
++        method: 'PATCH', body: JSON.stringify({ status }),
++      });
++      toast.success(`Version ${status}`);
++      setAppDetail(prev => prev && prev.id === appId
++        ? { ...prev, versions: prev.versions.map(v => (v.id === versionId ? { ...v, status } : v)) }
++        : prev);
++      loadApps();
++      fetch(`${base}/admin/dashboard`, { headers }).then(r => r.json()).then(d => setStats(d.stats)).catch(() => {});
++    } catch (e) { toast.error(e.message); }
++  };
++
+   const [appDetail, setAppDetail] = useState(null);
+   const [editingVersionUrl, setEditingVersionUrl] = useState({});
+ 
+@@ -186,6 +203,7 @@ export default function AdminDashboard() {
+             </form>
+             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); loadApps(e.target.value, searchTerm); }} className="input-field w-auto">
+               <option value="pending">Pending</option>
++              <option value="versions_pending">Versions to review</option>
+               <option value="reviewing">Reviewing</option>
+               <option value="approved">Approved</option>
+               <option value="rejected">Rejected</option>
+@@ -219,6 +237,11 @@ export default function AdminDashboard() {
+                             'bg-gray-100 text-gray-700'
+                           }`}>{app.status}</span>
+                           <span className="text-xs text-gray-400">{app.category}</span>
++                          {app.pending_versions > 0 && (
++                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-700">
++                              {app.pending_versions} version{app.pending_versions === 1 ? '' : 's'} to review
++                            </span>
++                          )}
+                           {app.review_notes && <span className="text-xs text-gray-500 italic">— {app.review_notes}</span>}
+                         </div>
+                       </div>
+@@ -417,6 +440,23 @@ export default function AdminDashboard() {
+                       <p className="text-xs text-gray-500">
+                         Size: {v.file_size ? `${(v.file_size / 1024 / 1024).toFixed(1)} MB` : 'unknown'}
+                       </p>
++                      {v.status !== 'approved' && (
++                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
++                          Not offered for download until approved. Check the download link works first.
++                        </p>
++                      )}
++                      <div className="flex gap-2">
++                        {v.status !== 'approved' && (
++                          <button onClick={() => reviewVersion(appDetail.id, v.id, 'approved')} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700">
++                            Approve version
++                          </button>
++                        )}
++                        {v.status !== 'rejected' && (
++                          <button onClick={() => reviewVersion(appDetail.id, v.id, 'rejected')} className="btn-danger btn-sm">
++                            Reject version
++                          </button>
++                        )}
++                      </div>
+                       <div className="space-y-1">
+                         <label className="text-xs font-medium text-gray-600">Download URL</label>
+                         <input
+diff --git a/server/routes/admin.js b/server/routes/admin.js
+index e241114..d278d48 100644
+--- a/server/routes/admin.js
++++ b/server/routes/admin.js
+@@ -87,7 +87,12 @@ router.get('/apps', async (req, res, next) => {
+     const offset = toInt(req.query.offset, 0);
+ 
+     const filter = {};
+-    if (status && typeof status === 'string') filter.status = status;
++    if (status === 'versions_pending') {
++      // Apps of any status with a version waiting for review
++      filter._id = { $in: await AppVersion.distinct('app_id', { status: 'pending' }) };
++    } else if (status && typeof status === 'string') {
++      filter.status = status;
++    }
+     if (category && typeof category === 'string') filter.category = category;
+     if (search && typeof search === 'string') {
+       const re = new RegExp(escapeRegex(search), 'i');
+@@ -101,6 +106,14 @@ router.get('/apps', async (req, res, next) => {
+       .limit(limit)
+       .populate('developer_id', 'username email display_name');
+ 
++    // How many of each app's versions wait for review: an approved app's new
++    // version is otherwise easy to miss, and it isn't downloadable until approved
++    const waiting = await AppVersion.aggregate([
++      { $match: { status: 'pending', app_id: { $in: docs.map(d => d._id) } } },
++      { $group: { _id: '$app_id', n: { $sum: 1 } } },
++    ]);
++    const pendingVersions = new Map(waiting.map(w => [String(w._id), w.n]));
++
+     const apps = docs.map(d => {
+       const obj = d.toJSON();
+       if (obj.developer_id && typeof obj.developer_id === 'object') {
+@@ -108,6 +121,7 @@ router.get('/apps', async (req, res, next) => {
+         obj.developer_email = obj.developer_id.email;
+         obj.developer_id = obj.developer_id.id;
+       }
++      obj.pending_versions = pendingVersions.get(String(d._id)) || 0;
+       return obj;
+     });
+ 
+@@ -193,10 +207,11 @@ router.patch('/apps/:id/versions/:versionId/review', async (req, res, next) => {
+ 
+     const version = await AppVersion.findOneAndUpdate(
+       { _id: req.params.versionId, app_id: req.params.id },
+-      { status }
++      { status },
++      { new: true }
+     );
+     if (!version) return res.status(404).json({ error: 'Version not found' });
+-    res.json({ message: `Version ${status}` });
++    res.json({ message: `Version ${status}`, version: version.toJSON() });
+   } catch (err) { next(err); }
+ });
+ 
+@@ -214,7 +229,12 @@ router.get('/developer-applications', async (req, res, next) => {
+   try {
+     const { status } = req.query;
+     const filter = {};
+-    if (status && typeof status === 'string') filter.status = status;
++    if (status === 'versions_pending') {
++      // Apps of any status with a version waiting for review
++      filter._id = { $in: await AppVersion.distinct('app_id', { status: 'pending' }) };
++    } else if (status && typeof status === 'string') {
++      filter.status = status;
++    }
+ 
+     const docs = await DeveloperApplication.find(filter)
+       .sort({ created_at: -1 })
+diff --git a/test/admin-versions.test.js b/test/admin-versions.test.js
+new file mode 100644
+index 0000000..97e45da
+--- /dev/null
++++ b/test/admin-versions.test.js
+@@ -0,0 +1,99 @@
++// Admin review of app versions: a version is only offered for download once
++// approved, so the admin can approve or reject each one, and the app list says
++// how many versions of each app wait for review. The database models are
++// stubbed; the route handlers run as they do in the server.
++const test = require('node:test');
++const assert = require('node:assert');
++const db = require('../server/database');
++const router = require('../server/routes/admin');
++const { requireAdmin } = require('../server/middleware/auth');
++
++function handler(method, path) {
++  const layer = router.stack.find(l => l.route && l.route.path === path && l.route.methods[method]);
++  assert.ok(layer, `no ${method.toUpperCase()} ${path} route`);
++  return layer.route.stack[layer.route.stack.length - 1].handle;
++}
++
++function call(fn, req) {
++  return new Promise((resolve, reject) => {
++    const res = {
++      code: 200,
++      status(c) { this.code = c; return this; },
++      json(body) { resolve({ code: this.code, body }); },
++    };
++    Promise.resolve(fn(req, res, reject)).catch(reject);
++  });
++}
++
++test('every admin route, version review included, requires an admin', () => {
++  const guards = router.stack.filter(l => !l.route).map(l => l.handle);
++  assert.ok(guards.includes(requireAdmin));
++  let code;
++  const res = { status(c) { code = c; return this; }, json() {} };
++  requireAdmin({ user: { role: 'developer' } }, res, () => assert.fail('a developer got through'));
++  assert.equal(code, 403);
++});
++
++test('approving a version updates that version of that app and returns it', async (t) => {
++  const seen = [];
++  t.mock.method(db.AppVersion, 'findOneAndUpdate', async (filter, update, opts) => {
++    seen.push({ filter, update, opts });
++    return { toJSON: () => ({ id: 'v1', version: '1.0.0-rc1', status: update.status }) };
++  });
++  const review = handler('patch', '/apps/:id/versions/:versionId/review');
++  const out = await call(review, { params: { id: 'a1', versionId: 'v1' }, body: { status: 'approved' } });
++  assert.equal(out.code, 200);
++  assert.equal(out.body.version.status, 'approved');
++  assert.deepEqual(seen[0].filter, { _id: 'v1', app_id: 'a1' });
++  assert.deepEqual(seen[0].update, { status: 'approved' });
++  assert.equal(seen[0].opts.new, true);
++});
++
++test('a version of another app, or an unknown status, is refused', async (t) => {
++  t.mock.method(db.AppVersion, 'findOneAndUpdate', async () => null);
++  const review = handler('patch', '/apps/:id/versions/:versionId/review');
++  const missing = await call(review, { params: { id: 'a2', versionId: 'v1' }, body: { status: 'approved' } });
++  assert.equal(missing.code, 404);
++  for (const status of ['pending', 'published', '', undefined]) {
++    const bad = await call(review, { params: { id: 'a1', versionId: 'v1' }, body: { status } });
++    assert.equal(bad.code, 400, `status ${status}`);
++  }
++});
++
++test('the admin app list says how many versions of each app wait for review', async (t) => {
++  const docs = [
++    { _id: 'a1', toJSON: () => ({ id: 'a1', name: 'PRIMERS OS', developer_id: { id: 'u1', username: 'u', email: 'e' } }) },
++    { _id: 'a2', toJSON: () => ({ id: 'a2', name: 'Other', developer_id: { id: 'u2', username: 'w', email: 'f' } }) },
++  ];
++  const chain = { sort() { return this; }, skip() { return this; }, limit() { return this; }, populate: async () => docs };
++  t.mock.method(db.App, 'countDocuments', async () => docs.length);
++  t.mock.method(db.App, 'find', () => chain);
++  let match;
++  t.mock.method(db.AppVersion, 'aggregate', async (pipeline) => {
++    match = pipeline[0].$match;
++    return [{ _id: 'a1', n: 1 }];
++  });
++  const list = handler('get', '/apps');
++  const out = await call(list, { query: {} });
++  assert.equal(match.status, 'pending');
++  assert.deepEqual(match.app_id.$in, ['a1', 'a2']);
++  assert.deepEqual(out.body.apps.map(a => [a.id, a.pending_versions]), [['a1', 1], ['a2', 0]]);
++});
++
++test('the "versions to review" filter lists apps of any status with a version waiting', async (t) => {
++  let filter;
++  const chain = { sort() { return this; }, skip() { return this; }, limit() { return this; }, populate: async () => [] };
++  t.mock.method(db.AppVersion, 'distinct', async (field, query) => {
++    assert.equal(field, 'app_id');
++    assert.deepEqual(query, { status: 'pending' });
++    return ['a1'];
++  });
++  t.mock.method(db.AppVersion, 'aggregate', async () => []);
++  t.mock.method(db.App, 'countDocuments', async (f) => { filter = f; return 0; });
++  t.mock.method(db.App, 'find', () => chain);
++  const list = handler('get', '/apps');
++  await call(list, { query: { status: 'versions_pending' } });
++  assert.deepEqual(filter, { _id: { $in: ['a1'] } });
++  await call(list, { query: { status: 'approved' } });
++  assert.deepEqual(filter, { status: 'approved' });
++});
+-- 
+2.43.0
+
