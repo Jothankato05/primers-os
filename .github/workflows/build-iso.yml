@@ -67,6 +67,10 @@ jobs:
             # The tag must be new, or already on exactly this commit; no release for it yet
             state=$(primers-distro/tools/check-release-tag.sh "$tag" "$GITHUB_SHA")
             echo "Tag $tag: $state"
+            # A new tag is created on the commit built here. A tag made by hand
+            # already names that commit, and naming it again is refused (403)
+            # when the commit changes workflow files (docs/releases/README.md).
+            if [ "$state" = new ]; then echo "target=$GITHUB_SHA" >> "$GITHUB_OUTPUT"; fi
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Release tag: ${tag:-none (build only)}"
@@ -232,8 +236,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          # When started by hand, the tag is created on the exact commit built here
-          target_commitish: ${{ github.sha }}
+          # A new tag is created on the exact commit built here; an existing one
+          # is already on it (checked above), and then no commit is named
+          target_commitish: ${{ steps.tag.outputs.target }}
           name: "PRIMERS OS ${{ steps.tag.outputs.tag }}"
           body_path: release-notes.md
           # Tags with a suffix (v1.0.0-rc1) are pre-releases. A final tag only
@@ -326,6 +331,9 @@ jobs:
           # workflow files); no release for it yet
           state=$(primers-distro/tools/check-release-tag.sh "$TAG" "$sha")
           echo "Tag $TAG: $state"
+          # Name the commit only for a new tag: a tag made by hand already names
+          # it, and naming it again is refused (403) when it changes workflow files
+          if [ "$state" = new ]; then echo "target=$sha" >> "$GITHUB_OUTPUT"; fi
           artifact=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
             --jq '[.artifacts[] | select(.expired == false and (.name | endswith(".iso")))][0].name // empty')
           if [ -z "$artifact" ]; then
@@ -399,7 +407,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          target_commitish: ${{ steps.run.outputs.sha }}
+          target_commitish: ${{ steps.run.outputs.target }}
           name: "PRIMERS OS ${{ steps.tag.outputs.tag }}"
           body_path: release-notes.md
           prerelease: true

@@ -28,7 +28,11 @@ policy was the cause.
 So, when the commit to release changes workflow files compared with the
 default branch (as every commit on the working branch does until it is
 merged), the **tag is made by hand** by someone with write access, and the
-workflow then publishes the release on that tag. It accepts an existing tag
+workflow then publishes the release on that tag. It must then not name the
+commit again: GitHub also refuses a release whose `target_commitish` is such
+a commit (CI run 80, a second probe: a draft release on the hand-made
+v1.0.0-rc1 tag was accepted without `target_commitish` and refused with it),
+so the workflow names the commit only when it creates the tag itself. It accepts an existing tag
 only if it points at exactly the commit that was built, and only if no
 release exists for it yet (`primers-distro/tools/check-release-tag.sh`,
 tested in CI); otherwise it stops before publishing anything.
